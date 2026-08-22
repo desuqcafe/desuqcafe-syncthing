@@ -275,6 +275,7 @@ func (s *service) Serve(ctx context.Context) error {
 	restMux.HandlerFunc(http.MethodGet, "/rest/system/browse", s.getSystemBrowse)             // current
 	restMux.HandlerFunc(http.MethodGet, "/rest/system/connections", s.getSystemConnections)   // -
 	restMux.HandlerFunc(http.MethodGet, "/rest/system/discovery", s.getSystemDiscovery)       // -
+	restMux.HandlerFunc(http.MethodGet, "/rest/system/diskfree", s.getSystemDiskFree)         // path    (desuqcafe fork, see api_diskfree.go)
 	restMux.HandlerFunc(http.MethodGet, "/rest/system/error", s.getSystemError)               // -
 	restMux.HandlerFunc(http.MethodGet, "/rest/system/paths", s.getSystemPaths)               // -
 	restMux.HandlerFunc(http.MethodGet, "/rest/system/ping", s.restPing)                      // -

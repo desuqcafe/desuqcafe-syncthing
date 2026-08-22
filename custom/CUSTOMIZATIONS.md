@@ -22,13 +22,29 @@ This is the complete list. Keep it that way, and keep this table current.
 | File | Change | Conflict risk |
 | --- | --- | --- |
 | `build.go` | Added an `envOr()` helper and used it for the six Windows version-resource strings in `shouldBuildSyso()` (product name, publisher, description, internal/original filename, icon). | **Low.** 16 lines in one rarely-touched function. With the `ST_BRAND_*` variables unset the behaviour is byte-for-byte upstream's, so the change is safe to keep across merges. |
+| `lib/api/api.go` | **One line**, registering `GET /rest/system/diskfree`. The handler itself is in a new file, `lib/api/api_diskfree.go`. | **Low.** One entry in a long, alphabetically-ordered, append-only route table. If it ever conflicts the resolution is "keep both sides". |
+| `gui/default/index.html` | Two additive hunks: a `<script>` tag for the fork's directive, and a "Disk Space" row in the folder detail table. 11 lines. | **Low–medium.** The file is large and upstream does edit it, but both hunks are additive and nowhere near each other. |
+| `gui/default/syncthing/folder/editFolderModalView.html` | Three lines showing free space under the Folder Path field. | **Low.** |
 
-Nothing else. In particular we have **not**:
+Everything else the fork adds lives in files upstream does not have, so it
+cannot conflict at all:
+
+| New file | What |
+| --- | --- |
+| `lib/api/api_diskfree.go` | The `/rest/system/diskfree` handler |
+| `gui/default/syncthing/desuq/` | The fork's Angular directives |
+| `gui/violet/` | The violet theme |
+| `custom/` | Everything else |
+
+In particular we have **not**:
 
 - renamed the Go module (`github.com/syncthing/syncthing`) — renaming it would
   rewrite every import in the tree and make merges impossible;
 - renamed packages, types or internal identifiers;
-- edited anything under `lib/`, `cmd/` or `gui/`.
+- added anything to the root `go.mod` or `go.sum`;
+- changed the behaviour of any existing upstream code path. Every edit above
+  is an addition; with the fork's new files removed, the four modified files
+  would still behave exactly as upstream's do.
 
 ## How the branding is done without touching upstream
 

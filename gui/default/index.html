@@ -428,6 +428,16 @@
                             <span tooltip data-original-title="{{folder.path}}">{{folder.path}}</span>
                           </td>
                         </tr>
+                        <!-- desuqcafe fork: free space on the drive this folder lands on, and a
+                             warning when what is still to be pulled will not fit. -->
+                        <tr ng-if="!folder.paused">
+                          <th><span class="far fa-fw fa-hdd"></span>&nbsp;<span translate>Disk Space</span></th>
+                          <!-- no-overflow-ellipse: this row's warning is the whole point of it,
+                               and table-condensed would otherwise truncate it mid-sentence. -->
+                          <td class="text-right no-overflow-ellipse">
+                            <disk-free path="folder.path" need-bytes="model[folder.id].needBytes"></disk-free>
+                          </td>
+                        </tr>
                         <tr ng-if="!folder.paused && (model[folder.id].invalid || model[folder.id].error)">
                           <th><span class="fas fa-fw fa-exclamation-triangle"></span>&nbsp;<span translate>Error</span></th>
                           <td class="text-right">
@@ -1087,6 +1097,7 @@
   <script type="text/javascript" src="syncthing/core/uncamelFilter.js"></script>
   <script type="text/javascript" src="syncthing/core/uniqueFolderDirective.js"></script>
   <script type="text/javascript" src="syncthing/core/validDeviceidDirective.js"></script>
+  <script type="text/javascript" src="syncthing/desuq/diskFreeDirective.js"></script>
   <script type="text/javascript" src="assets/lang/valid-langs.js"></script>
   <script type="text/javascript" src="assets/lang/prettyprint.js"></script>
   <script type="text/javascript" src="meta.js"></script>

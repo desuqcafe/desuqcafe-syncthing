@@ -32,20 +32,51 @@ The GUI has an input for `minDiskFree` but **never displays actual free space**,
 and there is no REST endpoint reporting disk usage. There is no pre-flight
 capacity check anywhere in the codebase.
 
-**Mitigations available today**
+**What the fork does about it**
 
-- Raise the default reserve. 1 % of a 500 GB drive is 5 GB — far too little when
-  a single asset drop can be tens of GB. An absolute value is more predictable
-  across differently-sized drives than a percentage.
-- Before sharing, tell them the folder size. The receiving side *can* see it as
-  "Global State" in the GUI, but only after accepting the share.
+The reserve is now seeded at **20 GB absolute** rather than 1 % (see §4 and the
+table at the end). 1 % of a 500 GB drive is 5 GB, which is nothing when a single
+asset drop can be tens of GB, and an absolute figure behaves predictably across
+differently-sized drives.
 
-**If we want to fix it properly in the fork**, the smallest useful change is a
-pre-flight check when accepting a pending folder: compare the offering device's
-advertised folder size against `fs.Usage()` on the chosen path and warn. That
-needs a real code change in `lib/api` plus the GUI accept dialog, so it is a
-feature, not a config tweak — see the rule in `CUSTOMIZATIONS.md` before
-starting.
+The GUI now also *shows* the space, which it never did before:
+
+- `GET /rest/system/diskfree?path=…` reports free and total bytes for a path
+  (`lib/api/api_diskfree.go`). For a folder path that does not exist yet it
+  measures the nearest existing ancestor, which is the same filesystem the
+  folder will end up on.
+- The folder editor shows "481 GiB free of 1.82 TiB" under the Folder Path
+  field, updating as the path is typed.
+- The folder panel has a **Disk Space** row, and when what is still to be
+  pulled will not fit it turns red: *"Not enough space: needs 357 GiB more than
+  the 481 GiB free here"*.
+
+**A true accept-time check turns out to be impossible**, and it is worth
+recording why, because it is not obvious. The suggestion used to be "compare
+the offering device's advertised folder size against `fs.Usage()`". But the
+offering device never advertises a size. The pending-folder record is
+`ObservedFolder` in `internal/db/observed.go`:
+
+```go
+type ObservedFolder struct {
+	Time             time.Time
+	Label            string
+	ReceiveEncrypted bool
+	RemoteEncrypted  bool
+}
+```
+
+Label and two flags. No size, no file count. And the size cannot be learned by
+waiting either: the GUI adds a newly accepted folder **paused**, and
+`generateClusterConfig` announces a paused folder with
+`StopReason: FolderStopReasonPaused`, so the remote sends no index and
+`globalBytes` stays 0 until the folder actually starts.
+
+So the earliest moment the size is knowable is *just after* the folder starts
+and its index arrives — before any file data has been pulled. That is where the
+warning fires. It is not "before you click accept", but it is still long before
+the disk fills, and it names the exact shortfall instead of leaving the folder
+to wedge at "Out of Sync" with a full drive.
 
 ## 2. Selective sync: it exists, but it is ignore patterns
 

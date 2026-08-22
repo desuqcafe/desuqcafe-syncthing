@@ -88,6 +88,9 @@
                 <span class="text-danger" translate translate-value-other-folder="{{folderPathErrors.otherID}}" ng-if="folderPathErrors.otherLabel.length == 0">Warning, this path is a parent directory of an existing folder "{%otherFolder%}".</span>
                 <span class="text-danger" translate translate-value-other-folder="{{folderPathErrors.otherID}}" translate-value-other-folder-label="{{folderPathErrors.otherLabel}}" ng-if="folderPathErrors.otherLabel.length != 0">Warning, this path is a parent directory of an existing folder "{%otherFolderLabel%}" ({%otherFolder%}).</span>
               </span>
+              <!-- desuqcafe fork: show the space on the drive being pointed at, before
+                   committing to a folder that will not fit. -->
+              <span ng-if="!editingFolderDefaults()"></br><disk-free path="currentFolder.path" need-bytes="model[currentFolder.id].needBytes"></disk-free></span>
             </p>
           </div>
         </div>
