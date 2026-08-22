@@ -49,10 +49,20 @@ Everything else is upstream Syncthing, unmodified.
 .\custom\build-windows.ps1 -Installer          # build binary + installer
 .\custom\scripts\sync-upstream.ps1 -DryRun     # preview upstream changes
 git tag v2.1.4-desuq.2; git push origin v2.1.4-desuq.2   # cut a release
+
+# Two-device testing. Most of what this fork adds only happens between two
+# devices, so this is usually the first thing to run.
+.\custom\scripts\start-test-pair.ps1 -Fresh -WithFolder   # A on 8390, B on 8391
+.\custom\scripts\start-test-pair.ps1 -Stop
 ```
 
 Requires Go (per `go.mod`) and Inno Setup. The build script provisions
 `goversioninfo` itself.
+
+To iterate on `gui/` without rebuilding the binary, point `STGUIASSETS` at the
+repository's `gui` directory before starting Syncthing. It serves those files
+in preference to the compiled blob, falling back per file, so a browser refresh
+is the whole edit loop.
 
 ## Who this is for
 
