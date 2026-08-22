@@ -170,6 +170,30 @@ Applied per machine, under *Actions → Advanced → Defaults*:
 | Default Ignores | empty | the block in §3 | Kills the `.blend1` churn |
 | Folder type (modellers) | Send & Receive | Receive Only where they only consume | Prevents accidental upstream overwrites |
 
-These are per-device settings, not baked into the build — the installer does not
-currently seed them. Seeding them at install time would need the installer to
-write `config.xml` before first launch, which is doable but not yet done.
+These are per-device settings rather than build-time ones, so **the installer
+seeds them into `config.xml` before Syncthing first starts**
+(`custom/scripts/seed-config.ps1`). A fresh install therefore already has
+staggered versioning, the 20 GB reserve and the Blender ignore set in place,
+and nobody has to find *Actions → Advanced → Defaults*.
+
+What is seeded, and what is deliberately not:
+
+| Seeded | Not seeded |
+| --- | --- |
+| `defaults/folder/versioning` — staggered, 30 days | Existing folders and devices — only the *defaults* are written |
+| `defaults/folder/minDiskFree` — 20 GB | Folder type (Receive Only) — that is a per-folder, per-person choice |
+| `defaults/ignores` — the §3 block | The GUI password — set it per machine if the LAN is not trusted |
+| `gui/theme` — `violet` | |
+| `device/@name` — the Windows user name, rather than upstream's host name, because `DESKTOP-A1B2C3` tells nobody which machine they are looking at | |
+
+Re-running the installer does **not** re-seed: a sentinel file in the data
+directory records that it has been done, so an upgrade never overwrites
+settings someone has since changed in the GUI. To force it after changing the
+recommended values, bump `$SeedVersion` in the script, or run it by hand:
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\desuq-syncthing\seed-config.ps1" `
+    -DataDir "$env:LOCALAPPDATA\desuqcafe-syncthing" `
+    -Binary  "$env:LOCALAPPDATA\Programs\desuq-syncthing\desuq-syncthing.exe" `
+    -Force
+```

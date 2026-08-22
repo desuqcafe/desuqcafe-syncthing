@@ -74,6 +74,9 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 
 [Files]
 Source: "..\dist\{#MyAppBinary}.exe"; DestDir: "{app}"; Flags: ignoreversion
+; Shipped rather than run from a temp dir so it can be re-run by hand later,
+; e.g. with -Force after the recommended defaults change.
+Source: "..\scripts\seed-config.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 ; Double-clicking starts the daemon and opens the web GUI. If it is already
@@ -94,6 +97,19 @@ Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppBinary}.exe"; \
     WorkingDir: "{app}"; Tasks: startupicon
 
 [Run]
+; Seed config.xml with the defaults this team needs -- staggered versioning, a
+; 20 GB disk reserve, the Blender ignore set -- before Syncthing ever starts,
+; so the modellers get a working setup without touching Settings. Entries
+; without the postinstall flag run during installation, so this is guaranteed
+; to complete before the "Start now" entry below.
+;
+; The script no-ops on an upgrade unless the seeded defaults have changed, and
+; swallows its own errors, so a failure here can never block the install.
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
+    Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""{app}\seed-config.ps1"" -DataDir ""{localappdata}\{#MyDataDir}"" -Binary ""{app}\{#MyAppBinary}.exe"""; \
+    WorkingDir: "{app}"; StatusMsg: "Preparing your {#MyAppName} settings..."; \
+    Flags: runhidden waituntilterminated
+
 Filename: "{app}\{#MyAppBinary}.exe"; \
     Parameters: "serve --home=""{localappdata}\{#MyDataDir}"""; \
     WorkingDir: "{app}"; Description: "Start {#MyAppName} now"; \

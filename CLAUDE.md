@@ -28,6 +28,7 @@ As of now exactly **one** upstream file is modified: `build.go` (16 lines).
 | `custom/branding.ps1` | Single source of truth for all naming |
 | `custom/build-windows.ps1` | Builds the branded binary + installer |
 | `custom/installer/installer.iss` | Inno Setup script (per-user, no admin) |
+| `custom/scripts/seed-config.ps1` | Writes first-run `config.xml` defaults |
 | `custom/scripts/sync-upstream.ps1` | Merge upstream and verify the build |
 | `custom/scripts/disable-inherited-ci.ps1` | Turn off upstream's workflows |
 | `custom/CUSTOMIZATIONS.md` | Divergence register and merge guide |
