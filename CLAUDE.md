@@ -15,6 +15,9 @@ boring. Concretely:
 - **Never rename the Go module or any package.** The module is still
   `github.com/syncthing/syncthing`. Renaming it would rewrite every import in
   the tree and make merges impossible.
+- **New dependencies go in a nested module, not the root `go.mod`.** Adding a
+  line to upstream's `go.mod`/`go.sum` means a conflict on every dependency
+  bump they make. `custom/tray/` is a separate module for exactly this reason.
 - Prefer Syncthing's existing extension points over patching source:
   `--home`, `STGUIASSETS`, build tags, and the `ST_BRAND_*` env vars.
 - Record any new upstream-file edit in the table in `custom/CUSTOMIZATIONS.md`.
@@ -28,6 +31,7 @@ As of now exactly **one** upstream file is modified: `build.go` (16 lines).
 | `custom/branding.ps1` | Single source of truth for all naming |
 | `custom/build-windows.ps1` | Builds the branded binary + installer |
 | `custom/installer/installer.iss` | Inno Setup script (per-user, no admin) |
+| `custom/tray/` | Notification-area app. **Its own Go module** |
 | `custom/scripts/seed-config.ps1` | Writes first-run `config.xml` defaults |
 | `custom/scripts/sync-upstream.ps1` | Merge upstream and verify the build |
 | `custom/scripts/disable-inherited-ci.ps1` | Turn off upstream's workflows |

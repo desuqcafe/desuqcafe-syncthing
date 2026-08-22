@@ -41,6 +41,24 @@ Nothing else. In particular we have **not**:
 | Auto-upgrade | Compiled out with the `noupgrade` build tag (see below). No source change. |
 | GUI logo / CSS *(not used yet)* | Syncthing serves `$STGUIASSETS/<theme>/<file>` in preference to its built-in copy and falls back per file, so dropping art into an assets directory rebrands the web UI **without editing `gui/`**. Wire it up by setting `STGUIASSETS` in the shortcuts. |
 | First-run defaults (versioning, disk reserve, ignore patterns, theme, device name) | `custom/scripts/seed-config.ps1`, run by the installer before first launch. It calls Syncthing's own `generate` subcommand to create `config.xml` and the device keys, then patches the `<defaults>` block. No source change; see `DEPLOYMENT-3D-TEAM.md` for the values and the reasoning. |
+| Violet web UI theme | A new directory, `gui/violet/`. `lib/api`'s static server discovers theme directories by itself and falls back to `gui/default` per file, so only `theme.css` had to be written. `lib/api/auto/gui.files.go` is generated at build time and **gitignored**, so compiling the theme in adds nothing to the diff. |
+| Notification-area icon | `custom/tray/`, **a separate Go module** — see below. It talks to Syncthing only over the REST API. |
+
+## Why the tray is its own Go module
+
+`custom/tray` has its own `go.mod` and `go.sum`. The alternative — adding
+`fyne.io/systray` to the root `go.mod` — would put our lines in two files that
+upstream edits on every dependency bump, guaranteeing a conflict on each merge,
+for a program that is not part of Syncthing.
+
+A nested module is invisible to the parent: `go build ./...` at the repository
+root skips the directory entirely, and upstream's `go.mod` and `go.sum` stay
+byte-for-byte theirs. `custom/build-windows.ps1` builds it as a second step.
+
+The tray reads Syncthing's state through the REST API and its address and API
+key out of `config.xml`. It deliberately does not import `lib/config` or
+anything else from the tree above it, so an upstream change to those packages
+cannot break it.
 
 All names live in one place: `custom/branding.ps1`.
 

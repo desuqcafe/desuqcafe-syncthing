@@ -159,6 +159,31 @@ The sending side is fine too — if Blender is still writing when a scan fires,
 Syncthing sees the file change again and rescans. `fsWatcherDelayS` defaults to
 10 s, which absorbs most of it.
 
+## 7. Nothing showed that Syncthing was running — now the tray does
+
+Syncthing has no notification-area icon and no service mode. Started from the
+sign-in shortcut it ran completely invisibly, which for this team is the worst
+possible failure mode: if it stops, or somebody closes it, nothing says so and
+the files simply stop arriving. People notice days later.
+
+The sign-in shortcut now starts `desuq-syncthing-tray.exe`, which starts
+Syncthing, keeps it running, and shows one of five states:
+
+| Icon | Meaning |
+| --- | --- |
+| Violet, tick | Up to date |
+| Blue, arrows | Syncing or scanning, with the amount left in the tooltip |
+| Grey, pause bars | Paused |
+| Red, exclamation | A folder has an error — open the GUI to see it |
+| Dark, dash | Syncthing is not running |
+
+Right-click gives **Open**, **Pause Syncing** and **Quit**. Pause uses the same
+endpoint as the GUI's *Pause All* button: it pauses every device, so nothing
+transfers, while local scanning carries on.
+
+Worth telling the modellers: **the icon is the app**. Quitting from that menu
+stops syncing until they sign in again or start it from the Start Menu.
+
 ## Recommended configuration
 
 Applied per machine, under *Actions → Advanced → Defaults*:

@@ -127,6 +127,28 @@ finally {
     Pop-Location
 }
 
+# --- Tray ------------------------------------------------------------------
+# Built separately because custom/tray is its own Go module: it needs a systray
+# dependency that has no business in upstream's go.mod. See custom/tray/go.mod.
+$TrayDir = Join-Path $PSScriptRoot 'tray'
+Push-Location $TrayDir
+try {
+    $env:CGO_ENABLED   = '0'
+    $env:GOOS          = 'windows'
+    $env:GOARCH        = 'amd64'
+    $trayOut = Join-Path $DistDir "$($Brand.Binary)-tray.exe"
+
+    Write-Host "Building $($Brand.Binary)-tray.exe..." -ForegroundColor Cyan
+    # -H windowsgui for the same reason as the daemon: a shortcut must not pop
+    # a console window at sign-in.
+    & $go build -ldflags '-H windowsgui' -o $trayOut .
+    if ($LASTEXITCODE -ne 0) { throw "tray build failed with exit code $LASTEXITCODE" }
+    Write-Host "Tray:   $trayOut" -ForegroundColor Green
+}
+finally {
+    Pop-Location
+}
+
 # --- Installer ------------------------------------------------------------
 if ($Installer) {
     $iscc = Find-ISCC

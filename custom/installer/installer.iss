@@ -74,6 +74,7 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 
 [Files]
 Source: "..\dist\{#MyAppBinary}.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\{#MyAppBinary}-tray.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Shipped rather than run from a temp dir so it can be re-run by hand later,
 ; e.g. with -Force after the recommended defaults change.
 Source: "..\scripts\seed-config.ps1"; DestDir: "{app}"; Flags: ignoreversion
@@ -91,10 +92,14 @@ Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppBinary}.exe"; \
     Parameters: "serve --home=""{localappdata}\{#MyDataDir}"""; \
     WorkingDir: "{app}"; Tasks: desktopicon
 
-; Autostart shortcut: same thing, minus opening a browser window at sign-in.
-Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppBinary}.exe"; \
-    Parameters: "serve --home=""{localappdata}\{#MyDataDir}"" --no-browser"; \
-    WorkingDir: "{app}"; Tasks: startupicon
+; Autostart runs the tray rather than the daemon directly. The tray starts
+; Syncthing, keeps it running, and is the only thing on screen that says whether
+; it is working -- Syncthing itself has no tray icon and no service mode, so
+; started bare at sign-in it is completely invisible.
+Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppBinary}-tray.exe"; \
+    Parameters: "-home=""{localappdata}\{#MyDataDir}"" -binary=""{app}\{#MyAppBinary}.exe"""; \
+    WorkingDir: "{app}"; Tasks: startupicon; \
+    Comment: "Run {#MyAppName} in the notification area"
 
 [Run]
 ; Seed config.xml with the defaults this team needs -- staggered versioning, a
@@ -110,8 +115,11 @@ Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
     WorkingDir: "{app}"; StatusMsg: "Preparing your {#MyAppName} settings..."; \
     Flags: runhidden waituntilterminated
 
-Filename: "{app}\{#MyAppBinary}.exe"; \
-    Parameters: "serve --home=""{localappdata}\{#MyDataDir}"""; \
+; Start the tray rather than the daemon directly, so what the user gets now is
+; the same thing they will get at sign-in. -open makes it show the web
+; interface once it is up, which the sign-in shortcut deliberately does not do.
+Filename: "{app}\{#MyAppBinary}-tray.exe"; \
+    Parameters: "-home=""{localappdata}\{#MyDataDir}"" -binary=""{app}\{#MyAppBinary}.exe"" -open"; \
     WorkingDir: "{app}"; Description: "Start {#MyAppName} now"; \
     Flags: nowait postinstall skipifsilent
 
@@ -122,7 +130,12 @@ procedure StopRunningInstance();
 var
   ResultCode: Integer;
 begin
-  // Ask politely first, then insist.
+  // The tray first: it supervises Syncthing and would restart it underneath us.
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM {#MyAppBinary}-tray.exe',
+       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(500);
+
+  // Then the daemon: ask politely first, then insist.
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM {#MyAppBinary}.exe',
        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(1500);
