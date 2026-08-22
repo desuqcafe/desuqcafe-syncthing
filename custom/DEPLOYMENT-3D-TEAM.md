@@ -272,7 +272,73 @@ and no registration** beyond a per-user registry key naming the app.
 Notifications can be turned off per machine with `--quiet` on the tray, and
 appear in Windows' own notification settings under *desuqcafe Syncthing*.
 
-## 9. What is verified, and what is not
+## 9. Adding a device is mutual, but it is not authentication
+
+Both sides have to add each other before anything syncs, and that mutuality is
+routinely mistaken for proof of identity. It is not. It proves the two
+installations agreed on an ID. It says nothing about **whose** ID it is.
+
+In practice the ID is pasted into a chat window and trusted. Anyone able to
+edit that message can substitute their own ID; both people add the attacker,
+both see "Connected", and nothing anywhere looks wrong. Syncthing's own
+documentation says the ID must be exchanged over a trusted channel. Nothing in
+the product helps you check that you did.
+
+**What the fork does about it**
+
+The device editor and the device panel now show a short authentication string
+for the pair -- the same idea ZRTP and Signal use, dressed as a finishing move:
+
+```
+《 CRIMSON TALISMAN NOCTURNE 》Rank CLXXVI
+```
+
+The two device IDs are sorted, joined and hashed with SHA-256. Three bytes of
+the digest index three wordlists of 256; a fourth gives the rank. Sorting is
+what makes both machines agree regardless of who is adding whom, and 256³ × 256
+is 2^32 possible phrases. Swap either ID and the phrase changes.
+
+**The part that is easy to get wrong.** The strength is entirely in the channel
+you compare over. Reading the phrase to each other on a voice call works
+because you recognise the voice. Sending it through the same chat that carried
+the device ID does **not** — whoever tampered with the ID can tamper with the
+phrase. The card says so on screen, because a ritual people perform incorrectly
+is worse than no ritual: it manufactures confidence without earning it.
+
+Some deliberate decisions:
+
+- **The wordlists are checked mechanically, not by eye.** No two words in a
+  list share their first three letters, and none are within a Levenshtein
+  distance of 3. If "SLASH" and "CLASH" were both in the strike list, a
+  *mismatched* pair could sound matched down a phone line — the one failure
+  this mechanism exists to prevent. `custom/scripts/check-handshake-words.ps1`
+  asserts it and the Windows build runs it, so a careless edit fails the build.
+- **The rank is shown as a Roman numeral and as a number** — "Rank CLXXVI
+  (176 of 256)". The numeral is the aesthetic; the digits are what someone
+  actually reads down a phone, because CCXLIII and CCXLIV are not
+  distinguishable by ear.
+- **SHA-256 is implemented in the page rather than taken from
+  `window.crypto.subtle`.** SubtleCrypto only exists in a secure context. That
+  covers `http://127.0.0.1`, but the GUI is routinely opened at
+  `http://192.168.x.x` from another machine, where it is `undefined` — so the
+  feature would have silently died on exactly the setup most likely to need it.
+- **Confirmations are stored in `localStorage`, not in the config.** Writing
+  them to the config would sync a claim about identity between machines, which
+  is precisely the thing that cannot be trusted over the wire. A confirmation
+  is a note to self and stays on the machine that made it. It is also voided
+  automatically if either device ID changes, so re-pasting a different ID
+  cannot inherit a tick it never earned.
+- **It does not block saving.** The card informs; it does not gate the button.
+  Gating would mean editing upstream's save path, and would trap anyone whose
+  browser failed to load the directive.
+
+**What it does not do.** It does not defend against someone who can grind
+device IDs: 2^32 is enough to make a live substitution fail, not enough to
+resist an attacker generating keys until one collides with a target phrase.
+For a three-person studio that is the right trade. It is worth knowing before
+anyone points this at a larger deployment.
+
+## 10. What is verified, and what is not
 
 Verified 2026-08-23 against **two instances on separate ports sharing a real
 folder**, not just single-device:
@@ -288,6 +354,12 @@ folder**, not just single-device:
   device key, folders and devices, seeded the defaults, pointed the sign-in
   shortcut at the tray, and on a second run stopped both processes and left
   `config.xml` byte-identical.
+- The device verification card was rendered through real Angular and asserted
+  on: the phrase, both its forms, the on-screen warning, and -- the one that
+  matters -- that a stored confirmation is voided the moment either device ID
+  changes. The in-page SHA-256 matches Node's `crypto` byte for byte, and
+  across 20,000 synthetic pairs every one of the 256 values in each of the
+  four positions is reachable with no collisions, so the space really is 2^32.
 - **All five notifications fired end to end against those two instances**, and
   were confirmed on screen. In order: an unknown device dialling in raised one
   toast despite Syncthing emitting the underlying event ten times; the folder
@@ -299,7 +371,7 @@ folder**, not just single-device:
 **Not verified:** uninstall. It shares `StopRunningInstance` with the upgrade
 path, which is exercised, but the `DelTree` prompt has never been run.
 
-## 10. Things that surprised us, worth knowing before changing anything
+## 11. Things that surprised us, worth knowing before changing anything
 
 - **`limitBandwidthInLan` defaults to `false`.** Rate limits are silently
   ignored on LAN and loopback until it is switched on. If a limit "does not

@@ -88,6 +88,18 @@ Write-Host "Version: $Version" -ForegroundColor DarkGray
 $numeric = '0.0.0'
 if ($Version -match '(\d+)\.(\d+)\.(\d+)') { $numeric = "$($Matches[1]).$($Matches[2]).$($Matches[3])" }
 
+# --- Checks ---------------------------------------------------------------
+
+# The device-verification wordlists have to stay phonetically distinct or the
+# handshake silently stops being able to catch a mismatch. Cheap to check, and
+# a build is the last point at which a bad edit can be caught.
+$wordCheck = Join-Path $PSScriptRoot 'scripts\check-handshake-words.ps1'
+if (Test-Path -LiteralPath $wordCheck) {
+    Write-Host "Checking device-verification wordlists..." -ForegroundColor DarkGray
+    & $wordCheck
+    if ($LASTEXITCODE -ne 0) { throw "handshake wordlist check failed" }
+}
+
 # --- Build ----------------------------------------------------------------
 Push-Location $RepoRoot
 try {

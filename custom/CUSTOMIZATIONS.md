@@ -23,8 +23,9 @@ This is the complete list. Keep it that way, and keep this table current.
 | --- | --- | --- |
 | `build.go` | Added an `envOr()` helper and used it for the six Windows version-resource strings in `shouldBuildSyso()` (product name, publisher, description, internal/original filename, icon). | **Low.** 16 lines in one rarely-touched function. With the `ST_BRAND_*` variables unset the behaviour is byte-for-byte upstream's, so the change is safe to keep across merges. |
 | `lib/api/api.go` | **One line**, registering `GET /rest/system/diskfree`. The handler itself is in a new file, `lib/api/api_diskfree.go`. | **Low.** One entry in a long, alphabetically-ordered, append-only route table. If it ever conflicts the resolution is "keep both sides". |
-| `gui/default/index.html` | Two additive hunks: a `<script>` tag for the fork's directive, and a "Disk Space" row in the folder detail table. 11 lines. | **Low–medium.** The file is large and upstream does edit it, but both hunks are additive and nowhere near each other. |
+| `gui/default/index.html` | Four additive hunks, ~20 lines: a `<link>` and three `<script>` tags for the fork's GUI files, a "Disk Space" row in the folder detail table, and a "Verification" row in the device detail table. | **Low–medium.** The file is large and upstream does edit it, but every hunk is additive and they are far apart. |
 | `gui/default/syncthing/folder/editFolderModalView.html` | Three lines showing free space under the Folder Path field. | **Low.** |
+| `gui/default/syncthing/device/editDeviceModalView.html` | Five lines placing the device verification card under the Device ID field. | **Low.** |
 
 Everything else the fork adds lives in files upstream does not have, so it
 cannot conflict at all:
@@ -32,7 +33,7 @@ cannot conflict at all:
 | New file | What |
 | --- | --- |
 | `lib/api/api_diskfree.go` | The `/rest/system/diskfree` handler |
-| `gui/default/syncthing/desuq/` | The fork's Angular directives |
+| `gui/default/syncthing/desuq/` | The fork's Angular directives, its wordlists and its CSS |
 | `gui/violet/` | The violet theme |
 | `custom/` | Everything else |
 
@@ -60,6 +61,7 @@ In particular we have **not**:
 | Violet web UI theme | A new directory, `gui/violet/`. `lib/api`'s static server discovers theme directories by itself and falls back to `gui/default` per file, so only `theme.css` had to be written. `lib/api/auto/gui.files.go` is generated at build time and **gitignored**, so compiling the theme in adds nothing to the diff. |
 | Notification-area icon | `custom/tray/`, **a separate Go module** — see below. It talks to Syncthing only over the REST API. |
 | Desktop notifications | Also `custom/tray/`. It subscribes to Syncthing's `/rest/events` long poll and raises Windows toasts through WinRT. No source change, and no new dependency: WinRT is reached through `combase.dll` with `syscall`, and toast clicks use protocol activation so nothing has to be registered with COM. |
+| Verified device handshake | `gui/default/syncthing/desuq/`, plus five lines in the device modal and one row in the device panel. Entirely client-side: the phrase is a SHA-256 of the two device IDs, computed in the browser, so there is **no new REST route and no server code at all**. See `DEPLOYMENT-3D-TEAM.md` section 9. |
 
 ## Why the tray is its own Go module
 

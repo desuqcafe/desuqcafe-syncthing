@@ -84,3 +84,11 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
 - Windows suppresses toasts while anything is full screen (automatic Do Not
   Disturb). They land in the Action Centre instead, so a notifier that looks
   broken during testing may be working perfectly.
+- `window.crypto.subtle` is **undefined** in the GUI whenever it is reached at
+  anything but `127.0.0.1` over plain http — a LAN address is not a secure
+  context. Anything cryptographic in `gui/` has to carry its own implementation.
+- The device-verification wordlists in `gui/default/syncthing/desuq/` are data,
+  not prose: a word's *index* is its meaning. Re-ordering a list or inserting
+  into the middle of one silently invalidates every verification anyone has
+  already done. Append only, and re-run
+  `custom/scripts/check-handshake-words.ps1` (the build does too).

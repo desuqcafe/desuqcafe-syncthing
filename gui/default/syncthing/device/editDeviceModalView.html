@@ -42,6 +42,11 @@
                   </li>
                 </ul>
               </div>
+            <!-- desuqcafe fork: short authentication string for the pair.
+                 Adding a device is mutual but not authenticated -- this is
+                 what lets the two people check the ID was not swapped in
+                 transit. See gui/default/syncthing/desuq/. -->
+            <device-handshake local-id="myID" remote-id="currentDevice.deviceID"></device-handshake>
               <p class="help-block">
                 <span translate ng-if="deviceEditor.deviceID.$valid || deviceEditor.deviceID.$pristine">The device ID to enter here can be found in the "Actions &gt; Show ID" dialog on the other device. Spaces and dashes are optional (ignored).</span>
                 <span translate ng-show="deviceEditor.deviceID.$valid || deviceEditor.deviceID.$pristine">When adding a new device, keep in mind that this device must be added on the other side too.</span>
