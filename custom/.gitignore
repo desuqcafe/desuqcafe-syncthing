@@ -1,0 +1,6 @@
+# Build output. Scoped to this directory so the root .gitignore stays untouched
+# and never conflicts with upstream.
+dist/
+
+# Drop a logo.ico here to override the icon; art itself is not committed.
+branding/*.ico

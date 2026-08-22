@@ -1,0 +1,97 @@
+# Builds and publishes the desuqcafe Syncthing Windows installer.
+#
+# This workflow belongs to the fork; upstream Syncthing has no file by this
+# name, so it never conflicts when merging upstream changes.
+#
+# Cut a release by tagging a commit, e.g.:
+#   git tag v2.1.4-desuq.1 && git push origin v2.1.4-desuq.1
+name: desuq release
+
+on:
+  push:
+    tags:
+      - "v*-desuq*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to stamp (e.g. v2.1.4-desuq.1)"
+        required: true
+        default: "v0.0.0-desuq.dev"
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Windows installer
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # build-windows.ps1 falls back to `git describe`, which needs tags.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Resolve version
+        id: ver
+        shell: pwsh
+        run: |
+          $v = if ('${{ github.event_name }}' -eq 'push') {
+                 '${{ github.ref_name }}'
+               } else {
+                 '${{ github.event.inputs.version }}'
+               }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "Building $v"
+
+      - name: Ensure Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+          }
+
+      - name: Build binary and installer
+        shell: pwsh
+        run: ./custom/build-windows.ps1 -Version "${{ steps.ver.outputs.version }}" -Installer
+
+      - name: Checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem custom/dist/*.exe | ForEach-Object {
+            $h = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$h  $($_.Name)"
+          } | Set-Content custom/dist/SHA256SUMS.txt
+          Get-Content custom/dist/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desuq-syncthing-windows
+          path: |
+            custom/dist/*.exe
+            custom/dist/SHA256SUMS.txt
+
+      - name: Publish release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.ver.outputs.version }}
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          body: |
+            desuqcafe Syncthing ${{ steps.ver.outputs.version }}
+
+            **Install (Windows):** download `desuq-syncthing-setup-*.exe` and run it.
+            No administrator rights are needed — it installs for the current user only.
+
+            Built with in-app auto-upgrade disabled; update by running a newer installer.
+          files: |
+            custom/dist/*.exe
+            custom/dist/SHA256SUMS.txt

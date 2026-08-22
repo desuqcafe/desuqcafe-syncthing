@@ -683,6 +683,16 @@ func createPostInstScript(target target) (string, error) {
 	return scriptname, nil
 }
 
+// envOr returns the value of the named environment variable, or def when it is
+// unset or empty. Added by the desuqcafe fork so branding can be overridden at
+// build time without changing upstream defaults. See custom/CUSTOMIZATIONS.md.
+func envOr(name, def string) string {
+	if v := os.Getenv(name); v != "" {
+		return v
+	}
+	return def
+}
+
 func shouldBuildSyso(dir string) (string, error) {
 	type M map[string]interface{}
 	version := getVersion()
@@ -702,16 +712,16 @@ func shouldBuildSyso(dir string) (string, error) {
 			},
 		},
 		"StringFileInfo": M{
-			"CompanyName":      "The Syncthing Authors",
-			"FileDescription":  "Syncthing - Open Source Continuous File Synchronization",
+			"CompanyName":      envOr("ST_BRAND_COMPANY", "The Syncthing Authors"),
+			"FileDescription":  envOr("ST_BRAND_DESCRIPTION", "Syncthing - Open Source Continuous File Synchronization"),
 			"FileVersion":      version,
-			"InternalName":     "syncthing",
+			"InternalName":     envOr("ST_BRAND_BINARY", "syncthing"),
 			"LegalCopyright":   "The Syncthing Authors",
-			"OriginalFilename": "syncthing",
-			"ProductName":      "Syncthing",
+			"OriginalFilename": envOr("ST_BRAND_BINARY", "syncthing"),
+			"ProductName":      envOr("ST_BRAND_PRODUCT", "Syncthing"),
 			"ProductVersion":   version,
 		},
-		"IconPath": "assets/logo.ico",
+		"IconPath": envOr("ST_BRAND_ICON", "assets/logo.ico"),
 	})
 	if err != nil {
 		return "", err
