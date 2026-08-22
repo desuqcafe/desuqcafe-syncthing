@@ -13,9 +13,9 @@ module github.com/desuqcafe/desuqcafe-syncthing/custom/tray
 
 go 1.24
 
-require fyne.io/systray v1.12.2
-
 require (
-	github.com/godbus/dbus/v5 v5.1.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
+	fyne.io/systray v1.12.2
+	golang.org/x/sys v0.31.0
 )
+
+require github.com/godbus/dbus/v5 v5.1.0 // indirect

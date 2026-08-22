@@ -28,11 +28,17 @@ import (
 
 const appName = "desuqcafe Syncthing"
 
+// toastAppID is the AppUserModelID Windows attributes notifications to. It is
+// only ever compared as a string, but the convention is CompanyName.AppName so
+// that it cannot collide with another program's.
+const toastAppID = "desuqcafe.Syncthing.Tray"
+
 type options struct {
 	home     string
 	binary   string
 	attach   bool
 	open     bool
+	quiet    bool
 	interval time.Duration
 }
 
@@ -47,6 +53,9 @@ type app struct {
 	cl     *client
 	selfID string
 	last   Status
+
+	notify notifier
+	alerts *alerter
 
 	refresh chan struct{}
 	ctx     context.Context
@@ -75,8 +84,13 @@ func main() {
 		"Do not start or stop Syncthing; only watch an instance that is already running")
 	flag.BoolVar(&opts.open, "open", false,
 		"Open the web interface once Syncthing is up. Used by the installer, not by the sign-in shortcut")
-	flag.DurationVar(&opts.interval, "interval", 5*time.Second,
-		"How often to poll Syncthing for its status")
+	// The event stream, not this ticker, is what makes the icon react. This is
+	// only the safety net for an event that was missed or never fires, so it
+	// is deliberately slow: polling every five seconds was the old design.
+	flag.DurationVar(&opts.interval, "interval", 30*time.Second,
+		"How often to re-read Syncthing's status as a fallback to the event stream")
+	flag.BoolVar(&opts.quiet, "quiet", false,
+		"Do not show desktop notifications")
 	flag.Parse()
 
 	// Log to the Syncthing home directory, where the support bundle and
@@ -96,6 +110,12 @@ func main() {
 
 	a := &app{opts: opts, refresh: make(chan struct{}, 1)}
 	a.ctx, a.cancel = context.WithCancel(context.Background())
+
+	a.notify = nopNotifier{}
+	if !opts.quiet {
+		a.notify = newNotifier(toastAppID, appName)
+	}
+	a.alerts = newAlerter(a.notify, a.guiURL, a.client)
 
 	if !opts.attach {
 		a.sup = newSupervisor(opts.binary, opts.home, a.connected)
@@ -134,10 +154,40 @@ func (a *app) onReady() {
 
 	go a.watchClicks()
 	go a.pollLoop()
+	// The event stream both feeds the notifications and wakes the status
+	// refresh, so the icon changes when Syncthing does rather than up to a
+	// poll interval later.
+	go watchEvents(a.ctx, a.client, a.onEvent)
+	go a.alerts.watchDisk(a.ctx)
 }
 
 func (a *app) onExit() {
 	a.cancel()
+	a.notify.Close()
+}
+
+// client returns the current API client, or nil if Syncthing is not reachable.
+// Everything that talks to Syncthing off the poll loop goes through this rather
+// than holding a client, because the client is replaced whenever Syncthing
+// restarts on a different port.
+func (a *app) client() *client {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.cl
+}
+
+func (a *app) guiURL() string {
+	if cl := a.client(); cl != nil {
+		return cl.ep.baseURL
+	}
+	return ""
+}
+
+// onEvent handles one event from the stream: it updates the icon promptly, and
+// hands the event to the notification policy.
+func (a *app) onEvent(ev event) {
+	a.alerts.handle(ev)
+	a.pokeRefresh()
 }
 
 func (a *app) watchClicks() {
@@ -214,6 +264,10 @@ func (a *app) pokeRefresh() {
 
 // pollLoop is the only place the status is read, so the menu and the icon can
 // never disagree about what state they are showing.
+//
+// It is woken by the event stream rather than driving the pace itself. The
+// ticker is the fallback for a change no event describes, which is why it is
+// slow: making it fast again would defeat the point of subscribing.
 func (a *app) pollLoop() {
 	ticker := time.NewTicker(a.opts.interval)
 	defer ticker.Stop()
@@ -223,8 +277,10 @@ func (a *app) pollLoop() {
 	fast := time.NewTicker(time.Second)
 	defer fast.Stop()
 
+	var lastPoll time.Time
 	for {
-		if a.connected() {
+		up := a.connected()
+		if up {
 			a.apply(a.readStatus())
 		} else {
 			a.apply(Status{
@@ -233,12 +289,11 @@ func (a *app) pollLoop() {
 				Detail:   "Waiting for Syncthing",
 			})
 		}
+		lastPoll = time.Now()
 
-		var tick <-chan time.Time
-		if a.connected() {
+		tick := fast.C
+		if up {
 			tick = ticker.C
-		} else {
-			tick = fast.C
 		}
 
 		select {
@@ -246,9 +301,27 @@ func (a *app) pollLoop() {
 			return
 		case <-tick:
 		case <-a.refresh:
+			// Events arrive in bursts -- a folder syncing publishes a summary
+			// every few seconds, and each one would otherwise cost a full
+			// config-plus-status read. Hold off briefly so a burst costs one
+			// refresh rather than one per event.
+			if wait := minRefreshGap - time.Since(lastPoll); wait > 0 {
+				if !sleepCtx(a.ctx, wait) {
+					return
+				}
+				// Anything that arrived while waiting is already covered by
+				// the poll about to happen.
+				select {
+				case <-a.refresh:
+				default:
+				}
+			}
 		}
 	}
 }
+
+// minRefreshGap is the shortest time between two event-driven status reads.
+const minRefreshGap = 2 * time.Second
 
 // connected resolves the API endpoint if it has not been resolved yet. The
 // address and key are re-read from config.xml rather than cached across

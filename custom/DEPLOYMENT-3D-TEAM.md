@@ -215,7 +215,64 @@ transfers, while local scanning carries on.
 Worth telling the modellers: **the icon is the app**. Quitting from that menu
 stops syncing until they sign in again or start it from the Start Menu.
 
-## 8. What is verified, and what is not
+## 8. Nothing reached the user unless the GUI was open - now it does
+
+Syncthing knows a great deal that nobody ever sees. It has a full event stream
+at `/rest/events` - devices connecting, folders erroring, sync finishing,
+someone asking to share a folder - and **no notification of any kind**. Unless
+the web GUI happens to be open in a browser tab, every one of those passes in
+silence.
+
+For this team that is the same failure as having no tray icon, one level up.
+The icon says "something is wrong"; it does not say so loudly enough to notice,
+and nobody is looking at it.
+
+The tray now consumes that event stream and raises real Windows toasts. Every
+toast is click-through: clicking it opens the web GUI at the page that can act
+on the thing being reported.
+
+| Toast | Raised when | Held back by |
+| --- | --- | --- |
+| A new device wants to connect | An unconfigured device tries to connect | One per device, until it is dealt with |
+| A new folder has been offered | A known device offers a folder | One per folder *and* offering device |
+| Sync complete | A folder that was behind reaches zero | 10 s settle, then one toast for all folders that finished; 2 min per folder |
+| Problem with *folder* | A folder enters the error state | One per folder per 30 min, reset when it recovers |
+| Disk nearly / completely full | Free space falls under twice the folder's reserve | One per **drive** per 6 h, reset when space recovers |
+
+**The restraint is the feature.** `LocalChangeDetected` fires once per file and
+`FolderSummary` every few seconds per folder; a naive "toast on interesting
+event" makes the first sync of a texture library unusable and teaches the user
+to dismiss everything, which is worse than no notifications at all. So the tray
+subscribes to a deliberately narrow event mask - the per-file events are not in
+it - and every alert has a cooldown. "Sync complete" in particular fires only on
+the transition from *behind* to *in sync*, never on an idle folder rescanning
+and finding nothing.
+
+Two things learned building it, both non-obvious:
+
+- **Event IDs are per subscription, not global.** Syncthing keeps one buffer per
+  distinct event mask and numbers each from 1. Asking `/rest/events` for the
+  latest ID *without* an `events=` filter and then polling *with* one compares
+  two unrelated counters, and silently drops everything below the other
+  subscription's number. The bootstrap query must carry the same mask as the
+  polls that follow.
+- **Windows suppresses toasts in full screen.** Playing a full-screen video or
+  game turns on Do Not Disturb automatically, and toasts go to the Action Centre
+  instead of the screen. That is correct behaviour, but it looks exactly like a
+  broken notifier when testing.
+
+The toasts are raised by calling WinRT through `combase.dll` directly
+(`custom/tray/notify_windows.go`). The alternatives were both worse: the
+`Shell_NotifyIcon` balloon route needs the tray icon's `NOTIFYICONDATA`, which
+`fyne.io/systray` keeps private, and shelling out to PowerShell spawns a 30 MB
+process per toast and fails silently under Constrained Language Mode. Clicks
+use `activationType="protocol"`, so opening the GUI needs **no COM activator
+and no registration** beyond a per-user registry key naming the app.
+
+Notifications can be turned off per machine with `--quiet` on the tray, and
+appear in Windows' own notification settings under *desuqcafe Syncthing*.
+
+## 9. What is verified, and what is not
 
 Verified 2026-08-23 against **two instances on separate ports sharing a real
 folder**, not just single-device:
@@ -231,11 +288,18 @@ folder**, not just single-device:
   device key, folders and devices, seeded the defaults, pointed the sign-in
   shortcut at the tray, and on a second run stopped both processes and left
   `config.xml` byte-identical.
+- **All five notifications fired end to end against those two instances**, and
+  were confirmed on screen. In order: an unknown device dialling in raised one
+  toast despite Syncthing emitting the underlying event ten times; the folder
+  offer named the offering device and the folder label; the completion toast
+  reported `12.6 MB received`, the real transferred figure; the disk warning
+  came through the fork's own `/rest/system/diskfree`; and removing a
+  `.stfolder` marker produced the folder-error toast.
 
 **Not verified:** uninstall. It shares `StopRunningInstance` with the upgrade
 path, which is exercised, but the `DelTree` prompt has never been run.
 
-## 9. Things that surprised us, worth knowing before changing anything
+## 10. Things that surprised us, worth knowing before changing anything
 
 - **`limitBandwidthInLan` defaults to `false`.** Rate limits are silently
   ignored on LAN and loopback until it is switched on. If a limit "does not

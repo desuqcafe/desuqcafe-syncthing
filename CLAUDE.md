@@ -77,3 +77,10 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
   by deleting files, so they cannot conflict on merge. That state lives in
   GitHub, not the repo.
 - `.stignore` is never synced between devices — it is per-machine by design.
+- **`/rest/events` IDs are per subscription, not global.** Syncthing keeps one
+  buffer per distinct `events=` mask and numbers each from 1. Bootstrapping
+  "where is now" with one mask and then polling with another silently drops
+  events. Ask with the same mask you intend to poll with.
+- Windows suppresses toasts while anything is full screen (automatic Do Not
+  Disturb). They land in the Action Centre instead, so a notifier that looks
+  broken during testing may be working perfectly.

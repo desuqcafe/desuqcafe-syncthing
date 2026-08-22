@@ -59,6 +59,7 @@ In particular we have **not**:
 | First-run defaults (versioning, disk reserve, ignore patterns, theme, device name) | `custom/scripts/seed-config.ps1`, run by the installer before first launch. It calls Syncthing's own `generate` subcommand to create `config.xml` and the device keys, then patches the `<defaults>` block. No source change; see `DEPLOYMENT-3D-TEAM.md` for the values and the reasoning. |
 | Violet web UI theme | A new directory, `gui/violet/`. `lib/api`'s static server discovers theme directories by itself and falls back to `gui/default` per file, so only `theme.css` had to be written. `lib/api/auto/gui.files.go` is generated at build time and **gitignored**, so compiling the theme in adds nothing to the diff. |
 | Notification-area icon | `custom/tray/`, **a separate Go module** — see below. It talks to Syncthing only over the REST API. |
+| Desktop notifications | Also `custom/tray/`. It subscribes to Syncthing's `/rest/events` long poll and raises Windows toasts through WinRT. No source change, and no new dependency: WinRT is reached through `combase.dll` with `syscall`, and toast clicks use protocol activation so nothing has to be registered with COM. |
 
 ## Why the tray is its own Go module
 
@@ -75,6 +76,14 @@ The tray reads Syncthing's state through the REST API and its address and API
 key out of `config.xml`. It deliberately does not import `lib/config` or
 anything else from the tree above it, so an upstream change to those packages
 cannot break it.
+
+That isolation is also why the desktop notifications live here rather than in
+`lib/`. They need only two things Syncthing already exposes — the event stream
+and the fork's own `/rest/system/diskfree` — so putting them in the tray costs
+**zero** additional divergence from upstream, while a notifier inside `lib/`
+would mean patching the model or the API service. See
+`DEPLOYMENT-3D-TEAM.md` section 8 for which events become toasts and why the
+list is deliberately short.
 
 All names live in one place: `custom/branding.ps1`.
 
