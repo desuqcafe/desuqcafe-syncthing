@@ -60,6 +60,17 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
 
 ## Gotchas
 
+- The branded binary is linked `-H windowsgui`. PowerShell's call operator
+  neither waits for it nor sets `$LASTEXITCODE`; use `Start-Process -Wait
+  -PassThru`. Same for the tray.
+- `syncthing serve` exits **0** when an instance is already serving that home.
+  Anything supervising it must check reachability first, or it respawn-loops.
+- `lib/api/auto/gui.files.go` is gitignored and regenerated whenever `gui/`
+  changes, so new GUI files cost no tracked diff.
+- Fork-added GUI strings should use plain `{{ }}` interpolation.
+  angular-translate renders `{%placeholders%}` literally for any string missing
+  from `assets/lang`, which ours always are.
+
 - Auto-upgrade is compiled out (`-no-upgrade`). Syncthing verifies upgrades
   against upstream's signing key, which cannot validate our builds.
 - Upstream's inherited GitHub workflows are disabled **via the GitHub API**, not

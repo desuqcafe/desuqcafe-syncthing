@@ -215,6 +215,39 @@ transfers, while local scanning carries on.
 Worth telling the modellers: **the icon is the app**. Quitting from that menu
 stops syncing until they sign in again or start it from the Start Menu.
 
+## 8. What is verified, and what is not
+
+Verified 2026-08-23 against **two instances on separate ports sharing a real
+folder**, not just single-device:
+
+- Seeding produces the same defaults on a second machine, and a newly accepted
+  folder inherits staggered/30d and the 20 GB reserve from them.
+- The ignore set holds across the wire: the sender had 21 files, the receiver
+  got 16 — `.blend1`, `.blend2`, `.blend@`, `.tmp` and `Thumbs.db` were never
+  transferred at all, not transferred-then-hidden.
+- The tray reports `Syncing Project Assets` / `157.5 MB remaining` counting
+  down, and `1 of 1 devices connected`.
+- The installer was run for real over an existing install: it preserved the
+  device key, folders and devices, seeded the defaults, pointed the sign-in
+  shortcut at the tray, and on a second run stopped both processes and left
+  `config.xml` byte-identical.
+
+**Not verified:** uninstall. It shares `StopRunningInstance` with the upgrade
+path, which is exercised, but the `DelTree` prompt has never been run.
+
+## 9. Things that surprised us, worth knowing before changing anything
+
+- **`limitBandwidthInLan` defaults to `false`.** Rate limits are silently
+  ignored on LAN and loopback until it is switched on. If a limit "does not
+  work", this is why.
+- **`/rest/db/browse` returns the *global* tree**, not the local one — it lists
+  files the remote has that were never pulled. That is the hook any real
+  "tick what you want" selective-sync UI would hang off (see §2).
+- **A pending folder carries no size** (§1), so nothing can be decided about
+  capacity until the folder actually starts.
+- **`.stfolder` is created hidden**, so a synced folder has *no* visible marker
+  in Explorer. Nothing in Syncthing writes a folder icon or overlay.
+
 ## Recommended configuration
 
 Applied per machine, under *Actions → Advanced → Defaults*:
