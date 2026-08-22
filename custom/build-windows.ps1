@@ -138,11 +138,48 @@ try {
     $env:GOARCH        = 'amd64'
     $trayOut = Join-Path $DistDir "$($Brand.Binary)-tray.exe"
 
-    Write-Host "Building $($Brand.Binary)-tray.exe..." -ForegroundColor Cyan
-    # -H windowsgui for the same reason as the daemon: a shortcut must not pop
-    # a console window at sign-in.
-    & $go build -ldflags '-H windowsgui' -o $trayOut .
-    if ($LASTEXITCODE -ne 0) { throw "tray build failed with exit code $LASTEXITCODE" }
+    # Version resource, so the tray shows the same publisher and product in file
+    # properties and Task Manager as the daemon does. build.go does this for the
+    # daemon via goversioninfo; the tray is a separate module, so it gets the
+    # same treatment here from the same branding block.
+    $verMajor, $verMinor, $verPatch = $numeric -split '\.'
+    $versionInfo = [ordered]@{
+        FixedFileInfo  = [ordered]@{
+            FileVersion    = [ordered]@{ Major = [int]$verMajor; Minor = [int]$verMinor; Patch = [int]$verPatch }
+            ProductVersion = [ordered]@{ Major = [int]$verMajor; Minor = [int]$verMinor; Patch = [int]$verPatch }
+        }
+        StringFileInfo = [ordered]@{
+            CompanyName      = $Brand.Company
+            FileDescription  = "$($Brand.Product) - notification area icon"
+            FileVersion      = $Version
+            InternalName     = "$($Brand.Binary)-tray"
+            LegalCopyright   = $Brand.Company
+            OriginalFilename = "$($Brand.Binary)-tray.exe"
+            ProductName      = $Brand.Product
+            ProductVersion   = $Version
+        }
+        IconPath       = if ($env:ST_BRAND_ICON) { $env:ST_BRAND_ICON } else { (Join-Path $RepoRoot 'assets\logo.ico') -replace '\\', '/' }
+    }
+
+    $viPath   = Join-Path $TrayDir 'versioninfo.json'
+    $sysoPath = Join-Path $TrayDir 'resource.syso'
+    $versionInfo | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $viPath -Encoding utf8
+
+    try {
+        & goversioninfo.exe -o $sysoPath -64=true $viPath
+        if ($LASTEXITCODE -ne 0) { throw "goversioninfo failed with exit code $LASTEXITCODE" }
+
+        Write-Host "Building $($Brand.Binary)-tray.exe..." -ForegroundColor Cyan
+        # -H windowsgui for the same reason as the daemon: a shortcut must not
+        # pop a console window at sign-in.
+        & $go build -ldflags '-H windowsgui' -o $trayOut .
+        if ($LASTEXITCODE -ne 0) { throw "tray build failed with exit code $LASTEXITCODE" }
+    }
+    finally {
+        # Leaving these behind would bake a stale version into every later
+        # `go build` run by hand in this directory.
+        Remove-Item -LiteralPath $viPath, $sysoPath -Force -EA SilentlyContinue
+    }
     Write-Host "Tray:   $trayOut" -ForegroundColor Green
 }
 finally {
