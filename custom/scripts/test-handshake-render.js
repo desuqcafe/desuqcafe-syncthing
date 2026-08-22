@@ -86,48 +86,99 @@ const full = els[0];
 const compactEl = els[1];
 const phrase = txt(full, '.desuq-handshake-phrase');
 const rankLine = txt(full, '.desuq-handshake-rank-line');
-const numeral = txt(full, '.desuq-handshake-rank-numeral');
+const cardWords = txt(full, '.desuq-card-name');
+const cardRank = txt(full, '.desuq-card-rank');
+const tier = txt(full, '.desuq-card-tier');
 
 console.log('');
-console.log('  phrase : ' + phrase);
-console.log('  rank   : ' + rankLine);
-console.log('  badge  : ' + numeral);
+console.log('  card words : ' + cardWords);
+console.log('  card rank  : ' + cardRank + '   tier: ' + tier);
+console.log('  phrase     : ' + phrase);
+console.log('  rank line  : ' + rankLine);
 console.log('');
 
 check('phrase shows all three words',
     phrase.indexOf('CRIMSON') >= 0 && phrase.indexOf('TALISMAN') >= 0 && phrase.indexOf('NOCTURNE') >= 0, phrase);
-check('decorative brackets rendered',
-    phrase.indexOf('《') >= 0 && phrase.indexOf('》') >= 0);
+check('decorative brackets rendered', phrase.indexOf('《') >= 0 && phrase.indexOf('》') >= 0);
 check('rank shown as numeral and as a number',
     rankLine.indexOf('CLXXVI') >= 0 && rankLine.indexOf('176') >= 0, rankLine);
-check('badge shows the numeral', numeral === 'CLXXVI', numeral);
+
+// The card face must carry the same identity as the text beside it, or the
+// two could disagree and there would be no way to tell which was right.
+check('card face repeats the same three words',
+    cardWords.indexOf('CRIMSON') >= 0 && cardWords.indexOf('TALISMAN') >= 0 && cardWords.indexOf('NOCTURNE') >= 0, cardWords);
+check('card face repeats the same rank', cardRank === 'CLXXVI', cardRank);
+check('card face names a rarity tier', /^(COMMON|RARE|EPIC|LEGENDARY)$/.test(tier), tier);
+
+// The sigil is the third encoding of the same bytes.
+const sigil = card(full).querySelector('.desuq-sigil-svg');
+check('sigil rendered as SVG', !!sigil);
+check('sigil has a star, a core and orbit marks',
+    !!sigil.querySelector('.desuq-sigil-star') &&
+    !!sigil.querySelector('.desuq-sigil-core') &&
+    sigil.querySelectorAll('.desuq-sigil-mark').length >= 3);
 
 // The honesty requirement. A verification ritual people perform incorrectly is
 // worse than none, so the card has to say what does and does not count.
 const note = txt(full, '.desuq-handshake-note');
-check('warns that comparing in-app proves nothing', /inside.*Syncthing.*proves nothing/i.test(note));
-check('directs the user to a voice call', /call the other person/i.test(note));
+check('warns against the channel that carried the ID', /other than.*where you sent the device ID/i.test(note));
+check('warns against comparing inside Syncthing', /never inside Syncthing/i.test(note));
 check('explains that the phrase could be swapped too', /could swap this too/i.test(note));
+check('does not prescribe voice as the only channel', !/verify by voice/i.test(note));
 
 // Compact form is for the device panel: the card, nothing else.
-check('compact form shows the phrase', !!txt(compactEl, '.desuq-handshake-phrase'));
+check('compact form shows a card', !!card(compactEl).querySelector('.desuq-card'));
 check('compact form omits the explanation', !card(compactEl).querySelector('.desuq-handshake-note'));
 check('compact form omits the confirm button', !card(compactEl).querySelector('.desuq-handshake-btn'));
 check('compact form carries the compact class', card(compactEl).classList.contains('desuq-handshake-compact'));
+check('hero card renders at medium size', !!card(full).querySelector('.desuq-card-md'));
+check('compact card renders at small size', !!card(compactEl).querySelector('.desuq-card-sm'));
 
-// --- the confirmation flow ---
+// --- the pick-one-of-three check ---
 
 const iso = angular.element(full).isolateScope();
 check('starts unconfirmed', iso.confirmed === false);
+check('no cards dealt until asked', !card(full).querySelector('.desuq-handshake-deal'));
 
-iso.$apply(function () { iso.confirm(); });
-check('confirm() sets the flag', iso.confirmed === true);
+iso.$apply(function () { iso.startChallenge(); });
+const slots = card(full).querySelectorAll('.desuq-handshake-slot');
+check('deals exactly three cards', slots.length === 3, slots.length + ' dealt');
+
+const dealt = iso.challenge;
+check('one dealt card is the real one',
+    dealt.filter(c => c.phrase === iso.sas.phrase && c.rank === iso.sas.rank).length === 1);
+
+// A decoy sharing any of the four positions with the real card would make the
+// check ambiguous -- someone comparing only the rank, or only the last word,
+// could pick a decoy and be told they were right.
+const decoys = dealt.filter(c => c.rank !== iso.sas.rank);
+check('two decoys, distinct from each other', decoys.length === 2 && decoys[0].rank !== decoys[1].rank);
+check('no decoy shares any word or the rank with the real card',
+    decoys.every(d => d.aspect !== iso.sas.aspect && d.omen !== iso.sas.omen &&
+                      d.strike !== iso.sas.strike && d.rank !== iso.sas.rank));
+
+// Stability: the same pair must always deal the same spread. A hand that
+// reshuffled on every redraw would look like the phrase itself was unstable.
+const before = dealt.map(c => c.rank).join(',');
+iso.$apply(function () { iso.cancelChallenge(); iso.startChallenge(); });
+check('the same pair always deals the same spread', iso.challenge.map(c => c.rank).join(',') === before);
+
+// Picking a decoy must refuse, and must not confirm anything.
+iso.$apply(function () { iso.choose(decoys[0]); });
+check('picking a decoy is refused', iso.confirmed === false && iso.wrongPick === decoys[0].rank);
+check('a refusal explains what to do', /do not add this device/i.test(txt(full, '.desuq-handshake-wrong') || ''));
+check('the cards stay on the table after a wrong pick', !!iso.challenge);
+
+// Picking the real card confirms.
+iso.$apply(function () { iso.choose(iso.sas); });
+check('picking the real card confirms', iso.confirmed === true);
+check('the challenge is cleared once confirmed', !iso.challenge);
 check('confirmed state reaches the DOM', card(full).classList.contains('desuq-handshake-confirmed'));
 check('confirmation is persisted', !!window.localStorage.getItem('desuq.handshake.confirmed'));
 
 // A stored confirmation must not survive the pair changing. Otherwise pasting
 // a different device ID would inherit a tick that was never earned for it --
-// which would be an actively dangerous bug, not a cosmetic one.
+// an actively dangerous bug, not a cosmetic one.
 rootScope.$apply(function () { rootScope.peer = ID_OTHER; });
 check('changing the peer clears the confirmation', iso.confirmed === false);
 check('changing the peer changes the phrase',

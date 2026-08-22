@@ -287,11 +287,18 @@ the product helps you check that you did.
 **What the fork does about it**
 
 The device editor and the device panel now show a short authentication string
-for the pair -- the same idea ZRTP and Signal use, dressed as a finishing move:
+for the pair -- the same idea ZRTP and Signal use, dressed as a collectible
+card with a finishing-move name:
 
 ```
 《 CRIMSON TALISMAN NOCTURNE 》Rank CLXXVI
 ```
+
+The card carries those same four bytes three separate ways: the words, the
+rank, and a sigil drawn from them. That redundancy is deliberate. Someone who
+would skim past "CLXXVI" will still notice that their partner has a
+nine-pointed star where this screen shows six, and the rarity tier gives a
+one-glance check ("mine's gold") before a single character has been read.
 
 The two device IDs are sorted, joined and hashed with SHA-256. Three bytes of
 the digest index three wordlists of 256; a fourth gives the rank. Sorting is
@@ -328,6 +335,17 @@ Some deliberate decisions:
   is a note to self and stays on the machine that made it. It is also voided
   automatically if either device ID changes, so re-pasting a different ID
   cannot inherit a tick it never earned.
+- **Confirming means picking the right card out of three.** The failure mode of
+  every "compare these codes" dialogue ever shipped is that people click yes
+  without reading; a checkbox saying "it matched" gets ticked by reflex. So
+  confirming deals three cards -- the real one and two decoys -- and asks which
+  one the other person is describing. It adds no entropy and is not meant to:
+  it is an attention check on a step whose entire value is that a human really
+  looked. The decoys are derived from the digest rather than at random, so the
+  same pair always deals the same spread; a hand that reshuffled on every
+  redraw would suggest the phrase itself was unstable. No decoy shares any of
+  the four positions with the real card, so someone comparing only the rank
+  cannot pick a decoy and be told they were right.
 - **It does not block saving.** The card informs; it does not gate the button.
   Gating would mean editing upstream's save path, and would trap anyone whose
   browser failed to load the directive.

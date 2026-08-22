@@ -1,111 +1,319 @@
 /* Added by the desuqcafe fork. Upstream has no such directory, so this file
    cannot conflict on a merge.
 
-   Styles the device verification card. Every colour is written as
-   var(--v-*, <fallback>): under the fork's violet theme it picks up the real
-   palette, and under stock Syncthing's light theme the fallbacks stand in, so
-   the card is legible either way rather than only in the theme it was drawn
-   for. */
+   The device verification card.
 
-.desuq-handshake {
-    margin: 12px 0 4px;
+   Every colour is written as var(--v-*, <fallback>): under the fork's violet
+   theme it picks up the real palette, and under stock Syncthing's light theme
+   the fallbacks stand in, so the card is legible either way rather than only
+   in the theme it was drawn for.
+
+   Everything here is CSS and inline SVG. No images, no fonts, no external
+   requests -- the GUI is served from the machine itself and is expected to
+   work with no network at all. */
+
+/* ==========================================================================
+   The card
+   ========================================================================== */
+
+.desuq-card {
+    position: relative;
+    width: 190px;
+    height: 272px;
+    flex: 0 0 auto;
+    border-radius: 11px;
+    padding: 2px;
+    overflow: hidden;
+    isolation: isolate;
+    /* The frame is a gradient behind a slightly inset body, which is cheaper
+       and sharper than a border-image. Tier overrides just swap these two. */
+    background: linear-gradient(160deg,
+        var(--dqc-edge-a) 0%,
+        var(--dqc-edge-b) 45%,
+        var(--dqc-edge-a) 100%);
+    box-shadow:
+        0 10px 26px -10px rgba(0, 0, 0, 0.65),
+        0 0 0 1px rgba(0, 0, 0, 0.28),
+        0 0 22px -6px var(--dqc-glow);
+    transition: transform 160ms ease, box-shadow 160ms ease;
+
+    /* Tier defaults: COMMON. */
+    --dqc-edge-a: #6d34d6;
+    --dqc-edge-b: #a78bfa;
+    --dqc-glow: rgba(139, 92, 246, 0.55);
+    --dqc-ink: #e7e1f2;
+    --dqc-accent: #c4b5fd;
 }
 
-.desuq-handshake-card {
-    display: flex;
-    align-items: stretch;
-    gap: 14px;
-    padding: 14px 16px;
-    border-radius: var(--v-radius-lg, 12px);
-    border: 1px solid var(--v-border-strong, #b9a6e8);
-    background:
-        linear-gradient(135deg,
-            var(--v-accent-wash, rgba(139, 92, 246, 0.14)) 0%,
-            transparent 60%),
-        var(--v-surface-raised, #f6f2ff);
-    box-shadow: var(--v-shadow, 0 2px 10px -2px rgba(0, 0, 0, 0.2));
+.desuq-card-rare {
+    --dqc-edge-a: #2563eb;
+    --dqc-edge-b: #67e8f9;
+    --dqc-glow: rgba(56, 189, 248, 0.6);
+    --dqc-accent: #a5f3fc;
+}
+
+.desuq-card-epic {
+    --dqc-edge-a: #a21caf;
+    --dqc-edge-b: #f0abfc;
+    --dqc-glow: rgba(232, 121, 249, 0.62);
+    --dqc-accent: #f5d0fe;
+}
+
+.desuq-card-legendary {
+    --dqc-edge-a: #b45309;
+    --dqc-edge-b: #fde68a;
+    --dqc-glow: rgba(251, 191, 36, 0.7);
+    --dqc-accent: #fde68a;
+}
+
+.desuq-card-inner {
     position: relative;
+    z-index: 2;
+    height: 100%;
+    border-radius: 9px;
+    padding: 9px 10px 8px;
+    display: flex;
+    flex-direction: column;
+    /* A dark plate under every tier, so the gold and cyan frames read the same
+       way in the light theme as in the dark one. */
+    background:
+        radial-gradient(120% 80% at 50% 0%, rgba(255, 255, 255, 0.10) 0%, transparent 60%),
+        linear-gradient(180deg, #1d1729 0%, #120e1b 100%);
+    color: var(--dqc-ink);
     overflow: hidden;
 }
 
-/* A thin bright edge down the left, the way a card in a deck-builder is
-   marked. Also the thing that turns green on confirmation. */
-.desuq-handshake-card::before {
-    content: '';
+/* --- the foil sweep --- */
+
+.desuq-card-foil {
     position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 3px;
-    background: var(--v-accent, #8b5cf6);
+    z-index: 3;
+    inset: 0;
+    border-radius: 11px;
+    pointer-events: none;
+    background: linear-gradient(105deg,
+        transparent 30%,
+        rgba(255, 255, 255, 0.10) 44%,
+        rgba(255, 255, 255, 0.26) 50%,
+        rgba(255, 255, 255, 0.10) 56%,
+        transparent 70%);
+    background-size: 280% 280%;
+    animation: desuq-foil 5.5s ease-in-out infinite;
+    mix-blend-mode: screen;
 }
 
-.desuq-handshake-confirmed .desuq-handshake-card {
-    border-color: var(--v-success, #10b981);
+@keyframes desuq-foil {
+    0%   { background-position: 130% 0%; }
+    55%  { background-position: -40% 0%; }
+    100% { background-position: -40% 0%; }
 }
 
-.desuq-handshake-confirmed .desuq-handshake-card::before {
-    background: var(--v-success-bright, #34d399);
-}
+/* --- header --- */
 
-/* --- the rank badge --- */
-
-.desuq-handshake-rank {
-    flex: 0 0 auto;
-    min-width: 62px;
+.desuq-card-top {
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    flex: 0 0 auto;
+}
+
+.desuq-card-tier {
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.19em;
+    color: var(--dqc-accent);
+    opacity: 0.95;
+}
+
+.desuq-card-rank {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--dqc-accent);
+    line-height: 1;
+    padding: 3px 7px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    /* Roman numerals get long at the top of the range; never wrap the header. */
+    white-space: nowrap;
+    max-width: 58%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* --- art panel --- */
+
+.desuq-card-art {
+    flex: 1 1 auto;
+    margin: 8px 0;
+    border-radius: 7px;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    background:
+        radial-gradient(80% 80% at 50% 45%, var(--dqc-glow) 0%, transparent 68%),
+        linear-gradient(180deg, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.6));
+    display: flex;
     align-items: center;
     justify-content: center;
-    padding: 4px 10px 4px 6px;
-    border-right: 1px solid var(--v-border, #d9cdf5);
+    overflow: hidden;
+    position: relative;
 }
 
-.desuq-handshake-rank-numeral {
-    font-size: 24px;
-    line-height: 1.05;
+.desuq-card-art desuq-sigil {
+    display: block;
+    width: 88%;
+    height: 88%;
+}
+
+.desuq-sigil-svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    overflow: visible;
+}
+
+.desuq-sigil-rot {
+    transform-origin: 50px 50px;
+    animation: desuq-spin 44s linear infinite;
+}
+
+@keyframes desuq-spin {
+    to { transform: rotate(360deg); }
+}
+
+.desuq-sigil-ring {
+    fill: none;
+    stroke: var(--dqc-accent);
+    stroke-width: 1.1;
+    opacity: 0.55;
+}
+
+.desuq-sigil-ring-thin {
+    fill: none;
+    stroke: var(--dqc-accent);
+    stroke-width: 0.5;
+    opacity: 0.35;
+}
+
+.desuq-sigil-star {
+    fill: none;
+    stroke: var(--dqc-accent);
+    stroke-width: 1.15;
+    opacity: 0.9;
+    stroke-linecap: round;
+}
+
+.desuq-sigil-core {
+    fill: rgba(255, 255, 255, 0.06);
+    stroke: var(--dqc-accent);
+    stroke-width: 1.1;
+    opacity: 0.95;
+}
+
+.desuq-sigil-mark {
+    fill: var(--dqc-accent);
+    opacity: 0.85;
+}
+
+/* --- the name --- */
+
+.desuq-card-name {
+    flex: 0 0 auto;
+    text-align: center;
+    line-height: 1.16;
+}
+
+.desuq-card-word {
+    display: block;
     font-weight: 700;
-    letter-spacing: 0.06em;
-    color: var(--v-accent-bright, #6d34d6);
-    /* Roman numerals above about XX get long; keep them on one line and let
-       them shrink rather than wrapping the card. */
-    white-space: nowrap;
+    letter-spacing: 0.07em;
+    font-size: 12.5px;
+    /* Long compounds like CHRYSANTHEMUM have to fit a 190px card without
+       wrapping mid-word or being cut off. */
+    overflow-wrap: anywhere;
 }
 
-.desuq-handshake-confirmed .desuq-handshake-rank-numeral {
-    color: var(--v-success-bright, #10b981);
+.desuq-card-word-strike {
+    color: var(--dqc-accent);
 }
 
-.desuq-handshake-rank-arabic {
-    font-size: 11px;
-    font-variant-numeric: tabular-nums;
-    color: var(--v-text-dim, #7b7196);
-    margin-top: 2px;
-}
-
-/* --- the phrase --- */
-
-.desuq-handshake-body {
-    flex: 1 1 auto;
-    min-width: 0;
-}
-
-.desuq-handshake-label {
-    font-size: 11px;
-    text-transform: uppercase;
+.desuq-card-foot {
+    flex: 0 0 auto;
+    margin-top: 7px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.10);
+    font-size: 9px;
     letter-spacing: 0.09em;
-    color: var(--v-text-muted, #6b6280);
-    margin-bottom: 4px;
+    text-align: center;
+    color: rgba(231, 225, 242, 0.62);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* --- small variant, for the dealt cards and the device panel --- */
+
+.desuq-card-sm {
+    width: 132px;
+    height: 190px;
+    border-radius: 9px;
+}
+
+.desuq-card-sm .desuq-card-inner { padding: 7px 7px 6px; border-radius: 7px; }
+.desuq-card-sm .desuq-card-rank { font-size: 11px; padding: 2px 5px; }
+.desuq-card-sm .desuq-card-tier { font-size: 7px; letter-spacing: 0.14em; }
+.desuq-card-sm .desuq-card-word { font-size: 10px; }
+.desuq-card-sm .desuq-card-foot { font-size: 8px; margin-top: 5px; padding-top: 4px; }
+.desuq-card-sm .desuq-card-art { margin: 6px 0; }
+
+/* ==========================================================================
+   Layout around the card
+   ========================================================================== */
+
+.desuq-handshake {
+    margin: 14px 0 6px;
+    /* Centred as a block. The card is a fixed 190px and the panel it sits in
+       is much wider, so left-aligning left it stranded against one edge. */
+    text-align: center;
+}
+
+.desuq-handshake-hero {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 18px;
+    flex-wrap: wrap;
+}
+
+.desuq-handshake-side {
+    flex: 0 1 380px;
+    min-width: 260px;
+    /* The group is centred; the prose inside it is not. Centred body text is
+       markedly harder to read, and this paragraph is the one that has to land. */
+    text-align: left;
+}
+
+.desuq-handshake-status {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--v-success-bright, #10b981);
+    margin-bottom: 7px;
+}
+
+.desuq-handshake-status-pending {
+    color: var(--v-warning-bright, #b45309);
 }
 
 .desuq-handshake-phrase {
-    font-size: 17px;
+    font-size: 19px;
     font-weight: 700;
     letter-spacing: 0.03em;
+    line-height: 1.3;
     color: var(--v-text, #241c33);
-    /* The phrase is read aloud a word at a time, so let it wrap between words
-       and never inside one. */
-    word-spacing: 0.15em;
+    word-spacing: 0.16em;
 }
 
 .desuq-handshake-word {
@@ -121,45 +329,36 @@
 .desuq-handshake-rank-line {
     font-size: 12px;
     color: var(--v-text-muted, #6b6280);
-    margin-top: 3px;
+    margin-top: 2px;
 }
 
 .desuq-handshake-dim {
     color: var(--v-text-dim, #8d84a3);
+    font-weight: 400;
 }
 
-/* --- the explanation --- */
-
 .desuq-handshake-note {
-    margin-top: 10px;
+    margin: 10px auto 0;
     font-size: 12.5px;
     line-height: 1.5;
     color: var(--v-text-muted, #55506b);
+    max-width: 46em;
 }
 
-.desuq-handshake-note p {
-    margin: 0 0 6px;
-}
+.desuq-handshake-note p { margin: 0 0 6px; }
+.desuq-handshake-note .fa { margin-right: 5px; opacity: 0.85; }
 
-.desuq-handshake-note .fa {
-    margin-right: 5px;
-    opacity: 0.85;
-}
-
-/* The warning is the most important text on the card: it is what stops the
-   check being performed in a way that proves nothing. */
+/* The warning is the most important text here: it is what stops the check
+   being performed in a way that proves nothing. */
 .desuq-handshake-warning {
     padding: 7px 10px;
     border-radius: var(--v-radius-sm, 5px);
     border-left: 2px solid var(--v-warning, #d99414);
-    background: var(--v-surface-sunken, rgba(217, 148, 20, 0.08));
-    color: var(--v-text-muted, #55506b);
+    background: var(--v-surface-sunken, rgba(217, 148, 20, 0.09));
 }
 
-/* --- the confirm button --- */
-
 .desuq-handshake-btn {
-    margin-top: 8px;
+    margin-top: 9px;
     border-radius: var(--v-radius-sm, 5px);
     border: 1px solid var(--v-accent-strong, #8b5cf6);
     background: transparent;
@@ -179,42 +378,122 @@
     font-weight: 400;
 }
 
-/* --- compact form, used in the device panel --- */
+/* --- confirmed --- */
+
+.desuq-handshake-confirmed .desuq-card {
+    --dqc-edge-a: #047857;
+    --dqc-edge-b: #6ee7b7;
+    --dqc-glow: rgba(16, 185, 129, 0.6);
+    --dqc-accent: #6ee7b7;
+    animation: desuq-seal 700ms ease-out;
+}
+
+@keyframes desuq-seal {
+    0%   { transform: scale(1); }
+    35%  { transform: scale(1.045); }
+    100% { transform: scale(1); }
+}
+
+/* ==========================================================================
+   The pick-one-of-three check
+   ========================================================================== */
+
+.desuq-handshake-challenge {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--v-border, #d9cdf5);
+    text-align: center;
+}
+
+.desuq-handshake-ask {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--v-text, #241c33);
+    margin-bottom: 10px;
+}
+
+.desuq-handshake-deal {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.desuq-handshake-slot {
+    cursor: pointer;
+    border-radius: 11px;
+    /* Dealt one after another rather than all at once, which reads as a hand
+       being laid down and buys a beat before anyone can click. */
+    animation: desuq-deal 380ms cubic-bezier(0.2, 0.9, 0.3, 1.4) backwards;
+}
+
+@keyframes desuq-deal {
+    from { opacity: 0; transform: translateY(16px) rotate(-4deg) scale(0.92); }
+    to   { opacity: 1; transform: none; }
+}
+
+.desuq-handshake-slot:hover .desuq-card,
+.desuq-handshake-slot:focus .desuq-card {
+    transform: translateY(-5px);
+    box-shadow:
+        0 18px 34px -12px rgba(0, 0, 0, 0.7),
+        0 0 0 1px rgba(0, 0, 0, 0.28),
+        0 0 30px -4px var(--dqc-glow);
+}
+
+.desuq-handshake-slot.is-wrong .desuq-card {
+    --dqc-edge-a: #7f1d1d;
+    --dqc-edge-b: #f87171;
+    --dqc-glow: rgba(248, 113, 113, 0.65);
+    --dqc-accent: #fca5a5;
+    animation: desuq-refuse 420ms ease;
+}
+
+@keyframes desuq-refuse {
+    0%, 100% { transform: translateX(0); }
+    20%      { transform: translateX(-7px); }
+    45%      { transform: translateX(6px); }
+    70%      { transform: translateX(-3px); }
+}
+
+.desuq-handshake-wrong {
+    margin: 12px auto 0;
+    text-align: left;
+    padding: 9px 12px;
+    border-radius: var(--v-radius-sm, 5px);
+    border-left: 3px solid var(--v-danger, #dc4b41);
+    background: var(--v-surface-sunken, rgba(220, 75, 65, 0.09));
+    color: var(--v-danger-bright, #b91c1c);
+    font-size: 12.5px;
+    line-height: 1.5;
+    max-width: 46em;
+}
+
+.desuq-handshake-wrong .fa { margin-right: 5px; }
+
+/* ==========================================================================
+   Compact, for the device panel row
+   ========================================================================== */
 
 .desuq-handshake-compact {
     margin: 0;
+    display: inline-block;
 }
 
-.desuq-handshake-compact .desuq-handshake-card {
-    padding: 7px 10px;
-    gap: 9px;
-    box-shadow: none;
-    background: var(--v-surface-sunken, rgba(139, 92, 246, 0.06));
-}
+.desuq-handshake-compact .desuq-handshake-hero { gap: 0; }
 
-.desuq-handshake-compact .desuq-handshake-rank {
-    min-width: 40px;
-    padding: 0 8px 0 4px;
-}
+/* ==========================================================================
+   Respect a stated preference for less motion. The foil, the spin and the
+   deal are decoration; the card has to be exactly as readable without them.
+   ========================================================================== */
 
-.desuq-handshake-compact .desuq-handshake-rank-numeral {
-    font-size: 15px;
-}
-
-.desuq-handshake-compact .desuq-handshake-rank-arabic {
-    display: none;
-}
-
-.desuq-handshake-compact .desuq-handshake-phrase {
-    font-size: 13px;
-    font-weight: 600;
-}
-
-.desuq-handshake-compact .desuq-handshake-label {
-    font-size: 10px;
-    margin-bottom: 1px;
-}
-
-.desuq-handshake-compact .desuq-handshake-rank-line {
-    display: none;
+@media (prefers-reduced-motion: reduce) {
+    .desuq-card-foil,
+    .desuq-sigil-rot,
+    .desuq-handshake-slot,
+    .desuq-handshake-confirmed .desuq-card,
+    .desuq-handshake-slot.is-wrong .desuq-card {
+        animation: none;
+    }
+    .desuq-card { transition: none; }
 }
