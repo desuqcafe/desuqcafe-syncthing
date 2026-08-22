@@ -38,6 +38,13 @@ same machine without interfering.
 
 ---
 
+## Deploying to the 3D team
+
+[DEPLOYMENT-3D-TEAM.md](DEPLOYMENT-3D-TEAM.md) covers what to configure when
+sharing large binary assets: disk-space limits, selective sync via ignore
+patterns, default ignores for Blender, file versioning, and how sync conflicts
+behave.
+
 ## Building it yourself
 
 One-time setup:
