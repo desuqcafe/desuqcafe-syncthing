@@ -34,6 +34,8 @@ As of now exactly **one** upstream file is modified: `build.go` (16 lines).
 | `custom/tray/` | Notification-area app. **Its own Go module** |
 | `custom/scripts/seed-config.ps1` | Writes first-run `config.xml` defaults |
 | `custom/scripts/sync-upstream.ps1` | Merge upstream and verify the build |
+| `custom/scripts/start-test-pair.ps1` | Two throwaway instances sharing a folder, for two-device testing |
+| `custom/scripts/check-handshake-words.ps1` | Asserts the verification wordlists stay distinct. Run by the build |
 | `custom/scripts/disable-inherited-ci.ps1` | Turn off upstream's workflows |
 | `custom/CUSTOMIZATIONS.md` | Divergence register and merge guide |
 | `custom/DEPLOYMENT-3D-TEAM.md` | Recommended config for the target users |
