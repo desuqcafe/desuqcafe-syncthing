@@ -1,0 +1,988 @@
+/**
+
+Violet theme for desuqcafe Syncthing
+
+A dark violet reskin of Syncthing's Bootstrap 3 web UI. Everything the stock
+dark theme (gui/dark/assets/css/theme.css) overrides is covered here, plus
+focus rings, scrollbars, tooltips and the date range picker, which it does not.
+
+The whole palette lives in the custom properties below, so retuning the theme
+means editing one block rather than hunting hex codes through the file.
+
+This file is only ever served for the "violet" theme; every other GUI asset
+falls back to gui/default. Nothing upstream is modified -- lib/api's static
+server picks the theme directory up on its own, and lib/api/auto/gui.files.go
+is generated at build time, so this is a pure addition.
+
+Note on !important: theme.css is the last stylesheet index.html loads, but
+Bootstrap wins plenty of specificity battles anyway (.nav-tabs > li.active > a
+and friends). The stock themes lean on !important throughout for the same
+reason; this file uses it where Bootstrap would otherwise take precedence and
+leaves it off where it would not.
+
+**/
+
+:root {
+    /* Surfaces: a neutral ramp pulled slightly towards violet, so the accent
+       never looks bolted onto a grey UI. */
+    --v-bg: #131019;
+    --v-surface: #1b1725;
+    --v-surface-raised: #221d2e;
+    --v-surface-hover: #2a2338;
+    --v-surface-sunken: #17131f;
+
+    --v-border: #2f2842;
+    --v-border-strong: #453a5c;
+
+    --v-text: #e7e1f2;
+    --v-text-muted: #a99ec0;
+    --v-text-dim: #7b7196;
+    --v-text-inverse: #17121f;
+
+    /* Accent. -deep is for resting fills, -strong for hover, -bright for text
+       and icons, where a fill-weight violet would not clear contrast on the
+       dark background. */
+    --v-accent-deep: #6d34d6;
+    --v-accent-strong: #8b5cf6;
+    --v-accent: #a78bfa;
+    --v-accent-bright: #c4b5fd;
+    --v-accent-wash: rgba(139, 92, 246, 0.14);
+    --v-accent-wash-strong: rgba(139, 92, 246, 0.26);
+
+    --v-success: #10b981;
+    --v-success-bright: #34d399;
+    --v-warning: #d99414;
+    --v-warning-bright: #fbbf24;
+    --v-danger: #dc4b41;
+    --v-danger-bright: #f87171;
+    --v-info: #7c6ce0;
+    --v-info-bright: #a5b4fc;
+
+    --v-radius-sm: 5px;
+    --v-radius: 8px;
+    --v-radius-lg: 12px;
+
+    --v-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --v-shadow: 0 2px 10px -2px rgba(0, 0, 0, 0.45);
+    --v-shadow-pop: 0 16px 44px -12px rgba(0, 0, 0, 0.7);
+
+    /* A ring rather than a glow: two layers so the focused control stays
+       visible against both the page and a panel. */
+    --v-ring: 0 0 0 2px var(--v-bg), 0 0 0 4px var(--v-accent);
+    --v-ring-inset: 0 0 0 3px var(--v-accent-wash-strong);
+
+    --v-transition: 120ms ease;
+}
+
+
+/* ------------------------------------------------------------------ base */
+
+body {
+    color: var(--v-text) !important;
+    background-color: var(--v-bg) !important;
+}
+
+a {
+    color: var(--v-accent);
+}
+
+a:hover,
+a:focus,
+a.focus {
+    color: var(--v-accent-bright);
+    outline: none !important;
+}
+
+hr {
+    border-top-color: var(--v-border) !important;
+}
+
+::selection {
+    background: var(--v-accent-wash-strong);
+    color: var(--v-text);
+}
+
+small,
+.small,
+.text-muted {
+    color: var(--v-text-muted) !important;
+}
+
+code,
+pre,
+code.ng-binding {
+    color: var(--v-accent-bright) !important;
+    border-color: var(--v-border) !important;
+    background-color: var(--v-surface-sunken) !important;
+    border-radius: var(--v-radius-sm) !important;
+}
+
+
+/* --------------------------------------------------------- focus rings */
+
+/* Bootstrap 3 predates :focus-visible and removes outlines wholesale. Put a
+   real ring back, but only for keyboard users, so mouse clicks stay quiet. */
+a:focus-visible,
+button:focus-visible,
+[tabindex]:focus-visible,
+.btn:focus-visible,
+.nav-tabs > li > a:focus-visible,
+.panel-heading:focus-visible,
+.dropdown-menu > li > a:focus-visible,
+.pagination > li > a:focus-visible,
+.close:focus-visible {
+    outline: none !important;
+    box-shadow: var(--v-ring) !important;
+    border-radius: var(--v-radius-sm);
+}
+
+.form-control:focus,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    outline: none !important;
+    border-color: var(--v-accent-strong) !important;
+    box-shadow: var(--v-ring-inset) !important;
+}
+
+
+/* ---------------------------------------------------------- scrollbars */
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--v-border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: var(--v-border-strong);
+    border-radius: 999px;
+    /* Transparent border plus background-clip keeps the thumb visually inset
+       from the track without needing a separate track colour. */
+    border: 3px solid transparent;
+    background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: var(--v-accent-deep);
+}
+
+::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+
+/* -------------------------------------------------------------- navbar */
+
+.navbar {
+    color: var(--v-text) !important;
+    background-color: var(--v-surface) !important;
+    border-color: var(--v-border) !important;
+    border-top-width: 1px !important;
+    border-bottom-width: 1px !important;
+    box-shadow: var(--v-shadow-sm);
+}
+
+.navbar-text,
+.dropdown > a,
+.dropdown-menu > li > a,
+.hidden-xs > a,
+.navbar-link {
+    color: var(--v-text-muted) !important;
+}
+
+.navbar-link:hover,
+.navbar-link:focus,
+li.hidden-xs:hover {
+    outline: none !important;
+    color: var(--v-text) !important;
+    border-color: var(--v-border) !important;
+    background-color: var(--v-surface-raised) !important;
+}
+
+.navbar-fixed-bottom {
+    background-color: var(--v-surface) !important;
+    border-top-color: var(--v-border) !important;
+}
+
+/* The stock logo is a mid-blue wordmark (#0882C8..#26B6DB, hue ~195-202deg).
+   A single hue rotation is enough to bring it onto the violet accent, since
+   the artwork is all one hue. 65deg was picked by rendering the range: below
+   it the mark still reads blue, above it turns magenta. */
+.navbar-brand .logo,
+img.logo {
+    filter: hue-rotate(65deg) saturate(1.1);
+}
+
+
+/* ---------------------------------------------------------- nav tabs */
+
+.nav-tabs {
+    border-bottom: 1px solid var(--v-border) !important;
+}
+
+.nav-tabs > li > a {
+    color: var(--v-text-muted) !important;
+    border-radius: var(--v-radius-sm) var(--v-radius-sm) 0 0 !important;
+    transition: background-color var(--v-transition), color var(--v-transition);
+}
+
+.nav-tabs > li > a:hover,
+.nav-tabs > li > a:focus {
+    color: var(--v-text) !important;
+    background-color: var(--v-surface-raised) !important;
+    border-color: transparent !important;
+}
+
+.nav-tabs > li.active > a,
+.nav-tabs > li.active > a:hover,
+.nav-tabs > li.active > a:focus {
+    color: var(--v-accent-bright) !important;
+    background-color: var(--v-surface-raised) !important;
+    border: 1px solid var(--v-border) !important;
+    border-bottom-color: transparent !important;
+    cursor: default;
+}
+
+.nav-pills > li.active > a,
+.nav-pills > li.active > a:hover,
+.nav-pills > li.active > a:focus {
+    color: #fff !important;
+    background-color: var(--v-accent-deep) !important;
+}
+
+
+/* ------------------------------------------------------------ dropdowns */
+
+.dropdown-menu {
+    color: var(--v-text) !important;
+    border: 1px solid var(--v-border-strong) !important;
+    border-radius: var(--v-radius) !important;
+    background-color: var(--v-surface-raised) !important;
+    box-shadow: var(--v-shadow-pop) !important;
+    padding: 4px !important;
+}
+
+.dropdown-menu > li > a {
+    border-radius: var(--v-radius-sm) !important;
+    transition: background-color var(--v-transition), color var(--v-transition);
+}
+
+.dropdown-menu > li > a:hover,
+.dropdown-menu > li > a:focus {
+    color: var(--v-text) !important;
+    background-color: var(--v-surface-hover) !important;
+}
+
+.dropdown-menu > .active > a,
+.dropdown-menu > .active > a:hover,
+.dropdown-menu > .active > a:focus {
+    color: #fff !important;
+    background-color: var(--v-accent-deep) !important;
+}
+
+.open > .dropdown-toggle,
+.dropdown-toggle:hover {
+    border-color: var(--v-border) !important;
+    background-color: var(--v-surface-raised) !important;
+}
+
+.divider {
+    background-color: var(--v-border) !important;
+    height: 1px !important;
+    margin: 4px 0 !important;
+}
+
+
+/* --------------------------------------------------------------- panels */
+
+.panel {
+    border-width: 1px !important;
+    border-radius: var(--v-radius-lg) !important;
+    background-color: var(--v-surface) !important;
+    box-shadow: var(--v-shadow);
+}
+
+.panel-default,
+.panel-primary,
+.panel-success,
+.panel-info,
+.panel-warning,
+.panel-danger {
+    border-color: var(--v-border) !important;
+}
+
+.panel-default > .panel-heading,
+.panel-primary > .panel-heading,
+.panel-success > .panel-heading,
+.panel-info > .panel-heading,
+.panel-warning > .panel-heading,
+.panel-danger > .panel-heading {
+    color: var(--v-text) !important;
+    border-color: var(--v-border) !important;
+    background-color: var(--v-surface-raised) !important;
+    border-radius: var(--v-radius-lg) var(--v-radius-lg) 0 0 !important;
+}
+
+/* Folder and device state is carried by the heading's colour. Bootstrap's
+   contextual panels use pale fills that would blow out on a dark ground, so
+   state is shown as a left edge and a tinted title instead. */
+.panel-success > .panel-heading {
+    border-left: 3px solid var(--v-success) !important;
+}
+
+.panel-info > .panel-heading {
+    border-left: 3px solid var(--v-info) !important;
+}
+
+.panel-warning > .panel-heading {
+    color: var(--v-warning-bright) !important;
+    border-left: 3px solid var(--v-warning) !important;
+}
+
+.panel-danger > .panel-heading {
+    color: var(--v-danger-bright) !important;
+    border-left: 3px solid var(--v-danger) !important;
+}
+
+.panel-primary > .panel-heading {
+    border-left: 3px solid var(--v-accent-strong) !important;
+}
+
+.panel-heading:hover,
+.panel-heading:focus {
+    text-decoration: none;
+    background-color: var(--v-surface-hover) !important;
+}
+
+.panel-body {
+    color: var(--v-text);
+}
+
+.panel-footer {
+    color: var(--v-text-muted) !important;
+    border-width: 0 !important;
+    background-color: var(--v-surface-sunken) !important;
+    border-radius: 0 0 var(--v-radius-lg) var(--v-radius-lg) !important;
+}
+
+.panel-progress {
+    background: var(--v-accent-strong);
+    border-radius: var(--v-radius-lg) 0 0 0;
+}
+
+.panel-group .panel-heading + .panel-collapse > .panel-body,
+.panel-group .panel-heading + .panel-collapse > .list-group {
+    border-top: 1px solid var(--v-border) !important;
+}
+
+.panel-icon {
+    color: var(--v-accent);
+}
+
+.list-group-item {
+    color: var(--v-text) !important;
+    border-color: var(--v-border) !important;
+    background-color: transparent !important;
+}
+
+
+/* --------------------------------------------------------------- tables */
+
+.table > thead > tr > th {
+    color: var(--v-text-muted) !important;
+    border-bottom-color: var(--v-border-strong) !important;
+}
+
+.table > tbody > tr > td,
+.table > tbody > tr > th,
+.table > tfoot > tr > td {
+    border-top-color: var(--v-border) !important;
+}
+
+.table-striped > tbody > tr:nth-of-type(odd) {
+    background-color: var(--v-surface-sunken) !important;
+}
+
+.table-hover > tbody > tr:hover {
+    background-color: var(--v-surface-hover) !important;
+}
+
+
+/* -------------------------------------------------------------- buttons */
+
+.btn {
+    border-width: 0 !important;
+    border-radius: var(--v-radius) !important;
+    font-weight: 500;
+    transition: background-color var(--v-transition), color var(--v-transition),
+                box-shadow var(--v-transition);
+}
+
+.btn:hover,
+.btn:focus,
+.btn.focus {
+    outline: none !important;
+}
+
+.btn:active,
+.btn.active {
+    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.35) !important;
+}
+
+.btn[disabled],
+.btn.disabled {
+    opacity: 0.4 !important;
+    box-shadow: none !important;
+}
+
+.btn-default {
+    color: var(--v-text-muted) !important;
+    background-color: var(--v-surface-raised) !important;
+}
+
+.btn-default:hover,
+.btn-default:focus,
+.btn-default.focus {
+    color: var(--v-text) !important;
+    background-color: var(--v-surface-hover) !important;
+}
+
+.btn-primary {
+    color: #fff !important;
+    background-color: var(--v-accent-deep) !important;
+}
+
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary.focus {
+    background-color: var(--v-accent-strong) !important;
+}
+
+.btn-success {
+    color: #06251a !important;
+    background-color: var(--v-success) !important;
+}
+
+.btn-success:hover,
+.btn-success:focus,
+.btn-success.focus {
+    background-color: var(--v-success-bright) !important;
+}
+
+.btn-warning {
+    color: var(--v-text-inverse) !important;
+    background-color: var(--v-warning) !important;
+}
+
+.btn-warning:hover,
+.btn-warning:focus,
+.btn-warning.focus {
+    background-color: var(--v-warning-bright) !important;
+}
+
+.btn-danger {
+    color: #fff !important;
+    background-color: var(--v-danger) !important;
+}
+
+.btn-danger:hover,
+.btn-danger:focus,
+.btn-danger.focus {
+    background-color: var(--v-danger-bright) !important;
+}
+
+.btn-info {
+    color: #fff !important;
+    background-color: var(--v-info) !important;
+}
+
+.btn-info:hover,
+.btn-info:focus,
+.btn-info.focus {
+    background-color: var(--v-info-bright) !important;
+    color: var(--v-text-inverse) !important;
+}
+
+.btn-link {
+    color: var(--v-accent) !important;
+}
+
+.btn-link:hover,
+.btn-link:focus {
+    color: var(--v-accent-bright) !important;
+}
+
+
+/* ---------------------------------------------------------------- forms */
+
+.form-control {
+    color: var(--v-text) !important;
+    border-color: var(--v-border-strong) !important;
+    border-radius: var(--v-radius-sm) !important;
+    background-color: var(--v-surface-sunken) !important;
+    box-shadow: none !important;
+    transition: border-color var(--v-transition), box-shadow var(--v-transition);
+}
+
+.form-control::placeholder {
+    color: var(--v-text-dim) !important;
+}
+
+/* Native select and option popups are drawn by the platform, which has no idea
+   the page is dark; colour-scheme tells it. */
+select.form-control,
+select {
+    color-scheme: dark;
+}
+
+.help-block {
+    color: var(--v-text-muted) !important;
+}
+
+.control-label,
+label {
+    color: var(--v-text) !important;
+}
+
+.input-group-addon {
+    color: var(--v-text-muted) !important;
+    border-color: var(--v-border-strong) !important;
+    background-color: var(--v-surface-raised) !important;
+}
+
+.well,
+.form-control[readonly="readonly"],
+.popover {
+    color: var(--v-text) !important;
+    border-color: var(--v-border) !important;
+    border-radius: var(--v-radius) !important;
+    background-color: var(--v-surface-raised) !important;
+    box-shadow: none !important;
+}
+
+.has-error .form-control {
+    border-color: var(--v-danger) !important;
+}
+
+.has-error .help-block,
+.has-error .control-label {
+    color: var(--v-danger-bright) !important;
+}
+
+/* Native checkboxes and radios, tinted rather than rebuilt. */
+input[type="checkbox"],
+input[type="radio"] {
+    accent-color: var(--v-accent-strong);
+}
+
+.checkbox[disabled] {
+    background-color: var(--v-surface-sunken);
+    border-radius: var(--v-radius-sm);
+}
+
+.checkbox[disabled] *,
+.checkbox[disabled] .help-block {
+    color: var(--v-text-dim) !important;
+}
+
+
+/* --------------------------------------------------------------- modals */
+
+.modal-content {
+    border: 1px solid var(--v-border-strong) !important;
+    border-radius: var(--v-radius-lg) !important;
+    background-color: var(--v-surface) !important;
+    box-shadow: var(--v-shadow-pop) !important;
+}
+
+.modal-header {
+    border-bottom-color: var(--v-border) !important;
+    border-radius: var(--v-radius-lg) var(--v-radius-lg) 0 0;
+}
+
+.modal-header:not(.alert) {
+    background-color: var(--v-surface-raised);
+}
+
+.modal-title {
+    color: var(--v-text) !important;
+}
+
+.modal-footer {
+    border-color: var(--v-border) !important;
+    background-color: var(--v-surface-sunken) !important;
+    border-radius: 0 0 var(--v-radius-lg) var(--v-radius-lg);
+}
+
+.modal-backdrop.in {
+    /* Violet-tinted rather than neutral black, and heavier than Bootstrap's
+       default so the dialog reads as clearly in front. */
+    background-color: #0b0810;
+    opacity: 0.72 !important;
+}
+
+.close {
+    color: var(--v-text) !important;
+    text-shadow: none !important;
+    opacity: 0.5;
+}
+
+.close:hover,
+.close:focus {
+    color: var(--v-text) !important;
+    opacity: 1;
+}
+
+
+/* --------------------------------------------------------------- alerts */
+
+/* Bootstrap's alert fills are pastel. Rebuild them as a tinted wash over the
+   dark surface, with the state colour carried by the border and the text. */
+.alert {
+    border-radius: var(--v-radius) !important;
+    border-width: 1px !important;
+}
+
+.alert-success {
+    color: var(--v-success-bright) !important;
+    border-color: var(--v-success) !important;
+    background-color: rgba(16, 185, 129, 0.12) !important;
+}
+
+.alert-info {
+    color: var(--v-info-bright) !important;
+    border-color: var(--v-info) !important;
+    background-color: rgba(124, 108, 224, 0.14) !important;
+}
+
+.alert-warning {
+    color: var(--v-warning-bright) !important;
+    border-color: var(--v-warning) !important;
+    background-color: rgba(217, 148, 20, 0.14) !important;
+}
+
+.alert-danger {
+    color: var(--v-danger-bright) !important;
+    border-color: var(--v-danger) !important;
+    background-color: rgba(220, 75, 65, 0.14) !important;
+}
+
+.alert a,
+.alert .alert-link {
+    color: inherit !important;
+    text-decoration: underline;
+}
+
+/* An alert used as a modal header keeps the dialog's top corners. */
+.modal-header.alert {
+    border-radius: var(--v-radius-lg) var(--v-radius-lg) 0 0 !important;
+}
+
+
+/* ------------------------------------------------- tooltips & popovers */
+
+.tooltip-inner {
+    color: var(--v-text) !important;
+    background-color: var(--v-surface-hover) !important;
+    border: 1px solid var(--v-border-strong) !important;
+    border-radius: var(--v-radius-sm) !important;
+    box-shadow: var(--v-shadow) !important;
+}
+
+.tooltip.top .tooltip-arrow,
+.tooltip.top-left .tooltip-arrow,
+.tooltip.top-right .tooltip-arrow {
+    border-top-color: var(--v-border-strong) !important;
+}
+
+.tooltip.right .tooltip-arrow {
+    border-right-color: var(--v-border-strong) !important;
+}
+
+.tooltip.bottom .tooltip-arrow,
+.tooltip.bottom-left .tooltip-arrow,
+.tooltip.bottom-right .tooltip-arrow {
+    border-bottom-color: var(--v-border-strong) !important;
+}
+
+.tooltip.left .tooltip-arrow {
+    border-left-color: var(--v-border-strong) !important;
+}
+
+.popover {
+    box-shadow: var(--v-shadow-pop) !important;
+}
+
+.popover-title {
+    color: var(--v-text) !important;
+    border-bottom-color: var(--v-border) !important;
+    background-color: var(--v-surface-hover) !important;
+}
+
+.popover.top > .arrow,
+.popover.top > .arrow:after {
+    border-top-color: var(--v-border-strong) !important;
+}
+
+.popover.right > .arrow,
+.popover.right > .arrow:after {
+    border-right-color: var(--v-border-strong) !important;
+}
+
+.popover.bottom > .arrow,
+.popover.bottom > .arrow:after {
+    border-bottom-color: var(--v-border-strong) !important;
+}
+
+.popover.left > .arrow,
+.popover.left > .arrow:after {
+    border-left-color: var(--v-border-strong) !important;
+}
+
+
+/* ----------------------------------------------------------- pagination */
+
+.pagination > li > a,
+.pagination > li > span {
+    color: var(--v-text-muted) !important;
+    border-color: var(--v-border) !important;
+    background-color: var(--v-surface-raised) !important;
+}
+
+.pagination > li > a:hover,
+.pagination > li > a:focus,
+.pagination > li > a.focus {
+    color: var(--v-text) !important;
+    background-color: var(--v-surface-hover) !important;
+}
+
+.pagination > .active > a,
+.pagination > .active > a:hover,
+.pagination > .active > span {
+    color: #fff !important;
+    border-color: var(--v-accent-deep) !important;
+    background-color: var(--v-accent-deep) !important;
+}
+
+.pagination > .disabled > a,
+.pagination > .disabled > span {
+    color: var(--v-text-dim) !important;
+    background-color: var(--v-surface) !important;
+}
+
+
+/* -------------------------------------------------------- progress bars */
+
+.progress {
+    border-radius: 999px !important;
+    background-color: var(--v-surface-sunken) !important;
+    box-shadow: none !important;
+}
+
+.progress-bar {
+    background-color: var(--v-accent-deep) !important;
+    box-shadow: none !important;
+}
+
+.progress-bar-success {
+    background-color: var(--v-success) !important;
+}
+
+.progress-bar-info {
+    background-color: var(--v-info) !important;
+}
+
+.progress-bar-warning {
+    background-color: var(--v-warning) !important;
+}
+
+.progress-bar-danger {
+    background-color: var(--v-danger) !important;
+}
+
+/* The percentage label sits on top of the bar, so it has to stay legible over
+   both the filled and the empty part. */
+.progress .frontal {
+    color: var(--v-text);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+
+/* ------------------------------------------------------ labels & badges */
+
+.label-default {
+    background-color: var(--v-surface-hover) !important;
+    color: var(--v-text-muted) !important;
+}
+
+.label-primary,
+.badge {
+    background-color: var(--v-accent-deep) !important;
+    color: #fff !important;
+}
+
+.label-success {
+    background-color: var(--v-success) !important;
+    color: var(--v-text-inverse) !important;
+}
+
+.label-info {
+    background-color: var(--v-info) !important;
+}
+
+.label-warning {
+    background-color: var(--v-warning) !important;
+    color: var(--v-text-inverse) !important;
+}
+
+.label-danger {
+    background-color: var(--v-danger) !important;
+}
+
+
+/* ------------------------------------------------------- text utilities */
+
+.text-primary {
+    color: var(--v-accent) !important;
+}
+
+.text-info {
+    color: var(--v-info-bright) !important;
+}
+
+.text-success {
+    color: var(--v-success-bright) !important;
+}
+
+.text-warning {
+    color: var(--v-warning-bright) !important;
+}
+
+.text-danger {
+    color: var(--v-danger-bright) !important;
+}
+
+
+/* ------------------------------------------------------------ identicon */
+
+.identicon rect {
+    fill: var(--v-accent);
+}
+
+.panel-warning .identicon rect {
+    fill: var(--v-warning-bright);
+}
+
+
+/* ------------------------------------------- remote device signal icons */
+
+/* The reception SVGs ship as near-black artwork, so they need a filter rather
+   than a colour. This chain lands close to --v-text-muted; it is approximate
+   by nature, the same way the stock dark theme's is. */
+.reception {
+    filter: invert(72%) sepia(18%) saturate(560%) hue-rotate(215deg)
+            brightness(96%) contrast(88%);
+}
+
+
+/* ------------------------------------------------------------ fancytree */
+
+.fancytree-container tr:hover,
+.fancytree-focused {
+    background-color: var(--v-surface-hover);
+}
+
+.fancytree-container tr.fancytree-active {
+    background-color: var(--v-accent-wash);
+}
+
+span.fancytree-title {
+    color: var(--v-text);
+}
+
+
+/* -------------------------------------------------- date range picker */
+
+/* Used by the file versioning browser. The stock dark theme leaves it white,
+   which is a hole worth closing on a theme meant to be lived in. */
+.daterangepicker {
+    color: var(--v-text);
+    border: 1px solid var(--v-border-strong) !important;
+    border-radius: var(--v-radius) !important;
+    background-color: var(--v-surface-raised) !important;
+    box-shadow: var(--v-shadow-pop) !important;
+}
+
+.daterangepicker .calendar-table {
+    border-color: transparent !important;
+    background-color: transparent !important;
+}
+
+.daterangepicker td.available:hover,
+.daterangepicker th.available:hover {
+    background-color: var(--v-surface-hover) !important;
+    color: var(--v-text) !important;
+}
+
+.daterangepicker td.active,
+.daterangepicker td.active:hover {
+    background-color: var(--v-accent-deep) !important;
+    color: #fff !important;
+}
+
+.daterangepicker td.off,
+.daterangepicker td.off.in-range,
+.daterangepicker td.off.start-date,
+.daterangepicker td.off.end-date {
+    color: var(--v-text-dim) !important;
+    background-color: transparent !important;
+}
+
+.daterangepicker td.in-range {
+    background-color: var(--v-accent-wash) !important;
+    color: var(--v-text) !important;
+}
+
+.daterangepicker .drp-buttons {
+    border-top-color: var(--v-border) !important;
+}
+
+.daterangepicker:before {
+    border-bottom-color: var(--v-border-strong) !important;
+}
+
+.daterangepicker:after {
+    border-bottom-color: var(--v-surface-raised) !important;
+}
+
+
+/* ------------------------------------------------------ reduced motion */
+
+/* The transitions above are decorative. Anyone who has asked the OS to calm
+   animations down should not have to watch them, and Bootstrap's own collapse
+   and fade transitions should stop too. */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    .progress-bar-striped,
+    .progress-bar.active {
+        animation: none !important;
+        background-image: none !important;
+    }
+}
