@@ -30,7 +30,14 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
 }
 
 if (-not $Repo) {
-    $Repo = (gh repo view --json nameWithOwner --jq .nameWithOwner).Trim()
+    # Derive from the origin remote rather than `gh repo view`, which on a fork
+    # resolves to the upstream parent repository instead of ours.
+    $url = (git remote get-url origin).Trim()
+    if ($url -match '[:/]([^/:]+)/([^/]+?)(\.git)?$') {
+        $Repo = "$($Matches[1])/$($Matches[2])"
+    } else {
+        throw "Could not determine the repository from origin remote '$url'. Pass -Repo owner/name."
+    }
 }
 Write-Host "Repository: $Repo" -ForegroundColor DarkGray
 
@@ -44,7 +51,12 @@ if (-not $workflows) {
 }
 
 foreach ($line in $workflows) {
-    $id, $state, $path = $line -split "`t"
+    $parts = $line -split "`t"
+    if ($parts.Count -lt 3) {
+        Write-Host "  skipped unparseable entry: $line" -ForegroundColor DarkGray
+        continue
+    }
+    $id, $state, $path = $parts
     $file = Split-Path $path -Leaf
 
     if ($keep -contains $file) {
