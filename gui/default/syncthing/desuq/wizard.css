@@ -1,0 +1,542 @@
+/* Added by the desuqcafe fork. Upstream has no such directory, so this file
+   cannot conflict on a merge.
+
+   The first-run wizard.
+
+   Same convention as handshake.css and selective.css: every colour is
+   var(--v-*, <fallback>), so the fork's violet theme supplies the real palette
+   and stock Syncthing's light theme still gets something legible. No images,
+   no fonts, no external requests.
+
+   The tone this is aiming for is a welcome rather than a form. Somebody
+   reaching this screen has just installed something they were told to install
+   and has no idea what it is for, so the steps are large, there are four of
+   them, and the one on screen is the only one with any weight to it. */
+
+/* ==========================================================================
+   Shell
+   ========================================================================== */
+
+.desuq-wiz .desuq-wiz-content {
+    border: 1px solid var(--v-border-strong, #cfc3e6);
+    border-radius: var(--v-radius-lg, 12px);
+    overflow: hidden;
+    box-shadow: var(--v-shadow-pop, 0 16px 44px -12px rgba(40, 20, 70, 0.35));
+}
+
+.desuq-wiz-header {
+    position: relative;
+    border-bottom: 1px solid var(--v-border, #e0d7f0);
+    background:
+        radial-gradient(120% 180% at 0% 0%,
+            var(--v-accent-wash-strong, rgba(139, 92, 246, 0.22)) 0%,
+            transparent 62%),
+        var(--v-surface-raised, #f6f2fd);
+    padding-bottom: 0;
+}
+
+.desuq-wiz-header::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -1px;
+    height: 2px;
+    background: linear-gradient(90deg,
+        var(--v-accent-deep, #6d34d6) 0%,
+        var(--v-accent, #a78bfa) 35%,
+        transparent 90%);
+}
+
+.desuq-wiz-eyebrow {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--v-accent, #7c4ddb);
+    margin-bottom: 2px;
+}
+
+.desuq-wiz-title.modal-title {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--v-text, #241a35);
+}
+
+/* ==========================================================================
+   The step rail
+   ========================================================================== */
+
+.desuq-wiz-rail {
+    list-style: none;
+    margin: 16px 0 0;
+    padding: 0;
+    display: flex;
+    gap: 4px;
+}
+
+.desuq-wiz-rail > li {
+    flex: 1 1 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 4px 10px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    color: var(--v-text-dim, #8d84a3);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    transition: color var(--v-transition, 120ms ease),
+                border-color var(--v-transition, 120ms ease);
+}
+
+.desuq-wiz-rail > li:hover {
+    color: var(--v-text-muted, #6b6280);
+}
+
+.desuq-wiz-rail > li.desuq-wiz-at {
+    color: var(--v-text, #241a35);
+    border-bottom-color: var(--v-accent, #7c4ddb);
+}
+
+.desuq-wiz-rail > li.desuq-wiz-ok {
+    color: var(--v-success, #10b981);
+}
+
+.desuq-wiz-rail > li.desuq-wiz-ok.desuq-wiz-at {
+    color: var(--v-text, #241a35);
+}
+
+/* The numbered disc. It becomes a tick the moment the step's condition is
+   satisfied by the actual state of the world, which is what makes the rail
+   worth looking at when the wizard is reopened days later. */
+.desuq-wiz-pip {
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid var(--v-border-strong, #cfc3e6);
+    background: var(--v-surface, #fff);
+    color: inherit;
+}
+
+.desuq-wiz-at .desuq-wiz-pip {
+    border-color: var(--v-accent, #7c4ddb);
+    background: var(--v-accent-wash, rgba(124, 77, 219, 0.12));
+    color: var(--v-accent, #7c4ddb);
+}
+
+.desuq-wiz-ok .desuq-wiz-pip {
+    border-color: var(--v-success, #10b981);
+    background: var(--v-success, #10b981);
+    color: var(--v-text-inverse, #fff);
+}
+
+.desuq-wiz-rail-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ==========================================================================
+   Body
+   ========================================================================== */
+
+.desuq-wiz-body {
+    background: var(--v-surface, #fff);
+    min-height: 260px;
+    padding: 22px 24px;
+}
+
+.desuq-wiz-lead {
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--v-text, #241a35);
+    margin-bottom: 18px;
+}
+
+.desuq-wiz-help {
+    color: var(--v-text-muted, #6b6280);
+    margin-top: 10px;
+}
+
+.desuq-wiz-note {
+    margin-top: 16px;
+    padding: 12px 14px;
+    border-left: 3px solid var(--v-warning, #d99414);
+    background: var(--v-surface-sunken, #faf7ff);
+    border-radius: 0 var(--v-radius-sm, 5px) var(--v-radius-sm, 5px) 0;
+    color: var(--v-text-muted, #6b6280);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.desuq-wiz-error {
+    margin-bottom: 16px;
+    padding: 10px 12px;
+    border-radius: var(--v-radius-sm, 5px);
+    background: var(--v-danger, #dc4b41);
+    color: #fff;
+    font-size: 13px;
+}
+
+/* ==========================================================================
+   Step 1 -- the name
+   ========================================================================== */
+
+.desuq-wiz-name.form-control {
+    font-size: 20px;
+    height: auto;
+    padding: 12px 14px;
+    border-radius: var(--v-radius, 8px);
+    background: var(--v-surface-sunken, #faf7ff);
+    border: 1px solid var(--v-border-strong, #cfc3e6);
+    color: var(--v-text, #241a35);
+}
+
+.desuq-wiz-name.form-control:focus {
+    border-color: var(--v-accent, #7c4ddb);
+    box-shadow: var(--v-ring-inset, 0 0 0 3px rgba(124, 77, 219, 0.18));
+}
+
+/* ==========================================================================
+   Step 2 -- the code
+   ========================================================================== */
+
+.desuq-wiz-code-row {
+    display: flex;
+    gap: 22px;
+    align-items: flex-start;
+}
+
+.desuq-wiz-code-col {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* The ID is 63 characters. It has to wrap, and it has to stay readable
+   character by character, because somebody will end up reading it aloud. */
+.desuq-wiz-code {
+    font-family: var(--font-monospace, "SFMono-Regular", Menlo, Consolas, monospace);
+    font-size: 14px;
+    line-height: 1.7;
+    letter-spacing: 0.04em;
+    word-break: break-all;
+    padding: 14px 16px;
+    border-radius: var(--v-radius, 8px);
+    background: var(--v-surface-sunken, #faf7ff);
+    border: 1px solid var(--v-border-strong, #cfc3e6);
+    color: var(--v-text, #241a35);
+    user-select: all;
+}
+
+.desuq-wiz-copy.btn {
+    margin-top: 10px;
+    border-radius: var(--v-radius-sm, 5px);
+    border: 1px solid var(--v-accent, #7c4ddb);
+    background: var(--v-accent-wash, rgba(124, 77, 219, 0.12));
+    color: var(--v-accent, #7c4ddb);
+    font-weight: 600;
+}
+
+.desuq-wiz-copy.btn:hover,
+.desuq-wiz-copy.btn:focus {
+    background: var(--v-accent, #7c4ddb);
+    color: var(--v-text-inverse, #fff);
+}
+
+.desuq-wiz-qr-col {
+    flex: 0 0 auto;
+    text-align: center;
+}
+
+.desuq-wiz-qr {
+    width: 132px;
+    height: 132px;
+    border-radius: var(--v-radius, 8px);
+    border: 1px solid var(--v-border-strong, #cfc3e6);
+    background: #fff;
+    padding: 6px;
+}
+
+.desuq-wiz-qr-cap {
+    margin-top: 6px;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--v-text-dim, #8d84a3);
+}
+
+/* The live indicator. A slow pulse rather than a spinner: a spinner says
+   "working on it", and nothing here is working on anything -- it is waiting on
+   a person. */
+.desuq-wiz-waiting,
+.desuq-wiz-hit,
+.desuq-wiz-empty {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    margin-top: 20px;
+    padding: 14px 16px;
+    border-radius: var(--v-radius, 8px);
+    background: var(--v-surface-sunken, #faf7ff);
+    border: 1px solid var(--v-border, #e0d7f0);
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--v-text-muted, #6b6280);
+}
+
+.desuq-wiz-waiting strong,
+.desuq-wiz-hit strong,
+.desuq-wiz-empty strong {
+    color: var(--v-text, #241a35);
+    display: block;
+}
+
+.desuq-wiz-hit > .fas,
+.desuq-wiz-empty > .fas {
+    font-size: 18px;
+    margin-top: 2px;
+    color: var(--v-accent, #7c4ddb);
+}
+
+.desuq-wiz-hit-ok {
+    border-color: var(--v-success, #10b981);
+    background: var(--v-success-wash, rgba(16, 185, 129, 0.1));
+}
+
+.desuq-wiz-hit-ok > .fas {
+    color: var(--v-success, #10b981);
+}
+
+.desuq-wiz-pulse {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    margin-top: 2px;
+    position: relative;
+}
+
+.desuq-wiz-pulse > span,
+.desuq-wiz-pulse::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--v-accent, #7c4ddb);
+}
+
+.desuq-wiz-pulse > span {
+    transform: scale(0.4);
+}
+
+.desuq-wiz-pulse::after {
+    opacity: 0.45;
+    animation: desuq-wiz-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes desuq-wiz-ping {
+    0%   { transform: scale(0.4); opacity: 0.5; }
+    80%  { transform: scale(1);   opacity: 0; }
+    100% { transform: scale(1);   opacity: 0; }
+}
+
+/* Respect the system setting. A pulse in the corner of the eye is exactly the
+   sort of thing this covers. */
+@media (prefers-reduced-motion: reduce) {
+    .desuq-wiz-pulse::after {
+        animation: none;
+        opacity: 0.3;
+    }
+}
+
+.desuq-wiz-ids {
+    margin-top: 6px;
+    font-family: var(--font-monospace, "SFMono-Regular", Menlo, Consolas, monospace);
+    font-size: 11px;
+    word-break: break-all;
+    color: var(--v-text-dim, #8d84a3);
+}
+
+/* ==========================================================================
+   Step 3 -- verification
+   ========================================================================== */
+
+.desuq-wiz-peer {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--v-border, #e0d7f0);
+}
+
+.desuq-wiz-peer:first-of-type {
+    border-top: 0;
+    padding-top: 0;
+}
+
+.desuq-wiz-peer-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.desuq-wiz-peer-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--v-text, #241a35);
+}
+
+.desuq-wiz-peer-state {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--v-success, #10b981);
+}
+
+.desuq-wiz-peer-state.desuq-wiz-peer-off {
+    color: var(--v-text-dim, #8d84a3);
+}
+
+/* ==========================================================================
+   Step 4 -- the folder offer
+   ========================================================================== */
+
+.desuq-wiz-offer {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 12px;
+    padding: 14px 16px;
+    border-radius: var(--v-radius, 8px);
+    border: 1px solid var(--v-accent, #7c4ddb);
+    background: var(--v-accent-wash, rgba(124, 77, 219, 0.1));
+}
+
+.desuq-wiz-offer-body {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.desuq-wiz-offer-label {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--v-text, #241a35);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.desuq-wiz-offer-from {
+    font-size: 12px;
+    color: var(--v-text-muted, #6b6280);
+}
+
+.desuq-wiz-accept.btn {
+    flex: 0 0 auto;
+    border: 0;
+    border-radius: var(--v-radius-sm, 5px);
+    background: var(--v-accent-deep, #6d34d6);
+    color: #fff;
+    font-weight: 600;
+}
+
+.desuq-wiz-accept.btn:hover,
+.desuq-wiz-accept.btn:focus {
+    background: var(--v-accent-strong, #8b5cf6);
+    color: #fff;
+}
+
+/* ==========================================================================
+   Footer
+   ========================================================================== */
+
+.desuq-wiz-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-top: 1px solid var(--v-border, #e0d7f0);
+    background: var(--v-surface-raised, #f6f2fd);
+}
+
+.desuq-wiz-spacer {
+    flex: 1 1 auto;
+}
+
+.desuq-wiz-btn-quiet.btn {
+    border: 0;
+    background: transparent;
+    color: var(--v-text-dim, #8d84a3);
+    padding-left: 0;
+}
+
+.desuq-wiz-btn-quiet.btn:hover,
+.desuq-wiz-btn-quiet.btn:focus {
+    color: var(--v-text-muted, #6b6280);
+    text-decoration: underline;
+    background: transparent;
+}
+
+.desuq-wiz-btn-back.btn {
+    border: 1px solid var(--v-border-strong, #cfc3e6);
+    background: transparent;
+    color: var(--v-text-muted, #6b6280);
+    border-radius: var(--v-radius-sm, 5px);
+}
+
+.desuq-wiz-btn-back.btn:hover,
+.desuq-wiz-btn-back.btn:focus {
+    border-color: var(--v-accent, #7c4ddb);
+    color: var(--v-accent, #7c4ddb);
+    background: transparent;
+}
+
+.desuq-wiz-btn-next.btn {
+    border: 0;
+    border-radius: var(--v-radius-sm, 5px);
+    background: var(--v-accent-deep, #6d34d6);
+    color: #fff;
+    font-weight: 600;
+    min-width: 96px;
+}
+
+.desuq-wiz-btn-next.btn:hover,
+.desuq-wiz-btn-next.btn:focus {
+    background: var(--v-accent-strong, #8b5cf6);
+    color: #fff;
+}
+
+.desuq-wiz-btn-next.btn[disabled] {
+    opacity: 0.6;
+}
+
+/* ==========================================================================
+   Narrow windows
+   ========================================================================== */
+
+@media (max-width: 767px) {
+    .desuq-wiz-code-row {
+        flex-direction: column;
+    }
+
+    .desuq-wiz-qr-col {
+        align-self: center;
+    }
+
+    /* Four labels do not fit; the discs alone still carry the position and the
+       tick, which is the part that matters. */
+    .desuq-wiz-rail-label {
+        display: none;
+    }
+
+    .desuq-wiz-rail > li {
+        justify-content: center;
+    }
+}

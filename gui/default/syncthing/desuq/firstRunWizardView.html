@@ -1,0 +1,248 @@
+<!-- Added by the desuqcafe fork. Upstream has no such directory, so this file
+     cannot conflict on a merge.
+
+     Plain Bootstrap markup rather than upstream's <modal> directive, for the
+     same reason selectiveSyncModalView.html is: that directive calls
+     scope.$parent.modalLoaded(), which gates initController on every <modal>
+     in the page having compiled, and hanging the whole GUI's start-up off a
+     fork template is not a trade worth making.
+
+     Plain {{ }} interpolation throughout, never the translate directive:
+     angular-translate renders {%placeholders%} literally for any string it has
+     no entry for, and none of these will ever be in upstream's language
+     files. -->
+
+<div class="modal fade desuq-wiz" id="desuqWizard" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content desuq-wiz-content">
+
+      <div class="modal-header desuq-wiz-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+        <div class="desuq-wiz-eyebrow">Getting started</div>
+        <h4 class="modal-title desuq-wiz-title">
+          <span ng-if="svc.stepName() == 'name'">Name this machine</span>
+          <span ng-if="svc.stepName() == 'code'">Send your code</span>
+          <span ng-if="svc.stepName() == 'verify'">Check it is really them</span>
+          <span ng-if="svc.stepName() == 'sync'">Choose what to sync</span>
+        </h4>
+
+        <!-- The rail. Clickable, because somebody who wants to re-read step 2
+             while waiting on step 3 should not have to close and reopen. -->
+        <ol class="desuq-wiz-rail">
+          <li ng-repeat="s in st.steps track by $index"
+              ng-class="{'desuq-wiz-at': $index == st.step,
+                         'desuq-wiz-ok': svc.isDone(s),
+                         'desuq-wiz-past': $index < st.step}"
+              ng-click="svc.goTo($index)" role="button" tabindex="0">
+            <span class="desuq-wiz-pip">
+              <span class="fas fa-check" ng-if="svc.isDone(s)"></span>
+              <span ng-if="!svc.isDone(s)">{{$index + 1}}</span>
+            </span>
+            <span class="desuq-wiz-rail-label">
+              <span ng-if="s == 'name'">Name</span>
+              <span ng-if="s == 'code'">Your code</span>
+              <span ng-if="s == 'verify'">Verify</span>
+              <span ng-if="s == 'sync'">Sync</span>
+            </span>
+          </li>
+        </ol>
+      </div>
+
+      <div class="modal-body desuq-wiz-body">
+
+        <div class="desuq-wiz-error" ng-if="st.error">
+          <span class="fas fa-exclamation-triangle"></span>&nbsp;{{st.error}}
+        </div>
+
+        <!-- 1. Name ------------------------------------------------------ -->
+        <div ng-if="svc.stepName() == 'name'" class="desuq-wiz-step">
+          <p class="desuq-wiz-lead">
+            This is the name the other people on your team will see next to your
+            files. It is only a label &mdash; nothing breaks if you change it later.
+          </p>
+          <div class="desuq-wiz-field">
+            <input class="form-control input-lg desuq-wiz-name" type="text"
+                   ng-model="st.nameDraft" maxlength="64"
+                   placeholder="Studio laptop"
+                   ng-keyup="$event.keyCode == 13 && svc.saveName()"/>
+          </div>
+          <p class="help-block desuq-wiz-help">
+            Something a person would recognise works best. &ldquo;Amy's laptop&rdquo;
+            tells the other two whose machine went offline; &ldquo;DESKTOP-A1B2C3&rdquo;
+            does not.
+          </p>
+        </div>
+
+        <!-- 2. Code ------------------------------------------------------ -->
+        <div ng-if="svc.stepName() == 'code'" class="desuq-wiz-step">
+          <p class="desuq-wiz-lead">
+            Send this code to whoever is sharing files with you. They need it
+            before anything can reach you &mdash; there is no account and no
+            server, so this code <em>is</em> your address.
+          </p>
+
+          <div class="desuq-wiz-code-row">
+            <div class="desuq-wiz-code-col">
+              <div class="desuq-wiz-code select-on-click">{{st.myID}}</div>
+              <button type="button" class="btn btn-sm desuq-wiz-copy"
+                      ng-click="svc.copy($event, st.myID)">
+                <span class="fa fa-clone" ng-if="!st.copied"></span>
+                <span class="fas fa-check" ng-if="st.copied"></span>
+                &nbsp;<span ng-if="!st.copied">Copy</span><span ng-if="st.copied">Copied</span>
+              </button>
+              <p class="help-block desuq-wiz-help">
+                Paste it into whatever you normally use to talk to them. It is
+                not a secret &mdash; it identifies this machine, it does not
+                unlock it.
+              </p>
+            </div>
+            <div class="desuq-wiz-qr-col" ng-if="st.myID">
+              <img class="desuq-wiz-qr" ng-src="qr/?text={{st.myID}}"
+                   alt="QR code for this device ID"/>
+              <div class="desuq-wiz-qr-cap">or scan it</div>
+            </div>
+          </div>
+
+          <!-- The live half. This is why the step polls. -->
+          <div class="desuq-wiz-waiting" ng-if="st.peers.length == 0 && st.pending.length == 0">
+            <div class="desuq-wiz-pulse"><span></span></div>
+            <div>
+              <strong>Waiting for someone to add you.</strong>
+              Nothing happens on this screen until they do, and that may well be
+              tomorrow. You can close this and come back &mdash;
+              <em>Actions &rarr; Setup guide</em> brings it back here.
+            </div>
+          </div>
+
+          <div class="desuq-wiz-hit" ng-if="st.pending.length > 0">
+            <span class="fas fa-user-plus"></span>
+            <div>
+              <strong ng-if="st.pending.length == 1">A device is trying to connect.</strong>
+              <strong ng-if="st.pending.length > 1">{{st.pending.length}} devices are trying to connect.</strong>
+              Close this and use the <em>Add Device</em> bar at the top of the
+              main screen &mdash; then come back for the next step.
+              <div class="desuq-wiz-ids">
+                <div ng-repeat="p in st.pending">{{p.name || p.deviceID}}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="desuq-wiz-hit desuq-wiz-hit-ok" ng-if="st.peers.length > 0">
+            <span class="fas fa-check-circle"></span>
+            <div>
+              <strong ng-if="st.peers.length == 1">{{st.peers[0].name}} has you.</strong>
+              <strong ng-if="st.peers.length > 1">{{st.peers.length}} devices are set up.</strong>
+              That is this step done.
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Verify ---------------------------------------------------- -->
+        <div ng-if="svc.stepName() == 'verify'" class="desuq-wiz-step">
+          <p class="desuq-wiz-lead">
+            Adding each other proves the two installations agreed on a code. It
+            does not prove <em>whose</em> code it was. Anyone who could edit the
+            message you pasted it into could have swapped it, and both ends
+            would still say &ldquo;Connected&rdquo;.
+          </p>
+
+          <div class="desuq-wiz-empty" ng-if="st.peers.length == 0">
+            <span class="fas fa-hourglass-half"></span>
+            <div>
+              Nobody has been added yet, so there is nothing to compare. Come
+              back to this once step 2 has gone through.
+            </div>
+          </div>
+
+          <div ng-repeat="p in st.peers" class="desuq-wiz-peer">
+            <div class="desuq-wiz-peer-head">
+              <span class="desuq-wiz-peer-name">{{p.name}}</span>
+              <span class="desuq-wiz-peer-state" ng-if="p.connected">connected</span>
+              <span class="desuq-wiz-peer-state desuq-wiz-peer-off" ng-if="!p.connected">not connected</span>
+            </div>
+            <device-handshake local-id="st.myID" remote-id="p.deviceID"></device-handshake>
+          </div>
+
+          <p class="desuq-wiz-note" ng-if="st.peers.length > 0">
+            <strong>Read the card to each other on a call.</strong> Not in the
+            chat that carried the code &mdash; whoever could tamper with the code
+            could tamper with the card. Recognising their voice is the whole
+            mechanism.
+          </p>
+        </div>
+
+        <!-- 4. Sync ------------------------------------------------------ -->
+        <div ng-if="svc.stepName() == 'sync'" class="desuq-wiz-step">
+          <p class="desuq-wiz-lead">
+            When somebody shares a folder with you, Windows shows a notification
+            and an offer appears at the top of the main screen. Accepting it
+            does <em>not</em> start downloading &mdash; you get the whole file
+            list first and tick what this machine should keep.
+          </p>
+
+          <div class="desuq-wiz-empty" ng-if="st.offers.length == 0 && st.folderCount == 0">
+            <span class="fas fa-folder-open"></span>
+            <div>
+              No folder has been offered yet. There is nothing to do here until
+              one is, and you will be told when it happens &mdash; you can close
+              this now.
+            </div>
+          </div>
+
+          <div class="desuq-wiz-hit desuq-wiz-hit-ok" ng-if="st.folderCount > 0">
+            <span class="fas fa-check-circle"></span>
+            <div>
+              <strong ng-if="st.folderCount == 1">One folder is set up.</strong>
+              <strong ng-if="st.folderCount > 1">{{st.folderCount}} folders are set up.</strong>
+              You can change what you keep at any time with <em>Choose Files</em>
+              on the folder.
+            </div>
+          </div>
+
+          <div ng-repeat="o in st.offers" class="desuq-wiz-offer">
+            <div class="desuq-wiz-offer-body">
+              <div class="desuq-wiz-offer-label">{{o.label}}</div>
+              <div class="desuq-wiz-offer-from">offered by {{o.deviceName}}</div>
+            </div>
+            <button type="button" class="btn btn-sm desuq-wiz-accept"
+                    ng-if="onAcceptFolder" ng-click="acceptOffer(o)">
+              <span class="far fa-check-square"></span>&nbsp;Choose what to sync
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="modal-footer desuq-wiz-footer">
+        <button type="button" class="btn btn-sm desuq-wiz-btn-quiet"
+                ng-click="svc.close()">
+          Finish this later
+        </button>
+        <span class="desuq-wiz-spacer"></span>
+        <button type="button" class="btn btn-sm desuq-wiz-btn-back"
+                ng-if="st.step > 0" ng-click="svc.back()">
+          <span class="fas fa-chevron-left"></span>&nbsp;Back
+        </button>
+        <button type="button" class="btn btn-sm desuq-wiz-btn-next"
+                ng-if="svc.stepName() == 'name'"
+                ng-disabled="st.saving" ng-click="svc.saveName()">
+          <span ng-if="!st.saving">Next&nbsp;<span class="fas fa-chevron-right"></span></span>
+          <span ng-if="st.saving">Saving&hellip;</span>
+        </button>
+        <button type="button" class="btn btn-sm desuq-wiz-btn-next"
+                ng-if="svc.stepName() != 'name' && st.step < st.steps.length - 1"
+                ng-click="svc.next()">
+          Next&nbsp;<span class="fas fa-chevron-right"></span>
+        </button>
+        <button type="button" class="btn btn-sm desuq-wiz-btn-next"
+                ng-if="st.step == st.steps.length - 1"
+                ng-click="svc.finish()">
+          <span class="fas fa-check"></span>&nbsp;Done
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>

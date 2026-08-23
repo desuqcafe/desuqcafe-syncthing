@@ -30,6 +30,8 @@
   <link href="syncthing/desuq/selective.css" rel="stylesheet"/>
   <!-- desuqcafe fork: the "this rate limit does not apply on the LAN" note -->
   <link href="syncthing/desuq/lanlimit.css" rel="stylesheet"/>
+  <!-- desuqcafe fork: the first-run wizard -->
+  <link href="syncthing/desuq/wizard.css" rel="stylesheet"/>
 </head>
 
 <body>
@@ -125,6 +127,11 @@
               <li><a href="" ng-click="advanced()"><span class="fa fa-fw fa-cogs"></span>&nbsp;<span translate>Advanced</span></a></li>
               <li class="divider" aria-hidden="true"></li>
               <li><a href="" ng-click="showDeviceIdentification(thisDevice())"><span class="fa fa-fw fa-qrcode"></span>&nbsp;<span translate>Show ID</span></a></li>
+              <!-- desuqcafe fork: reopen the first-run wizard. It closes on
+                   Escape, on the backdrop and on "Finish this later", and step 2
+                   waits on somebody else adding you, so there has to be a way
+                   back to it. desuqWizard is published on $rootScope. -->
+              <li><a href="" ng-click="desuqWizard.open(true)"><span class="fa fa-fw fa-map-signs"></span>&nbsp;<span>Setup guide</span></a></li>
               <li><a href="" ng-click="logging.show()"><span class="fa fa-fw fa-wrench"></span>&nbsp;<span translate>Logs</span></a></li>
               <li><a href="/rest/debug/support" target="_blank"><span class="fa fa-fw fa-user-md"></span>&nbsp;<span translate>Support Bundle</span></a></li>
               <li class="divider" aria-hidden="true"></li>
@@ -1090,6 +1097,15 @@
        an ng-include because it owns its own state and lifecycle. -->
   <desuq-selective-modal></desuq-selective-modal>
 
+  <!-- desuqcafe fork: the first-run wizard. It reads its own state over REST,
+       so the only things passed in are what it cannot get that way: myID, to
+       know when the GUI has finished starting, and upstream's own pending-folder
+       accept, so step 4 hands an offer to addFolderAndShare rather than
+       re-implementing its path and type defaults. -->
+  <desuq-first-run-wizard my-id="myID" pending-folders="pendingFolders"
+                          on-accept-folder="addFolderAndShare(folderID, pendingFolder, device)">
+  </desuq-first-run-wizard>
+
   <!-- vendor scripts -->
   <script type="text/javascript" src="vendor/jquery/jquery-3.7.1.js"></script>
   <script type="text/javascript" src="vendor/angular/angular.js"></script>
@@ -1132,6 +1148,7 @@
   <script type="text/javascript" src="syncthing/desuq/deviceHandshakeDirective.js"></script>
   <script type="text/javascript" src="syncthing/desuq/selectiveSync.js"></script>
   <script type="text/javascript" src="syncthing/desuq/lanLimitDirective.js"></script>
+  <script type="text/javascript" src="syncthing/desuq/firstRunWizard.js"></script>
   <script type="text/javascript" src="assets/lang/valid-langs.js"></script>
   <script type="text/javascript" src="assets/lang/prettyprint.js"></script>
   <script type="text/javascript" src="meta.js"></script>

@@ -3,9 +3,9 @@
     Runs every test suite this fork has, and says which ones it skipped.
 
 .DESCRIPTION
-    There are eight suites in three languages, three of them need jsdom and one
+    There are nine suites in three languages, four of them need jsdom and one
     needs two live Syncthing instances, so until this existed the only way to
-    run them all was to remember eight command lines. Nothing did, which is why
+    run them all was to remember nine command lines. Nothing did, which is why
     nothing ran them.
 
     What it runs, cheapest first, so a typo does not cost a two-minute wait:
@@ -16,8 +16,9 @@
       4. test-handshake.js             handshake      Node
       5. test-handshake-render.js      handshake UI   Node + jsdom
       6. test-lanlimit-render.js       LAN note       Node + jsdom
-      7. test-seed-naming.ps1          seeding        the built binary
-      8. test-selective-render.js      picker         jsdom + a live test pair
+      7. test-wizard-render.js         first run      Node + jsdom
+      8. test-seed-naming.ps1          seeding        the built binary
+      9. test-selective-render.js      picker         jsdom + a live test pair
 
     A missing prerequisite is reported as SKIP rather than as failure, and the
     exit code is non-zero only if something actually failed. But a run that
@@ -29,7 +30,7 @@
     runs in well under a minute from a clean checkout.
 
 .PARAMETER NoPair
-    Do not start a test pair. Suite 8 runs only if one is already up.
+    Do not start a test pair. Suite 9 runs only if one is already up.
 
 .PARAMETER Binary
     The Syncthing binary to test against. Defaults to custom/dist.
@@ -205,11 +206,12 @@ if (-not $go) {
     }
 }
 
-# --- 4 to 6. Node ----------------------------------------------------------
+# --- 4 to 7. Node ----------------------------------------------------------
 Section 'Node'
 $jsdomPath = $null
 if (-not $node) {
-    foreach ($n in @('test-handshake', 'test-handshake-render', 'test-lanlimit-render')) {
+    foreach ($n in @('test-handshake', 'test-handshake-render', 'test-lanlimit-render',
+                     'test-wizard-render')) {
         Record $n 'SKIP' 'node not found'
     }
 } else {
@@ -217,17 +219,19 @@ if (-not $node) {
 
     $jsdomPath = Resolve-Jsdom -NodeExe $node -Install:$InstallJsdom
     if ($null -eq $jsdomPath) {
-        foreach ($n in @('test-handshake-render', 'test-lanlimit-render')) {
+        foreach ($n in @('test-handshake-render', 'test-lanlimit-render',
+                         'test-wizard-render')) {
             Record $n 'SKIP' 'jsdom not found; pass -InstallJsdom or set NODE_PATH'
         }
     } else {
         if ($jsdomPath) { $env:NODE_PATH = $jsdomPath }
         Invoke-Suite 'test-handshake-render' { & $node (Join-Path $ScriptDir 'test-handshake-render.js') }
         Invoke-Suite 'test-lanlimit-render'  { & $node (Join-Path $ScriptDir 'test-lanlimit-render.js') }
+        Invoke-Suite 'test-wizard-render'    { & $node (Join-Path $ScriptDir 'test-wizard-render.js') }
     }
 }
 
-# --- 7. seeding, against the real binary -----------------------------------
+# --- 8. seeding, against the real binary -----------------------------------
 Section 'the built binary'
 $haveBinary = Test-Path -LiteralPath $Binary
 if ($Quick) {
@@ -238,7 +242,7 @@ if ($Quick) {
     Invoke-Suite 'test-seed-naming' { & (Join-Path $ScriptDir 'test-seed-naming.ps1') -Binary $Binary }
 }
 
-# --- 8. the picker, against two live instances -----------------------------
+# --- 9. the picker, against two live instances -----------------------------
 Section 'two live instances'
 $pairScript  = Join-Path $ScriptDir 'start-test-pair.ps1'
 $startedPair = $false
