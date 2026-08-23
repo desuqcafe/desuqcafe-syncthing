@@ -3,9 +3,11 @@
     Merges the latest upstream Syncthing changes into this fork.
 
 .DESCRIPTION
-    The fork keeps its own work as a small set of additive changes on top of
-    upstream, so this is normally a clean fast merge. See
-    custom/CUSTOMIZATIONS.md for the full list of files that diverge.
+    Most of the fork's work lives in files upstream does not have, and the
+    edits to files it does have are mostly insertions beside upstream's code,
+    so this is normally a clean fast merge. When it is not, the table in
+    custom/CUSTOMIZATIONS.md records every diverging file and how to resolve
+    it -- read that rather than reasoning from the conflict markers.
 
     Run with -DryRun first to see what would come in.
 

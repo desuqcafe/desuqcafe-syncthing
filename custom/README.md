@@ -1,8 +1,9 @@
 # desuqcafe Syncthing
 
 A fork of [Syncthing](https://github.com/syncthing/syncthing) packaged as a
-one-click Windows install, kept deliberately close to upstream so we can pull in
-their changes and add our own behaviour on top.
+one-click Windows install, with its own behaviour on top. It still tracks
+upstream and pulls their changes in; what it adds is recorded in
+[CUSTOMIZATIONS.md](CUSTOMIZATIONS.md).
 
 Upstream's own documentation still applies — this file only covers what is
 different here.

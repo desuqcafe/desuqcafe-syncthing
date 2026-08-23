@@ -1,23 +1,34 @@
-# What this fork changes, and how to stay mergeable with upstream
+# What this fork changes, and what that costs at merge time
 
-This fork exists so we can add our own behaviour later. The overriding design
-rule right now is: **keep the divergence from upstream Syncthing as small as
-possible**, so `git merge upstream/main` stays boring.
+This is a fork, and it is becoming its own product rather than a patch set on
+somebody else's. **Divergence is expected.** Where the right design needs an
+upstream file edited, it gets edited.
 
-Everything below is deliberate. Read this before adding a change of your own.
+What this file is for is making that divergence legible: every change from
+upstream, what it does, and how a conflict resolves if upstream ever touches
+the same lines. It is the merge plan. Read it before adding a change of your
+own, and add yours to it.
 
-## The rule
+## Where a change costs nothing
 
-> Add new files under `custom/`. Only edit an upstream file when there is no
-> other way, and when you do, make the edit additive and keep upstream's
-> behaviour as the default.
+New files cannot conflict, because upstream has no such paths: `custom/`,
+`gui/violet/`, `gui/default/syncthing/desuq/`, `lib/api/api_diskfree.go` and
+`.github/workflows/desuq-release.yaml`. That is a convenience worth taking when
+it is free, and worth ignoring when the alternative is a worse design.
 
-Anything in `custom/` and `.github/workflows/desuq-release.yaml` can never
-conflict, because upstream has no such files.
+Two constraints are still worth honouring, for reasons that are not about
+merge tidiness:
+
+- **The Go module keeps its name.** Renaming
+  `github.com/syncthing/syncthing` rewrites every import in the tree and
+  changes nothing a user can see.
+- **New dependencies go in a nested module.** A line in the root `go.mod` or
+  `go.sum` conflicts on every upstream dependency bump — a recurring tax, for
+  a one-off convenience. `custom/tray/` is a separate module for this reason.
 
 ## Files we modify from upstream
 
-This is the complete list. Keep it that way, and keep this table current.
+Keep this table current. It is the only place the merge cost is written down.
 
 | File | Change | Conflict risk |
 | --- | --- | --- |
@@ -39,15 +50,15 @@ cannot conflict at all:
 | `gui/violet/` | The violet theme |
 | `custom/` | Everything else |
 
-In particular we have **not**:
+Where the fork stands today: **99 inserted lines against 6 deleted**, across
+those seven files. Only `build.go` replaces anything — the six `envOr()`
+wrappers, which fall back to upstream's literals when the `ST_BRAND_*`
+variables are unset. Every other edit is inserted beside upstream's code rather
+than in place of it, so with the fork's own files removed the other six still
+behave exactly as upstream's do.
 
-- renamed the Go module (`github.com/syncthing/syncthing`) — renaming it would
-  rewrite every import in the tree and make merges impossible;
-- renamed packages, types or internal identifiers;
-- added anything to the root `go.mod` or `go.sum`;
-- changed the behaviour of any existing upstream code path. Every edit above
-  is an addition; with the fork's new files removed, the four modified files
-  would still behave exactly as upstream's do.
+That is worth *knowing* rather than worth *preserving*. It is the reason merges
+have been boring so far, not a rule that has to hold for the next change.
 
 ## How the branding is done without touching upstream
 

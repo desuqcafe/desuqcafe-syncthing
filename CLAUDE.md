@@ -3,29 +3,40 @@
 This is **desuqcafe-syncthing**, a fork of [Syncthing](https://github.com/syncthing/syncthing)
 packaged as a per-user Windows installer.
 
-## The one rule that matters
+## How much to diverge from upstream
 
-Keep the divergence from upstream minimal, so `git merge upstream/main` stays
-boring. Concretely:
+This is a fork, and it is becoming its own thing. **Divergence is expected and
+is not a failure.** If the right design needs an upstream file edited, edit it;
+do not contort a feature to avoid touching one.
 
-- **Add new files under `custom/`.** Upstream has no such directory, so nothing
-  there can ever conflict.
-- **Only edit an upstream file as a last resort**, and when you do, make the
-  change additive with upstream's behaviour as the default.
-- **Never rename the Go module or any package.** The module is still
-  `github.com/syncthing/syncthing`. Renaming it would rewrite every import in
-  the tree and make merges impossible.
-- **New dependencies go in a nested module, not the root `go.mod`.** Adding a
-  line to upstream's `go.mod`/`go.sum` means a conflict on every dependency
-  bump they make. `custom/tray/` is a separate module for exactly this reason.
-- Prefer Syncthing's existing extension points over patching source:
-  `--home`, `STGUIASSETS`, build tags, and the `ST_BRAND_*` env vars.
-- Record any new upstream-file edit in the table in `custom/CUSTOMIZATIONS.md`.
+What still matters is that the divergence is *deliberate and legible*, so a
+future `git merge upstream/main` is work you can plan rather than a surprise:
 
-Seven upstream files are modified, none by more than a few dozen lines, and every
-edit is additive. `custom/CUSTOMIZATIONS.md` has the table; keep it current.
-Only one of the six — `syncthingController.js` — is edited *inside* an upstream
-function rather than beside one, and that edit is a guarded early return.
+- **Record every upstream-file edit** in the table in
+  `custom/CUSTOMIZATIONS.md` — what it does, and how a conflict resolves. That
+  table is the merge plan. Keeping it current is the whole discipline; the rest
+  below is preference.
+- **Prefer additive edits where they cost nothing.** A guarded branch beside
+  upstream's logic conflicts far less often than a rewrite of it, and usually
+  reads better anyway. Where being additive would mean a worse design, take the
+  better design.
+- **New files still cannot conflict at all**, so `custom/`, `gui/violet/` and
+  `gui/default/syncthing/desuq/` remain the cheapest place to put things. A
+  convenience, not a rule.
+- **Use Syncthing's extension points when they are as good** as the
+  alternative: `--home`, `STGUIASSETS`, build tags, the `ST_BRAND_*` env vars.
+- **Still do not rename the Go module or its packages.** Not because merges are
+  sacred, but because it rewrites every import in the tree for nothing a user
+  can see. If that ever becomes worth doing it is a project of its own.
+- **New dependencies still go in a nested module** — `custom/tray/` is one.
+  A line in the root `go.mod`/`go.sum` is a conflict on every upstream
+  dependency bump: a recurring tax for a one-off convenience.
+
+Seven upstream files carry fork edits today, 99 insertions against 6 deletions.
+Only two of those deletions are a behaviour change (`build.go`'s `envOr`
+wrappers); everything else is inserted beside upstream's code. One edit,
+in `syncthingController.js`, sits *inside* an upstream function rather than
+beside one, and it is a guarded early return.
 
 ## Layout
 
