@@ -47,6 +47,31 @@ Keep this table current. It is the only place the merge cost is written down.
 | `lib/syncthing/syncthing.go` | **One condition**, `if build.IsCandidate` becomes `if build.IsCandidate && build.TelemetryEnabled`, plus four comment lines. | **Low.** One token on one line. If it conflicts, re-add the conjunct. |
 | `gui/default/syncthing/settings/settingsModalView.html` (2) | Upstream's "Anonymous Usage Reporting" `<select>` replaced by a static note saying the build sends none. | **Low–medium.** This one *replaces* rather than inserts. A conflict resolves by deleting upstream's control again. |
 
+## One upstream file we have deliberately *not* touched yet
+
+`README.md` is still upstream Syncthing's, unmodified. That is now a known
+problem rather than a decision: this repository's GitHub landing page reads as
+though it *is* Syncthing, with nothing at the top saying what the fork is, who
+it is for, or how to install it without a command line.
+
+It is called out here rather than just done because it is the fork's
+**highest-conflict edit by some distance**, and the shape is worth choosing
+deliberately:
+
+- **Rewrite it.** Far better for anyone arriving at the page, and the honest
+  representation of a fork that is becoming its own product. Every future
+  upstream README change conflicts, but resolving is always "keep ours" and
+  the file has no behaviour, so a stale merge costs nothing but a diff to
+  discard.
+- **Fork header above upstream's content.** Conflicts far less, and keeps
+  upstream's goals and build instructions available. Reads like a patch set
+  rather than a product, which is no longer what this is.
+
+Whichever is chosen, it goes in the table above with that reasoning, and the
+**MPLv2 notice and the attribution to upstream Syncthing stay intact** — that
+is a licence obligation, not a courtesy. `README-Docker.md` wants a decision
+at the same time; a Windows-only per-user installer has no use for it.
+
 Everything else the fork adds lives in files upstream does not have, so it
 cannot conflict at all:
 
