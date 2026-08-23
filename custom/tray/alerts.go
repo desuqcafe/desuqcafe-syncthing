@@ -9,7 +9,7 @@ package main
 // texture library unusable and train the user to dismiss everything, which is
 // worse than no notifications at all.
 //
-// So there are five things worth interrupting somebody for, and every one of
+// So there are six things worth interrupting somebody for, and every one of
 // them is either a question only a person can answer or a state that will not
 // fix itself:
 //
@@ -18,6 +18,8 @@ package main
 //	a sync finishing                -- the "my files have arrived" signal
 //	a folder erroring               -- will not clear on its own
 //	a disk about to fill            -- will wedge the folder if ignored
+//	a teammate on a newer build     -- see update.go; will not fix itself
+//	                                   either, because there is no auto-upgrade
 //
 // Everything else stays in the icon and the tooltip.
 
@@ -53,6 +55,16 @@ const (
 	// diskCheckInterval is how often free space is sampled. Disk space is the
 	// one alert with no event behind it, so it is the one thing still polled.
 	diskCheckInterval = 5 * time.Minute
+
+	// updateCooldown is the gap between two "somebody you sync with is ahead
+	// of you" toasts. A version that is newer today is still newer tomorrow,
+	// and the person cannot act on it any faster for being told twice.
+	updateCooldown = 24 * time.Hour
+
+	// updateCheckInterval catches the case the DeviceConnected event cannot:
+	// a tray started against an instance whose peers were already connected,
+	// which is what -attach does and what a tray restarted by hand does.
+	updateCheckInterval = 6 * time.Hour
 )
 
 // alerter turns events into notifications. Every method is safe to call from
@@ -85,6 +97,13 @@ type alerter struct {
 
 	lastErrored map[string]time.Time
 	lastDisk    map[string]time.Time
+
+	// naggedVersion is the peer version last announced, and lastNag when. The
+	// pair means a *newer* version still gets through inside the cooldown --
+	// two releases in a day is unusual but the second one is not less true --
+	// while the same one does not repeat on every reconnect.
+	naggedVersion string
+	lastNag       time.Time
 }
 
 func newAlerter(n notifier, guiURL func() string, current func() *client) *alerter {
@@ -122,6 +141,12 @@ func (a *alerter) handle(ev event) {
 		if s, err := decodeEvent[stateChanged](ev); err == nil && s.To == "error" {
 			a.folderErrored(s.Folder, "")
 		}
+	case "DeviceConnected":
+		// The moment a peer's version becomes knowable. The payload carries it
+		// too, but the authoritative list is re-read for the same reason
+		// checkPendingDevices does: one small local request beats tracking a
+		// payload shape across upstream versions.
+		a.checkPeerVersions()
 	}
 }
 
@@ -374,6 +399,96 @@ func (a *alerter) folderErrored(folder, detail string) {
 }
 
 // --- disk space -----------------------------------------------------------
+
+// --- somebody you sync with is running a newer build ----------------------
+
+// watchVersions is the slow backstop for the DeviceConnected event. See
+// updateCheckInterval.
+func (a *alerter) watchVersions(ctx context.Context) {
+	// Long enough after start-up that the first connections have had time to
+	// complete and report a version; anything sooner just reads empty fields.
+	if !sleepCtx(ctx, 90*time.Second) {
+		return
+	}
+	for {
+		a.checkPeerVersions()
+		if !sleepCtx(ctx, updateCheckInterval) {
+			return
+		}
+	}
+}
+
+// checkPeerVersions compares this build against the devices it is connected to
+// and says something if one of them is ahead.
+//
+// Nothing here contacts anything but the local Syncthing -- see update.go for
+// why this is a version comparison between peers rather than a poll of a
+// releases API, and for the rule that keeps a peer on stock Syncthing from
+// ever triggering it.
+func (a *alerter) checkPeerVersions() {
+	cl := a.current()
+	if cl == nil {
+		return
+	}
+
+	mine, err := cl.version()
+	if err != nil {
+		slog.Debug("could not read this build's version", "err", err)
+		return
+	}
+
+	conns, err := cl.connections()
+	if err != nil {
+		slog.Debug("could not read connections", "err", err)
+		return
+	}
+
+	names := map[string]string{}
+	if cfg, err := cl.config(); err == nil {
+		for _, d := range cfg.Devices {
+			names[d.DeviceID] = d.Name
+		}
+	}
+
+	var peers []peerVersion
+	for id, c := range conns.Connections {
+		if !c.Connected || c.ClientVersion == "" {
+			continue
+		}
+		who := names[id]
+		if who == "" {
+			who = shortDeviceID(id)
+		}
+		peers = append(peers, peerVersion{name: who, version: c.ClientVersion})
+	}
+
+	ahead, found := newestPeerAhead(mine, peers)
+	if !found {
+		return
+	}
+
+	a.mu.Lock()
+	repeat := ahead.version == a.naggedVersion && time.Since(a.lastNag) < updateCooldown
+	if !repeat {
+		a.naggedVersion = ahead.version
+		a.lastNag = time.Now()
+	}
+	a.mu.Unlock()
+	if repeat {
+		return
+	}
+
+	a.notify.Notify(Notification{
+		Title: "An update is available",
+		Body: ahead.name + " is running " + ahead.version + " and you have " + mine +
+			". Click to download the new installer.",
+		// The one external address in the tray, and it is only ever handed to
+		// a browser by somebody clicking this. Nothing fetches it.
+		Launch: releasesURL,
+	})
+	slog.Info("a connected device is running a newer build",
+		"peer", ahead.name, "theirs", ahead.version, "ours", mine)
+}
 
 // watchDisk is the one alert with no event behind it. Syncthing publishes
 // nothing about free space -- see DEPLOYMENT-3D-TEAM.md section 1 -- so this

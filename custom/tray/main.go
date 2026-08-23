@@ -182,6 +182,7 @@ func (a *app) onReady() {
 	// poll interval later.
 	go watchEvents(a.ctx, a.client, a.onEvent)
 	go a.alerts.watchDisk(a.ctx)
+	go a.alerts.watchVersions(a.ctx)
 	if !a.opts.noIcons {
 		go a.watchFolders(a.ctx)
 	}

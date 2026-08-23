@@ -259,7 +259,19 @@ type folderStatus struct {
 type connections struct {
 	Connections map[string]struct {
 		Connected bool `json:"connected"`
+		// ClientVersion is what the remote said it was running in its Hello
+		// message. Upstream has always served it -- the GUI shows it in the
+		// device detail table -- and it is the whole basis of update.go's
+		// "somebody you sync with is ahead of you" check. Empty for a device
+		// that has never connected.
+		ClientVersion string `json:"clientVersion"`
 	} `json:"connections"`
+}
+
+// systemVersion is /rest/system/version. Only Version is read: it is this
+// build's own stamp, the other side of update.go's comparison.
+type systemVersion struct {
+	Version string `json:"version"`
 }
 
 func (c *client) config() (restConfig, error) {
@@ -278,6 +290,12 @@ func (c *client) connections() (connections, error) {
 	var out connections
 	err := c.get("/rest/system/connections", nil, &out)
 	return out, err
+}
+
+func (c *client) version() (string, error) {
+	var out systemVersion
+	err := c.get("/rest/system/version", nil, &out)
+	return out.Version, err
 }
 
 // pauseAll and resumeAll hit the same endpoints as the GUI's "Pause All"
