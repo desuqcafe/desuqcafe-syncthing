@@ -754,13 +754,31 @@ folder**, not just single-device:
   sent -- a test built on it passes with the call removed, which is worse than
   no test. Confirming the repaint needs a person with a folder open.
 
-- The uninstaller now runs the tray's `--clear-folder-icons` at `usUninstall`,
-  while the tray binary and `config.xml` are both still on disk, so the violet
-  markers come off before the icon they name is deleted. The exact invocation
-  it makes -- quoted `--home` on a path containing a space, against a
-  GUI-subsystem binary -- was run against a throwaway home with two marked
-  folders: exit 0, both `desktop.ini` files gone, both read-only attributes
-  cleared. What has still not been run is the uninstaller itself.
+- **Uninstall was finally run, for real, against a live install.** It was the
+  one thing in this document that had never been exercised. Both directories
+  were copied aside first; in the event nothing had to be restored from the
+  copy, because the data directory is not touched unless you say so.
+
+  The run: `unins000.exe /VERYSILENT`, which takes the *default* answer to the
+  data-deletion prompt, and the default is deliberately No. Exit 0. The
+  program directory was removed entirely, the data directory kept, and
+  `key.pem` and `cert.pem` came out byte-for-byte identical to the copy taken
+  beforehand -- so the device keeps its identity and the other two people's
+  device lists do not change. Nothing was left behind: no Start Menu entry, no
+  sign-in shortcut, no desktop shortcut, no Add/Remove Programs row, no
+  processes.
+
+  The folder-icon clearing was exercised rather than assumed. A throwaway
+  folder was added to the real `config.xml` and marked the way the tray marks
+  one, and after the uninstall its `desktop.ini` was gone and its read-only
+  attribute cleared -- so the markers really do come off while the tray binary
+  and `config.xml` are both still on disk, which is why the call sits at
+  `usUninstall` rather than `usPostUninstall`. Reinstalling put everything
+  back, and the tray came up healthy on the same three processes.
+
+  Still not exercised: **answering Yes** to the data-deletion prompt. That
+  branch is one `DelTree` call, and testing it means destroying a real device
+  identity to watch a directory be deleted.
 
 - `folder.ico` went from **365 KB to 50 KB**, and the tray binary with it,
   because its 128 and 256 pixel entries are now PNG rather than DIB. A DIB
@@ -773,10 +791,9 @@ folder**, not just single-device:
   large entries are still PNG, because regenerating with that branch dropped
   would look like nothing at all except a much larger binary.
 
-**Not verified:** uninstall. It shares `StopRunningInstance` with the upgrade
-path, which is exercised, and the folder-icon clearing it now does was checked
-in isolation, but the uninstaller has never been run end to end and the
-`DelTree` prompt has never been answered.
+**Not verified:** the `DelTree` branch of uninstall -- the one that runs when
+somebody answers *Yes* to "also delete your configuration and database". Every
+other path through the uninstaller has now been run against a live install.
 
 **Not verified:** anything about layout or paint. Every GUI check in this
 document -- the picker, the verification card, the LAN note, the telemetry
