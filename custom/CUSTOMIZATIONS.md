@@ -64,6 +64,7 @@ In particular we have **not**:
 | Desktop notifications | Also `custom/tray/`. It subscribes to Syncthing's `/rest/events` long poll and raises Windows toasts through WinRT. No source change, and no new dependency: WinRT is reached through `combase.dll` with `syscall`, and toast clicks use protocol activation so nothing has to be registered with COM. |
 | Verified device handshake | `gui/default/syncthing/desuq/`, plus five lines in the device modal and one row in the device panel. Entirely client-side: the phrase is a SHA-256 of the two device IDs, computed in the browser, so there is **no new REST route and no server code at all**. See `DEPLOYMENT-3D-TEAM.md` section 9. |
 | Selective sync file picker | `gui/default/syncthing/desuq/selectiveSync.js` and friends, plus the four upstream hunks above. Also **no server code**: it is built entirely out of `/rest/db/browse`, which already serves the *global* tree, and `/rest/db/ignores`. The fancytree it renders in is one upstream already ships for the version restorer. See `DEPLOYMENT-3D-TEAM.md` section 2. |
+| Synced folders visible in Explorer | `custom/tray/foldericon*.go`. A `desktop.ini` per folder, written by the tray -- per user, no administrator, no COM, no registration, and **no upstream change of any kind**. Explicitly *not* an overlay-icon shell extension: those need a registered in-process COM server and compete for about fifteen global slots Dropbox and OneDrive already fill. See `DEPLOYMENT-3D-TEAM.md` section 10. |
 
 ## Why the tray is its own Go module
 
@@ -80,6 +81,12 @@ The tray reads Syncthing's state through the REST API and its address and API
 key out of `config.xml`. It deliberately does not import `lib/config` or
 anything else from the tree above it, so an upstream change to those packages
 cannot break it.
+
+The Explorer folder icons live here for the same reason. They need the folder
+list and the ignore patterns, both of which the REST API already serves, and
+they write files on the machine the tray is running on -- so putting them in
+the tray costs no divergence at all, where a shell integration inside `lib/`
+would mean a Windows-only dependency in a cross-platform tree.
 
 That isolation is also why the desktop notifications live here rather than in
 `lib/`. They need only two things Syncthing already exposes — the event stream

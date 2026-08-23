@@ -232,3 +232,127 @@ foreach ($state in $States) {
     Write-IcoFile -Path $path -Images $images -Widths $Sizes
     Write-Host ("{0,-9} {1}  {2:N1} KB" -f $state.Name, $state.Colour, ((Get-Item $path).Length / 1KB))
 }
+
+# --- the Explorer folder icon ---------------------------------------------
+#
+# Written into each synced folder's desktop.ini, so it needs the sizes Explorer
+# actually asks for -- up to 256 for the Extra Large Icons view -- rather than
+# the tray's set. Entries are DIBs here too; PNG entries would be far smaller
+# at 256 but the writer above only speaks DIB, and 300-odd KB inside a 10 MB
+# binary is not worth a second format for.
+$FolderSizes = @(16, 20, 24, 32, 48, 64, 128, 256)
+
+function New-FolderBitmap {
+    param([int]$Size)
+
+    $scale = 4
+    $s = $Size * $scale
+    $big = New-Object System.Drawing.Bitmap($s, $s, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $g = [System.Drawing.Graphics]::FromImage($big)
+    try {
+        $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+        $g.Clear([System.Drawing.Color]::Transparent)
+
+        $back = ConvertFrom-Hex '#5B25C0'
+        $frontTop = ConvertFrom-Hex '#A78BFA'
+        $frontBottom = ConvertFrom-Hex '#7C3AED'
+
+        # A rounded rectangle, as a path. GDI+ has no primitive for one.
+        function New-RoundedPath {
+            param([float]$X, [float]$Y, [float]$W, [float]$H, [float]$R)
+            $p = New-Object System.Drawing.Drawing2D.GraphicsPath
+            $d = $R * 2
+            if ($d -gt $W) { $d = $W }
+            if ($d -gt $H) { $d = $H }
+            $p.AddArc($X, $Y, $d, $d, 180, 90)
+            $p.AddArc(($X + $W - $d), $Y, $d, $d, 270, 90)
+            $p.AddArc(($X + $W - $d), ($Y + $H - $d), $d, $d, 0, 90)
+            $p.AddArc($X, ($Y + $H - $d), $d, $d, 90, 90)
+            $p.CloseFigure()
+            return $p
+        }
+
+        $r = [float]($s * 0.075)
+
+        # Back plate plus the tab, drawn as two overlapping rounded rectangles
+        # so the join between them is square rather than pinched.
+        $brush = New-Object System.Drawing.SolidBrush($back)
+        $tab = New-RoundedPath -X ([float]($s * 0.07)) -Y ([float]($s * 0.17)) `
+            -W ([float]($s * 0.40)) -H ([float]($s * 0.20)) -R $r
+        $g.FillPath($brush, $tab)
+        $tab.Dispose()
+        $plate = New-RoundedPath -X ([float]($s * 0.07)) -Y ([float]($s * 0.24)) `
+            -W ([float]($s * 0.86)) -H ([float]($s * 0.58)) -R $r
+        $g.FillPath($brush, $plate)
+        $plate.Dispose()
+        $brush.Dispose()
+
+        # Front panel, sitting slightly proud of the back plate.
+        $front = New-RoundedPath -X ([float]($s * 0.07)) -Y ([float]($s * 0.33)) `
+            -W ([float]($s * 0.86)) -H ([float]($s * 0.49)) -R $r
+        $grad = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
+            (New-Object System.Drawing.PointF([float]0, [float]($s * 0.33))),
+            (New-Object System.Drawing.PointF([float]0, [float]($s * 0.82))),
+            $frontTop, $frontBottom)
+        $g.FillPath($grad, $front)
+        $grad.Dispose()
+        $front.Dispose()
+
+        # The sync ring. Below 32 pixels the folder is only about ten pixels
+        # tall and any glyph inside it turns to mush, so smaller entries carry
+        # no mark at all -- at that size the violet is the recognisable part,
+        # sitting in a list of yellow folders.
+        if ($Size -ge 32) {
+            $white = [System.Drawing.Color]::FromArgb(235, 255, 255, 255)
+            $cx = $s * 0.50
+            $cy = $s * 0.585
+            $rad = $s * 0.135
+            $pen = New-Object System.Drawing.Pen($white, [float]($s * 0.052))
+            $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Flat
+            $pen.EndCap = [System.Drawing.Drawing2D.LineCap]::Flat
+            $arc = New-Object System.Drawing.RectangleF(
+                [float]($cx - $rad), [float]($cy - $rad), [float]($rad * 2), [float]($rad * 2))
+            # Same near-closed ring and single arrowhead as the syncing tray
+            # icon: two proper arrows blur together at these sizes, and the
+            # shared motif ties the folder to the icon in the notification area.
+            $g.DrawArc($pen, $arc, 110, 285)
+            $pen.Dispose()
+            $wb = New-Object System.Drawing.SolidBrush($white)
+            $head = @(
+                (New-Object System.Drawing.PointF([float]($cx), [float]($cy - $rad * 1.75))),
+                (New-Object System.Drawing.PointF([float]($cx), [float]($cy - $rad * 0.25))),
+                (New-Object System.Drawing.PointF([float]($cx - $rad * 1.30), [float]($cy - $rad * 1.00)))
+            )
+            $g.FillPolygon($wb, [System.Drawing.PointF[]]$head)
+            $wb.Dispose()
+        }
+
+        $out = New-Object System.Drawing.Bitmap($Size, $Size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+        $og = [System.Drawing.Graphics]::FromImage($out)
+        try {
+            $og.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+            $og.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+            $og.Clear([System.Drawing.Color]::Transparent)
+            $og.DrawImage($big, (New-Object System.Drawing.Rectangle(0, 0, $Size, $Size)))
+        } finally {
+            $og.Dispose()
+        }
+        return $out
+    } finally {
+        $g.Dispose()
+        $big.Dispose()
+    }
+}
+
+$images = @()
+foreach ($size in $FolderSizes) {
+    $bmp = New-FolderBitmap -Size $size
+    try {
+        $images += , (ConvertTo-IconDib -Bitmap $bmp)
+    } finally {
+        $bmp.Dispose()
+    }
+}
+$path = Join-Path $PSScriptRoot 'folder.ico'
+Write-IcoFile -Path $path -Images $images -Widths $FolderSizes
+Write-Host ("{0,-9} {1}  {2:N1} KB" -f 'folder', '#7C3AED', ((Get-Item $path).Length / 1KB))

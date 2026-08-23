@@ -20,6 +20,14 @@ var iconError []byte
 //go:embed icons/offline.ico
 var iconOffline []byte
 
+// Not a tray state: this is the icon written into each synced folder's
+// desktop.ini so the folder is recognisable in Explorer. It carries the sizes
+// Explorer asks for rather than the tray's, which is why it is far the largest
+// of them. See foldericon.go.
+//
+//go:embed icons/folder.ico
+var iconFolder []byte
+
 func iconFor(s State) []byte {
 	switch s {
 	case StateIdle:

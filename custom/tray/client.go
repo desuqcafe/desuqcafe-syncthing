@@ -34,6 +34,34 @@ type configXML struct {
 		APIKey  string `xml:"apikey"`
 		TLS     string `xml:"tls,attr"`
 	} `xml:"gui"`
+	// Folders are read from the file rather than the API only by
+	// --clear-folder-icons, which has to work with Syncthing stopped: that is
+	// the state the uninstaller leaves things in, and the state anyone
+	// reaching for the flag is most likely to be in.
+	Folders []struct {
+		ID    string `xml:"id,attr"`
+		Path  string `xml:"path,attr"`
+		Label string `xml:"label,attr"`
+	} `xml:"folder"`
+}
+
+// folderPathsFromConfig reads the configured folder paths straight off disk.
+func folderPathsFromConfig(home string) ([]string, error) {
+	raw, err := os.ReadFile(filepath.Join(home, "config.xml"))
+	if err != nil {
+		return nil, err
+	}
+	var cfg configXML
+	if err := xml.Unmarshal(raw, &cfg); err != nil {
+		return nil, fmt.Errorf("parse config.xml: %w", err)
+	}
+	paths := make([]string, 0, len(cfg.Folders))
+	for _, f := range cfg.Folders {
+		if f.Path != "" {
+			paths = append(paths, f.Path)
+		}
+	}
+	return paths, nil
 }
 
 func readEndpoint(home string) (endpoint, error) {
@@ -307,3 +335,35 @@ func (c *client) diskFree(path string) (diskFree, error) {
 }
 
 func (c *client) ping() error { return c.get("/rest/system/ping", nil, nil) }
+
+// --- ignore patterns, for the Explorer folder marker ----------------------
+
+// folderIgnores is the shape of /rest/db/ignores. Error carries a *parse*
+// failure, which arrives with a 200: Syncthing stored the lines and then found
+// it could not read them back. A folder in that state refuses to scan or pull
+// at all, so the field has to be looked at rather than assumed empty.
+type folderIgnores struct {
+	Ignore   []string `json:"ignore"`
+	Expanded []string `json:"expanded"`
+	Error    string   `json:"error"`
+}
+
+func (c *client) ignores(folderID string) (folderIgnores, error) {
+	var out folderIgnores
+	err := c.get("/rest/db/ignores", url.Values{"folder": {folderID}}, &out)
+	return out, err
+}
+
+func (c *client) setIgnores(folderID string, lines []string) error {
+	var out folderIgnores
+	body := map[string][]string{"ignore": lines}
+	err := c.do(http.MethodPost, "/rest/db/ignores",
+		url.Values{"folder": {folderID}}, body, &out)
+	if err != nil {
+		return err
+	}
+	if out.Error != "" {
+		return fmt.Errorf("ignore patterns: %s", out.Error)
+	}
+	return nil
+}

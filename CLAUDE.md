@@ -34,7 +34,7 @@ function rather than beside one, and that edit is a guarded early return.
 | `custom/branding.ps1` | Single source of truth for all naming |
 | `custom/build-windows.ps1` | Builds the branded binary + installer |
 | `custom/installer/installer.iss` | Inno Setup script (per-user, no admin) |
-| `custom/tray/` | Notification-area app. **Its own Go module** |
+| `custom/tray/` | Notification-area app, desktop notifications, and the Explorer folder icons. **Its own Go module** |
 | `custom/scripts/seed-config.ps1` | Writes first-run `config.xml` defaults |
 | `custom/scripts/sync-upstream.ps1` | Merge upstream and verify the build |
 | `custom/scripts/start-test-pair.ps1` | Two throwaway instances sharing a folder, for two-device testing |
@@ -114,6 +114,10 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
 - An `#include` line in the *default* ignores deadlocks every newly accepted
   folder: the included file is inside the folder, which cannot sync until the
   include resolves. See `DEPLOYMENT-3D-TEAM.md` section 2.
+- A `desktop.ini` does nothing unless the folder itself carries the read-only
+  or system attribute, and `SHGetFileInfo` ignores it entirely when COM has not
+  been initialised -- it returns the generic icon and no error. Both are silent
+  failures. See `DEPLOYMENT-3D-TEAM.md` section 10.
 - The device-verification wordlists in `gui/default/syncthing/desuq/` are data,
   not prose: a word's *index* is its meaning. Re-ordering a list or inserting
   into the middle of one silently invalidates every verification anyone has

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -112,18 +114,112 @@ func waitForPaused(t *testing.T, c *client, selfID string, want bool) bool {
 	return last.Paused
 }
 
+// TestMarkFoldersForExplorer runs the real reconcile against the real
+// instance and then reads back what landed on disk. The parts that can go
+// wrong here are all outside the Go: whether Syncthing accepts the appended
+// ignore line, whether the file can be overwritten once it is hidden and
+// system, and whether the folder ends up carrying the attribute without which
+// Explorer never looks at a desktop.ini at all.
+func TestMarkFoldersForExplorer(t *testing.T) {
+	c, _ := liveClient(t)
+
+	cfg, err := c.config()
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	if len(cfg.Folders) == 0 {
+		t.Skip("the instance has no folders to mark")
+	}
+
+	m := newFolderMarker(t.TempDir())
+	if err := m.ensureIcon(); err != nil {
+		t.Fatalf("ensureIcon: %v", err)
+	}
+	if info, err := os.Stat(m.iconPath); err != nil {
+		t.Fatalf("icon was not written: %v", err)
+	} else if info.Size() != int64(len(iconFolder)) {
+		t.Errorf("icon is %d bytes on disk, embedded is %d", info.Size(), len(iconFolder))
+	}
+
+	// Twice: the second pass must be a no-op rather than a second appended
+	// ignore line, because it runs every two minutes for as long as the tray
+	// is up.
+	m.reconcile(c)
+	first := map[string][]string{}
+	for _, f := range cfg.Folders {
+		ign, err := c.ignores(f.ID)
+		if err != nil {
+			t.Fatalf("ignores(%s): %v", f.ID, err)
+		}
+		first[f.ID] = ign.Ignore
+	}
+	m.done = map[string]bool{}
+	m.reconcile(c)
+
+	marked := 0
+	for _, f := range cfg.Folders {
+		if _, err := os.Stat(f.Path); err != nil {
+			t.Logf("%s: path not present, skipped", f.ID)
+			continue
+		}
+
+		ign, err := c.ignores(f.ID)
+		if err != nil {
+			t.Fatalf("ignores(%s): %v", f.ID, err)
+		}
+		if ign.Error != "" {
+			t.Logf("%s: ignores do not parse (%s), skipped", f.ID, ign.Error)
+			continue
+		}
+		if !ignoresCoverDesktopIni(ign.Ignore) {
+			t.Errorf("%s: desktop.ini is still not excluded: %q", f.ID, ign.Ignore)
+		}
+		if len(ign.Ignore) != len(first[f.ID]) {
+			t.Errorf("%s: a second pass changed the ignore list, %d lines -> %d: %q",
+				f.ID, len(first[f.ID]), len(ign.Ignore), ign.Ignore)
+		}
+
+		ini := filepath.Join(f.Path, "desktop.ini")
+		raw, err := os.ReadFile(ini)
+		if err != nil {
+			t.Errorf("%s: no desktop.ini: %v", f.ID, err)
+			continue
+		}
+		if len(raw) < 2 || raw[0] != 0xFF || raw[1] != 0xFE {
+			t.Errorf("%s: desktop.ini has no UTF-16LE BOM: % X", f.ID, raw[:min(4, len(raw))])
+		}
+		if !bytes.Contains(raw, utf16LE("IconResource="+m.iconPath)[2:]) {
+			t.Errorf("%s: desktop.ini does not point at the icon", f.ID)
+		}
+		checkExplorerAttributes(t, f.ID, f.Path, ini)
+		marked++
+
+		t.Cleanup(func() {
+			_ = os.Remove(ini)
+		})
+	}
+
+	if marked == 0 {
+		t.Skip("no folder was present on disk to mark")
+	}
+	t.Logf("marked %d folder(s)", marked)
+}
+
 func TestIconsAreValidIcoFiles(t *testing.T) {
 	for _, tc := range []struct {
-		name  string
-		state State
+		name string
+		ico  []byte
 	}{
-		{"idle", StateIdle},
-		{"syncing", StateSyncing},
-		{"paused", StatePaused},
-		{"error", StateError},
-		{"offline", StateOffline},
+		{"idle", iconFor(StateIdle)},
+		{"syncing", iconFor(StateSyncing)},
+		{"paused", iconFor(StatePaused)},
+		{"error", iconFor(StateError)},
+		{"offline", iconFor(StateOffline)},
+		// Not a tray state, but it is written to disk for Explorer to load and
+		// a malformed one would simply show no icon at all.
+		{"folder", iconFolder},
 	} {
-		b := iconFor(tc.state)
+		b := tc.ico
 		if len(b) < 22 {
 			t.Errorf("%s: only %d bytes", tc.name, len(b))
 			continue

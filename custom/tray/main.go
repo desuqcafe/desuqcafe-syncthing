@@ -39,6 +39,8 @@ type options struct {
 	attach   bool
 	open     bool
 	quiet    bool
+	noIcons  bool
+	clear    bool
 	interval time.Duration
 }
 
@@ -56,6 +58,7 @@ type app struct {
 
 	notify notifier
 	alerts *alerter
+	marker *folderMarker
 
 	refresh chan struct{}
 	ctx     context.Context
@@ -91,6 +94,10 @@ func main() {
 		"How often to re-read Syncthing's status as a fallback to the event stream")
 	flag.BoolVar(&opts.quiet, "quiet", false,
 		"Do not show desktop notifications")
+	flag.BoolVar(&opts.noIcons, "no-folder-icons", false,
+		"Do not give synced folders a custom icon in Explorer")
+	flag.BoolVar(&opts.clear, "clear-folder-icons", false,
+		"Remove the Explorer folder icons this has written, then exit. Works with Syncthing stopped")
 	flag.Parse()
 
 	// Log to the Syncthing home directory, where the support bundle and
@@ -108,6 +115,21 @@ func main() {
 		log.SetPrefix("systray: ")
 	}
 
+	// A one-shot that has to work on a machine being taken apart, so it runs
+	// before anything is started and reads the folder list off disk rather
+	// than asking a Syncthing that is no longer there. The exit code is the
+	// only signal it can give: this binary is linked -H windowsgui and has no
+	// stdout to write to.
+	if opts.clear {
+		n, err := newFolderMarker(opts.home).clear()
+		if err != nil {
+			slog.Error("could not clear the folder icons", "err", err)
+			os.Exit(1)
+		}
+		slog.Info("cleared Explorer folder icons", "folders", n)
+		return
+	}
+
 	a := &app{opts: opts, refresh: make(chan struct{}, 1)}
 	a.ctx, a.cancel = context.WithCancel(context.Background())
 
@@ -116,6 +138,7 @@ func main() {
 		a.notify = newNotifier(toastAppID, appName)
 	}
 	a.alerts = newAlerter(a.notify, a.guiURL, a.client)
+	a.marker = newFolderMarker(opts.home)
 
 	if !opts.attach {
 		a.sup = newSupervisor(opts.binary, opts.home, a.connected)
@@ -159,6 +182,33 @@ func (a *app) onReady() {
 	// poll interval later.
 	go watchEvents(a.ctx, a.client, a.onEvent)
 	go a.alerts.watchDisk(a.ctx)
+	if !a.opts.noIcons {
+		go a.watchFolders(a.ctx)
+	}
+}
+
+// folderMarkInterval is how often the Explorer folder markers are reconciled.
+// Nothing here is urgent -- a folder added a minute ago getting its icon a
+// minute later is fine -- and each pass that finds nothing new is one local
+// HTTP request, so there is no reason to be quicker about it.
+const folderMarkInterval = 2 * time.Minute
+
+// watchFolders keeps every synced folder marked with the fork's icon, so a
+// folder that is added later is not left looking like any other folder. Doing
+// it on a timer rather than once at start-up is also what covers a folder
+// whose drive was not plugged in yet. See foldericon.go.
+func (a *app) watchFolders(ctx context.Context) {
+	// A short wait first: on a cold start Syncthing is not up yet, and a
+	// folder it has not created on disk cannot be marked.
+	if !sleepCtx(ctx, 15*time.Second) {
+		return
+	}
+	for {
+		a.marker.reconcile(a.client())
+		if !sleepCtx(ctx, folderMarkInterval) {
+			return
+		}
+	}
 }
 
 func (a *app) onExit() {

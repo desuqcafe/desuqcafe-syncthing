@@ -432,7 +432,69 @@ resist an attacker generating keys until one collides with a target phrase.
 For a three-person studio that is the right trade. It is worth knowing before
 anyone points this at a larger deployment.
 
-## 10. What is verified, and what is not
+## 10. A synced folder looked like any other folder — now it does not
+
+There was no sign at all. `.stfolder` is created hidden, nothing writes a
+folder icon, and Syncthing has no shell integration, so in Explorer a synced
+folder and an ordinary one are the same yellow rectangle. Somebody moves one,
+or works in a copy of it, and finds out days later.
+
+Every synced folder now carries the fork's icon: a violet folder with a sync
+ring on it, sitting among the yellow ones. The tray writes it, reconciles every
+two minutes so a folder added later gets one too, and re-tries a folder whose
+drive was not plugged in.
+
+**No shell extension.** The overlay-icon badge Dropbox and OneDrive put on the
+corner of a file was deliberately not built. Overlays require a registered
+in-process COM server, and they come out of a global pool of roughly fifteen
+slots that those two products already crowd — ours would very likely never be
+drawn, and we would have put a DLL into every Explorer process to achieve that.
+`desktop.ini` needs no administrator, no COM, no registration, and leaves
+nothing behind but a file Explorer ignores once the icon it names is gone.
+
+Four things this had to get right:
+
+- **The marker must be ignored before it is written.** `desktop.ini` lands
+  inside the synced folder. Written first and excluded second, it would sync to
+  everyone carrying a path that is meaningless on their machine, and in a
+  **receive-only** folder it would appear as an unexpected local addition for
+  someone to worry about. So the tray checks the folder's ignore patterns
+  first, appends `(?d)desktop.ini` if nothing there covers it, and only then
+  writes. An explicit `!desktop.ini` is respected and the folder is left alone.
+  (§3's seeded set already contains the rule, so on a fresh install there is
+  usually nothing to add.)
+- **The folder needs an attribute or Explorer never looks.** A `desktop.ini` in
+  a plain folder is inert; the folder must be marked read-only or system.
+  Read-only is the one to use — system would hide the folder from anyone who
+  has not turned off *hide protected operating system files*, which for a
+  folder whose whole purpose is to be visible would be perfectly backwards.
+  Read-only on a *directory* does not stop anything being written inside it; it
+  is the flag that means "customised".
+- **UTF-16LE with a BOM.** The shell reads `desktop.ini` through
+  `GetPrivateProfileString`, which only treats a file as Unicode if it starts
+  with the byte-order mark. Without it the icon path is read in the system code
+  page, and any user whose name is not spelled in ASCII gets a path to a file
+  that does not exist.
+- **Overwriting one is not the same as writing one.** `CreateFile` refuses to
+  truncate a hidden or system file unless those attributes are passed in, so
+  the second run has to clear them first. This fails only on the *second* run,
+  which is exactly the sort of thing a single-pass test says nothing about.
+
+To undo it — every marker file, and the read-only attribute with it:
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\desuq-syncthing\desuq-syncthing-tray.exe" `
+    --home "$env:LOCALAPPDATA\desuqcafe-syncthing" --clear-folder-icons
+```
+
+That reads the folder list out of `config.xml` rather than asking Syncthing, so
+it works with everything stopped. `--no-folder-icons` on the tray turns the
+whole thing off for a machine. Note that the **uninstaller does not run it**:
+after removal the marker files stay, pointing at an icon that is gone, and
+Explorer silently falls back to the ordinary folder icon. Harmless, but it is
+litter, and worth clearing by hand before uninstalling if it matters.
+
+## 11. What is verified, and what is not
 
 Verified 2026-08-23 against **two instances on separate ports sharing a real
 folder**, not just single-device:
@@ -473,10 +535,21 @@ folder**, not just single-device:
   left the folder syncing all 18 files rather than stranded on `*`; and that an
   unreadable ignore file was reported instead of passing for success.
 
+- The Explorer folder icons were verified through the shell itself rather than
+  by checking our own output: `SHGetFileInfo`, the API Explorer uses, resolves
+  a marked folder to the fork's `folder.ico` and gives it its own system
+  image-list slot (286) where a plain folder gets the generic one (3). The
+  claim that matters was checked live too -- on a **receive-only** folder with
+  no default ignores at all, the tray added the rule itself, wrote the marker,
+  and afterwards `receiveOnlyTotalItems` was 0, `globalFiles` was unchanged on
+  both sides, and no `desktop.ini` ever reached the sending device.
+- `--clear-folder-icons` was run from the shipped binary with Syncthing
+  stopped: marker gone, read-only attribute cleared, icon removed, exit 0.
+
 **Not verified:** uninstall. It shares `StopRunningInstance` with the upgrade
 path, which is exercised, but the `DelTree` prompt has never been run.
 
-## 11. Things that surprised us, worth knowing before changing anything
+## 12. Things that surprised us, worth knowing before changing anything
 
 - **`limitBandwidthInLan` defaults to `false`.** Rate limits are silently
   ignored on LAN and loopback until it is switched on. If a limit "does not
@@ -492,7 +565,17 @@ path, which is exercised, but the `DelTree` prompt has never been run.
 - **A pending folder carries no size** (§1), so nothing can be decided about
   capacity until the folder actually starts.
 - **`.stfolder` is created hidden**, so a synced folder has *no* visible marker
-  in Explorer. Nothing in Syncthing writes a folder icon or overlay.
+  in Explorer of its own. Nothing in Syncthing writes a folder icon or overlay;
+  the fork does, see section 10.
+- **A `desktop.ini` is inert unless the folder carries the read-only or system
+  attribute.** Writing the file and nothing else changes nothing at all, with
+  no error anywhere (section 10).
+- **SHGetFileInfo silently ignores `desktop.ini` when COM is not initialised.**
+  It still succeeds and still returns an icon -- the generic one out of
+  `imageres.dll`. Anything checking this mechanism from outside Explorer has to
+  call `CoInitializeEx` first or it will conclude the feature is broken while
+  Explorer shows the icon perfectly well. It also caches per path, so probing a
+  folder *before* customising it poisons the answer you get afterwards.
 
 ## Recommended configuration
 
