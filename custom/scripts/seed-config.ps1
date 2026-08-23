@@ -19,6 +19,8 @@
       defaults/ignores            -> the Blender + OS junk set
       gui/theme                   -> violet
       device/@name                -> the Windows user name (upstream: hostname)
+      options/urAccepted          -> -1, declined (upstream: 0, "will ask")
+      options/crashReportingEnabled -> false (upstream: true)
 
     Only the defaults are touched. Existing folders and devices are left alone,
     so this is safe to run against a live installation.
@@ -59,7 +61,7 @@ Set-StrictMode -Version Latest
 
 # Bump when the seeded values below change, so an installer carrying newer
 # defaults re-seeds a machine that was set up by an older one.
-$SeedVersion = 1
+$SeedVersion = 2
 
 # --- The defaults themselves ----------------------------------------------
 
@@ -75,6 +77,14 @@ $MinDiskFreeValue = 20
 $MinDiskFreeUnit  = 'GB'
 
 $Theme = 'violet'
+
+# Telemetry. The binary sends none regardless of these -- every reporter is
+# guarded on lib/build/desuq_telemetry.go, which is a constant -- so this is
+# not what stops the traffic. It is here so that config.xml does not claim
+# something the build will not do: -1 is "declined", and upstream's default for
+# crashReportingEnabled is *true*, which uploads a panic log without asking.
+$URAccepted   = -1
+$CREnabled    = 'false'
 
 # Verified against a real folder: with these applied, a directory holding
 # scene.blend, scene.blend1, scene.blend2, scene.blend@, texture.png,
@@ -308,6 +318,12 @@ try {
     [void]$versioning.AppendChild($param)
     Set-Element -Parent $versioning -Name 'cleanupIntervalS' -Value '3600'
     Write-Log ("File versioning: {0}, maxAge {1}s ({2} days)" -f $VersioningType, $VersioningMaxAge, ($VersioningMaxAge / 86400))
+
+    # -- telemetry ----------------------------------------------------------
+    $options = Get-OrAdd -Parent $root -Name 'options'
+    Set-Element -Parent $options -Name 'urAccepted'            -Value "$URAccepted"
+    Set-Element -Parent $options -Name 'crashReportingEnabled' -Value $CREnabled
+    Write-Log "Telemetry: usage reporting declined, crash reporting off"
 
     # -- default ignores ----------------------------------------------------
     $ignores = Get-OrAdd -Parent $defaults -Name 'ignores'

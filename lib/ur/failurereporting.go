@@ -78,6 +78,14 @@ type failureStat struct {
 }
 
 func (h *failureHandler) Serve(ctx context.Context) error {
+	// desuqcafe: this fork sends no failure reports. Returning here also means
+	// we never subscribe to events.Failure, so nothing is buffered either.
+	// See lib/build/desuq_telemetry.go.
+	if !build.TelemetryEnabled {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+
 	cfg := h.cfg.Subscribe(h)
 	defer h.cfg.Unsubscribe(h)
 	url, sub, evChan := h.applyOpts(cfg.Options, nil)

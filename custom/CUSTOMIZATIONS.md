@@ -34,11 +34,18 @@ Keep this table current. It is the only place the merge cost is written down.
 | --- | --- | --- |
 | `build.go` | Added an `envOr()` helper and used it for the six Windows version-resource strings in `shouldBuildSyso()` (product name, publisher, description, internal/original filename, icon). | **Low.** 16 lines in one rarely-touched function. With the `ST_BRAND_*` variables unset the behaviour is byte-for-byte upstream's, so the change is safe to keep across merges. |
 | `lib/api/api.go` | **One line**, registering `GET /rest/system/diskfree`. The handler itself is in a new file, `lib/api/api_diskfree.go`. | **Low.** One entry in a long, alphabetically-ordered, append-only route table. If it ever conflicts the resolution is "keep both sides". |
-| `gui/default/index.html` | Eight additive hunks, ~41 lines: three `<link>` and five `<script>` tags for the fork's GUI files, the `<desuq-selective-modal>` element, a "Disk Space" row in the folder detail table, a "Verification" row in the device detail table, and a "Choose Files" button in the folder panel's footer. | **Low–medium.** The file is large and upstream does edit it, but every hunk is additive and they are far apart. |
+| `gui/default/index.html` | Eight additive hunks, ~41 lines, plus one removal (the two `<ng-include>`s for upstream's usage-report modals, replaced by a comment saying why): three `<link>` and five `<script>` tags for the fork's GUI files, the `<desuq-selective-modal>` element, a "Disk Space" row in the folder detail table, a "Verification" row in the device detail table, and a "Choose Files" button in the folder panel's footer. | **Low–medium.** The file is large and upstream does edit it, but every hunk is additive and they are far apart. |
 | `gui/default/syncthing/folder/editFolderModalView.html` | Seven lines: three showing free space under the Folder Path field, four placing `<desuq-selective-option>` at the top of the Ignores tab. | **Low.** |
 | `gui/default/syncthing/device/editDeviceModalView.html` | Ten lines: five placing the device verification card under the Device ID field, five placing `<desuq-lan-limit>` under the per-device rate limits. | **Low.** |
 | `gui/default/syncthing/settings/settingsModalView.html` | Seven lines placing `<desuq-lan-limit>` between the rate fields and the "Limit Bandwidth in LAN" checkbox. | **Low.** |
 | `gui/default/syncthing/core/syncthingController.js` | **One branch**, 13 lines with the comment, at the top of `saveFolder`'s new-folder handling. It hands the save to the selective-sync picker, and is guarded on both a flag only the fork's directive sets and a service only the fork publishes — so with `syncthing/desuq/` removed it is unreachable and the function is upstream's. | **Low–medium.** The only fork edit inside an upstream *function* rather than beside one. It sits between two comment-led blocks that have been stable for years, and it is a self-contained early return, so a conflict resolves by re-inserting it wherever the equivalent point ends up. |
+| `gui/default/syncthing/core/syncthingController.js` (2) | **Three removals**, each replaced by a comment: the two blocks that raise the usage-reporting nag, and the two lines in `saveSettings` where choosing the release-candidate upgrade channel silently sets `urAccepted`. | **Medium.** Removals inside upstream functions. If upstream edits them the merge will conflict; the resolution is to delete their side again. |
+| `lib/config/optionsconfiguration.go` | **Two struct tags.** `URAccepted` gains `default:"-1"` (upstream has none, i.e. 0, "not yet asked"); `CREnabled` loses `default:"true"`. | **Low.** Two lines in a long field list. A conflict resolves by re-applying the two tags to whatever upstream's line has become. |
+| `lib/ur/usage_report.go` | **One guard**, 8 lines with the comment, at the top of `Serve`. Returns an inert service when `build.TelemetryEnabled` is false. | **Low.** Additive, first statement of the function. |
+| `lib/ur/failurereporting.go` | **One guard**, 7 lines, at the top of `Serve`. Same shape; also means the handler never subscribes to `events.Failure`. | **Low.** Additive, first statement of the function. |
+| `cmd/syncthing/monitor.go` | **One guard**, 7 lines, at the top of `maybeReportPanics`. This is the reporter upstream leaves *on*. | **Low.** Additive, first statement of the function. |
+| `lib/syncthing/syncthing.go` | **One condition**, `if build.IsCandidate` becomes `if build.IsCandidate && build.TelemetryEnabled`, plus four comment lines. | **Low.** One token on one line. If it conflicts, re-add the conjunct. |
+| `gui/default/syncthing/settings/settingsModalView.html` (2) | Upstream's "Anonymous Usage Reporting" `<select>` replaced by a static note saying the build sends none. | **Low–medium.** This one *replaces* rather than inserts. A conflict resolves by deleting upstream's control again. |
 
 Everything else the fork adds lives in files upstream does not have, so it
 cannot conflict at all:
@@ -50,15 +57,19 @@ cannot conflict at all:
 | `gui/violet/` | The violet theme |
 | `custom/` | Everything else |
 
-Where the fork stands today: **99 inserted lines against 6 deleted**, across
-those seven files. Only `build.go` replaces anything — the six `envOr()`
-wrappers, which fall back to upstream's literals when the `ST_BRAND_*`
-variables are unset. Every other edit is inserted beside upstream's code rather
-than in place of it, so with the fork's own files removed the other six still
-behave exactly as upstream's do.
+Where the fork stands today: **159 inserted lines against 51 deleted**, across
+those twelve files.
 
-That is worth *knowing* rather than worth *preserving*. It is the reason merges
-have been boring so far, not a rule that has to hold for the next change.
+Up to the telemetry work almost every edit was inserted *beside* upstream's
+code rather than in place of it, which is why merges had been boring. Stripping
+the telemetry is the first change that had to delete things — upstream's
+consent nag, its usage-reporting dropdown, and the two lines where picking the
+release-candidate upgrade channel quietly opts you in. There was no additive
+way to remove a control, and a switch left on screen wired to nothing would
+have been worse than a merge conflict.
+
+So the four rows marked **Medium** above are the ones to read before a merge.
+Everything else still resolves by keeping both sides.
 
 ## How the branding is done without touching upstream
 
@@ -77,6 +88,7 @@ have been boring so far, not a rule that has to hold for the next change.
 | Verified device handshake | `gui/default/syncthing/desuq/`, plus five lines in the device modal and one row in the device panel. Entirely client-side: the phrase is a SHA-256 of the two device IDs, computed in the browser, so there is **no new REST route and no server code at all**. See `DEPLOYMENT-3D-TEAM.md` section 9. |
 | Selective sync file picker | `gui/default/syncthing/desuq/selectiveSync.js` and friends, plus the four upstream hunks above. Also **no server code**: it is built entirely out of `/rest/db/browse`, which already serves the *global* tree, and `/rest/db/ignores`. The fancytree it renders in is one upstream already ships for the version restorer. See `DEPLOYMENT-3D-TEAM.md` section 2. |
 | A rate limit that says whether it applies | `gui/default/syncthing/desuq/lanLimitDirective.js`, plus a line in each of the two dialogues with rate fields. Reads `options.limitBandwidthInLan` and, where there is a device, `isLocal` from `/rest/system/connections`. No server code. The **default is left as upstream's**; see `DEPLOYMENT-3D-TEAM.md` section 11 for why changing it would be wrong. |
+| No telemetry of any kind | `lib/build/desuq_telemetry.go` — a `const TelemetryEnabled = false` that all three of upstream's reporters consult, plus the GUI removals above and two seeded config values. See the section below. |
 | Synced folders visible in Explorer | `custom/tray/foldericon*.go`. A `desktop.ini` per folder, written by the tray -- per user, no administrator, no COM, no registration, and **no upstream change of any kind**. Explicitly *not* an overlay-icon shell extension: those need a registered in-process COM server and compete for about fifteen global slots Dropbox and OneDrive already fill. See `DEPLOYMENT-3D-TEAM.md` section 10. |
 
 ## Why the tray is its own Go module
@@ -110,6 +122,50 @@ would mean patching the model or the API service. See
 list is deliberately short.
 
 All names live in one place: `custom/branding.ps1`.
+
+## Why the telemetry is compiled out rather than switched off
+
+Upstream has **three** reporters, gated by **two** options, and the survey most
+people do finds only the first two:
+
+| Reporter | Where | Posts to | Gate | Default |
+| --- | --- | --- | --- | --- |
+| Usage report | `lib/ur/usage_report.go` | `Options.URURL`, `data.syncthing.net` | `URAccepted >= 2` | off (0, "not yet asked") |
+| Failure reports | `lib/ur/failurereporting.go` | `Options.CRURL` + `/failure` | `URAccepted > 0` | off |
+| **Panic-log upload** | `cmd/syncthing/crash_reporting.go`, called from `monitor.go` | `Options.CRURL`, `crash.syncthing.net` | **`CREnabled`** | **on** |
+
+The third one is the interesting one. It is gated on a *different* option,
+`CREnabled`, which upstream defaults to `true`, and unlike the other two it
+never asks. A stock build that crashes uploads its panic log — which contains
+goroutine stacks and the tail of the log — without the user having agreed to
+anything. `lib/ur`'s and `cmd/syncthing`'s tests demonstrate this: forcing
+`TelemetryEnabled` to `true` and re-running them shows the crash server
+contacted and the panic log renamed to `.reported.log`.
+
+Setting the options is therefore not enough on its own, for three reasons:
+
+1. It would only fix a config *we* wrote. `--home` pointed somewhere new, a
+   hand-run `generate`, a config restored from a backup: each starts over.
+2. `CREnabled` and `URAccepted` are two separate switches, and the seed script
+   would have to keep tracking whatever upstream adds next.
+3. The GUI offered a dropdown to turn usage reporting back on, and picking the
+   release-candidate upgrade channel turned it on without saying so.
+
+So the guarantee lives in a constant instead. Every reporter consults
+`build.TelemetryEnabled` before doing anything, the GUI no longer offers a
+control, and the options are *also* defaulted and seeded off — but only so
+that `config.xml` does not claim something the binary will not do. That part
+is cosmetic; the constant is what holds.
+
+A constant rather than a build tag on purpose: a tag someone forgets to pass
+is a silent regression, and there is no build of this fork that should ever
+want telemetry.
+
+What is deliberately **not** removed: `/rest/svc/report` and the report-building
+code itself. Building a report is local and harmless, it is what upstream's
+"preview" showed, and deleting `lib/ur` outright would mean touching
+`lib/model`, `lib/api`, `lib/syncthing` and the generated mocks for no change
+in what leaves the machine.
 
 ## Why auto-upgrade is disabled
 

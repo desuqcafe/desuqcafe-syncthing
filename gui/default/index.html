@@ -1068,8 +1068,11 @@
   <ng-include src="'syncthing/settings/settingsModalView.html'"></ng-include>
   <ng-include src="'syncthing/settings/advancedSettingsModalView.html'"></ng-include>
   <ng-include src="'syncthing/settings/discardChangesConfirmation.html'"></ng-include>
-  <ng-include src="'syncthing/usagereport/usageReportModalView.html'"></ng-include>
-  <ng-include src="'syncthing/usagereport/usageReportPreviewModalView.html'"></ng-include>
+  <!-- desuqcafe: the two usage-report modals are deliberately not included.
+       This fork sends no telemetry (lib/build/desuq_telemetry.go), so the
+       consent nag has nothing to consent to. The view files are left in the
+       tree unmodified so that an upstream merge has nothing to conflict
+       with; unreferenced, they are never compiled into a template. -->
   <ng-include src="'syncthing/transfer/neededFilesModalView.html'"></ng-include>
   <ng-include src="'syncthing/transfer/failedFilesModalView.html'"></ng-include>
   <ng-include src="'syncthing/transfer/remoteNeededFilesModalView.html'"></ng-include>

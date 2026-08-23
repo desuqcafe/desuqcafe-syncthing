@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-    Asserts that re-seeding never takes a device name somebody chose.
+    Asserts that re-seeding never takes a device name somebody chose, and that
+    the seeded config.xml does not claim telemetry is on.
 
 .DESCRIPTION
     seed-config.ps1 used to set device/@name unconditionally. On a fresh
@@ -110,6 +111,22 @@ try {
     [xml]$x = Get-Content -LiteralPath (Join-Path $fresh 'config.xml') -Raw
     Check 'the other defaults were still applied' ($x.configuration.gui.theme -eq 'violet') `
         "theme is '$($x.configuration.gui.theme)'"
+
+    # --- what the seeded config says about telemetry -----------------------
+    #
+    # Nothing depends on these -- every reporter is guarded on
+    # lib/build/desuq_telemetry.go, which is a constant, and lib/ur's own tests
+    # watch the wire. They are asserted because a config.xml that says
+    # urAccepted 0 reads as "the question is still open", which for this fork
+    # it is not.
+    Write-Host ''
+    Write-Host '-- the seeded config does not claim telemetry is on'
+    Check 'usage reporting is declined, not merely unanswered' `
+        ($x.configuration.options.urAccepted -eq '-1') `
+        "urAccepted is '$($x.configuration.options.urAccepted)'"
+    Check 'crash reporting is off, where upstream defaults it on' `
+        ($x.configuration.options.crashReportingEnabled -eq 'false') `
+        "crashReportingEnabled is '$($x.configuration.options.crashReportingEnabled)'"
 
     # --- names Syncthing picked -------------------------------------------
     Write-Host ''

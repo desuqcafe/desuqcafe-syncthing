@@ -549,7 +549,77 @@ confirming — "Applies to every connection, including devices on this network" 
 rather than vanishing, because a note that disappears when you fix something
 teaches nobody what they fixed.
 
-## 12. What is verified, and what is not
+## 12. Syncthing phoned home on a crash, and never asked
+
+Upstream's anonymous usage reporting is opt-in behind a modal, and off until
+somebody clicks yes. That is the part everybody knows about, and it was not the
+problem.
+
+There are **three** reporters, and they are gated by **two** options:
+
+| Reporter | Posts to | Gated on | Upstream default |
+| --- | --- | --- | --- |
+| Usage report — folder counts, sizes, platform, settings | `data.syncthing.net` | `urAccepted >= 2` | off |
+| Failure reports — non-fatal internal errors | `crash.syncthing.net/failure` | `urAccepted > 0` | off |
+| **Panic-log upload** | `crash.syncthing.net` | **`crashReportingEnabled`** | **on** |
+
+The third is on a different switch, and nothing ever asks about it. On a stock
+build, a crash uploads the panic log — goroutine stacks and the tail of the
+run's output, which for us means folder names and paths — to a third party the
+user has never heard of. That is not a hypothetical: forcing the fork's kill
+switch back on and re-running `go test ./cmd/syncthing/` shows the upload
+happening and the log renamed to `.reported.log` afterwards.
+
+### What the fork does about it
+
+`lib/build/desuq_telemetry.go` holds one constant:
+
+```go
+const TelemetryEnabled = false
+```
+
+All three reporters check it before doing anything. The usage-report and
+failure-report services start and immediately go inert; the panic uploader
+returns before it even reads the config. Nothing subscribes to the failure
+event stream, so nothing is buffered either.
+
+With that in place the GUI's controls would be switches wired to nothing, so
+they are gone too:
+
+- the consent modal is not included in the page at all, and neither of the two
+  places that raised it survives — including the one that set a cookie on
+  first visit and started nagging four hours later, on every config load,
+  until answered;
+- *Actions → Settings → Connections* no longer has an **Anonymous Usage
+  Reporting** dropdown. In its place is a line saying the build sends none;
+- choosing "Stable releases and release candidates" under Automatic upgrades
+  no longer sets `urAccepted` as a side effect. Upstream does, which means
+  picking an upgrade channel opts you into usage reporting without saying so.
+
+`urAccepted` is seeded to `-1` and `crashReportingEnabled` to `false` anyway,
+and the struct defaults changed to match, so a config generated with no seeding
+at all is still correct. **That part is cosmetic.** It stops `config.xml`
+reading as though the question were still open; it is not what stops the
+traffic.
+
+`build.IsCandidate` force-enables usage reporting upstream. It is
+`strings.Contains(Version, "-rc.")` and our tags are `v2.1.4-desuq.N`, so it
+was never going to fire — but that is a naming convention, and the guard there
+now depends on the constant instead.
+
+### What is left, and why
+
+Global discovery and relays are still on. They are a much larger third-party
+surface than the reporting was, and turning them off would break the thing the
+fork exists to do; see section 14 for the reasoning and what to do instead.
+
+`/rest/svc/report` still builds a report when asked. Building one is local and
+harmless — it is what upstream's "Preview" link showed — and it is never
+posted. Deleting `lib/ur` outright would mean touching `lib/model`, `lib/api`,
+`lib/syncthing` and the generated mocks, for no change in what leaves the
+machine.
+
+## 13. What is verified, and what is not
 
 Verified 2026-08-23 against **two instances on separate ports sharing a real
 folder**, not just single-device:
@@ -617,10 +687,101 @@ folder**, not just single-device:
   defaults*, the host name and the `DESKTOP-`/`LAPTOP-` forms are still
   replaced, "Desktop upstairs" is not, and an explicit `-DeviceName` wins.
 
+- The telemetry strip was verified **by watching the wire, both ways**. Three
+  Go tests -- two in `lib/ur`, one in `cmd/syncthing` -- stand an
+  `httptest` server up as the usage-report and crash-report endpoint, turn every
+  telemetry option all the way *on* in the config, run the reporter, and assert
+  the server was contacted zero times. The panic test adds an independent
+  witness: an uploaded log gets renamed to `.reported.log`, so the original
+  still sitting there says the upload was never attempted rather than merely
+  having failed.
+
+  Each was then checked for the failure that matters -- that it is not passing
+  vacuously. Flipping `TelemetryEnabled` to `true` and re-running makes all
+  three fail, and *how* they fail is the finding: `usage report server was
+  contacted 1 times`, `failure handler subscribed to the config 1 times`, and
+  the crash server contacted with the panic log renamed. Upstream's build
+  really does upload a panic log unasked; this is that behaviour, observed.
+
+  Two further checks in `test-seed-naming.ps1` assert the seeded `config.xml`
+  says `urAccepted -1` and `crashReportingEnabled false`, and the GUI removals
+  were confirmed against the running instance rather than the working tree:
+  the served `index.html` includes neither usage-report modal, the served
+  settings view has no `urVersion` control, and the served controller contains
+  no `showModal('#ur')`.
+
 **Not verified:** uninstall. It shares `StopRunningInstance` with the upgrade
 path, which is exercised, but the `DelTree` prompt has never been run.
 
-## 13. Things that surprised us, worth knowing before changing anything
+**Not verified:** anything about layout or paint. Every GUI check in this
+document -- the picker, the verification card, the LAN note, the telemetry
+removals -- was made through real Angular, real fancytree and the real REST
+API under jsdom, or by reading what the server served. jsdom does not lay out
+or paint, so what is asserted is structure and behaviour, not appearance. No
+browser has rendered any of it.
+
+## 14. Global discovery and relays: a bigger surface, and a different question
+
+With the telemetry gone these are the only things left that contact a third
+party, and they are a *much* larger surface than usage reporting ever was —
+contacted every 30 minutes, forever, by every device. It is a fair question
+whether they should go the same way. **The recommendation is no**, and the
+reasoning is worth writing down because it is not "third parties are fine".
+
+### What each one is, and what it actually discloses
+
+| | What it does | Who sees what |
+| --- | --- | --- |
+| **Local discovery** | Broadcast/multicast on the LAN, port 21027 | Nobody outside the LAN. Nothing to argue about. |
+| **Global discovery** | Announces this device's listen addresses to `discovery-announce-v4/v6.syncthing.net` every 30 min; looks peers up at `discovery-lookup.syncthing.net` | The announce body is literally `{"addresses": [...]}`. The device ID comes from the client certificate on the POST. So: device ID, public IP, listen addresses. **No folder names, no file names, no sizes, no counts.** |
+| **Relays** | If two devices cannot reach each other directly, a volunteer relay from `relays.syncthing.net` forwards bytes between them | The relay carries **ciphertext**. `lib/connections/relay_dial.go` layers `tls.Client`/`tls.Server` with the device's own certificate *on top of* the relay session, so the operator sees which two device IDs are talking, when, and how much — not what. |
+| **STUN** | `_stun._udp.syncthing.net` SRV lookup, then STUN to learn this device's public address for NAT traversal | Source IP, same as any STUN. |
+
+Upstream deliberately splits announce and lookup across *different* hostnames
+with `?nolookup` and `?noannounce`, so neither server sees both halves. That is
+a real design decision in the user's favour and worth crediting.
+
+### Why this is not the same call as the telemetry
+
+The telemetry was pure outflow: data *about* the user, of no use to the user,
+in exchange for nothing. Removing it cost nothing and there was no failure mode
+to weigh.
+
+These are load-bearing. Turn global discovery off and a device with no static
+address becomes unreachable from outside its own LAN. Turn relays off and two
+devices behind NATs that will not punch simply never connect.
+
+And the failure mode is the bad kind: **silent, and indistinguishable from the
+peer being switched off.** A modeller working from home sees "Disconnected"
+with no explanation, and nothing on either screen can tell them the difference
+between "cannot find the other machine" and "the other machine is off". For a
+fork whose entire premise is that non-technical users should not have to
+diagnose anything, trading a small metadata disclosure for that is a bad deal.
+
+### What to do instead, in increasing order of effort
+
+1. **Give every device a static address where it has one.** In *Edit Device →
+   Addresses*, replace `dynamic` with `tcp://192.168.1.50:22000` for the
+   machines in the studio. Discovery becomes a fallback rather than the path,
+   and the in-studio case stops depending on any third party at all. This costs
+   one field per device and is worth doing regardless.
+2. **Turn off global discovery and relays only on machines that never leave the
+   LAN**, and only once step 1 is done for them. A desktop that is always in
+   the studio does not need either. Leave both on for laptops.
+3. **Self-host, if it genuinely matters.** This is the honest answer to "I want
+   it gone" applied to discovery, and it is more achievable than it sounds:
+   both servers are in this tree already, `cmd/stdiscosrv` and
+   `cmd/strelaysrv`. One small VPS runs both. Then set
+   `globalAnnounceServers` and the relay address to your own, and no device
+   contacts `syncthing.net` for anything, with **no loss of function**. That
+   is a weekend of work and a running cost, not a config change, so it is a
+   decision rather than a default — but it is the option that actually exists.
+
+What is **not** recommended is switching them off across the board and finding
+out later. If you do it, do step 1 first, and expect to be the person who
+explains why a laptop stopped syncing at home.
+
+## 15. Things that surprised us, worth knowing before changing anything
 
 - **`limitBandwidthInLan` defaults to `false`.** Rate limits are silently
   ignored on LAN and loopback until it is switched on. If a limit "does not

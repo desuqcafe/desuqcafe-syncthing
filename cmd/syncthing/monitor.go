@@ -532,6 +532,13 @@ func childEnv() []string {
 // and reports any panics it can find if it's enabled. We spend at most
 // panicUploadMaxWait uploading panics...
 func maybeReportPanics() {
+	// desuqcafe: this fork uploads no panic logs. This is the reporter that
+	// upstream leaves ON by default -- Options.CREnabled defaults to true, and
+	// unlike the other two it never asks. See lib/build/desuq_telemetry.go.
+	if !build.TelemetryEnabled {
+		return
+	}
+
 	// Try to get a config to see if/where panics should be reported.
 	cfg, err := loadOrDefaultConfig()
 	if err != nil {

@@ -219,14 +219,10 @@ angular.module('syncthing.core')
                     $scope.version = data;
                 }).error($scope.emitHTTPError);
 
-                if ($scope.system && $scope.config.options.urAccepted > -1 && $scope.config.options.urSeen < $scope.system.urVersionMax && $scope.config.options.urAccepted < $scope.system.urVersionMax) {
-                    // Usage reporting decision has not been taken or format
-                    // has changed, prompt the user to (re-)accept.
-                    $http.get(urlbase + '/svc/report').success(function (data) {
-                        $scope.reportData = data;
-                        showModal('#ur');
-                    }).error($scope.emitHTTPError);
-                }
+                // desuqcafe: upstream prompts here to (re-)accept usage
+                // reporting whenever the report format has changed. This fork
+                // sends none (lib/build/desuq_telemetry.go), so there is
+                // nothing to accept and the modal is not included at all.
 
                 $http.get(urlbase + '/system/upgrade').success(function (data) {
                     $scope.upgradeInfo = data;
@@ -417,25 +413,10 @@ angular.module('syncthing.core')
             }
         });
 
-        $scope.$on('ConfigLoaded', function () {
-            if ($scope.config.options.urAccepted === 0) {
-                // If usage reporting has been neither accepted nor declined,
-                // we want to ask the user to make a choice. But we don't want
-                // to bug them during initial setup, so we set a cookie with
-                // the time of the first visit. When that cookie is present
-                // and the time is more than four hours ago, we ask the
-                // question.
-
-                var firstVisit = document.cookie.replace(/(?:(?:^|.*;\s*)firstVisit\s*\=\s*([^;]*).*$)|^.*$/, "$1");
-                if (!firstVisit) {
-                    document.cookie = "firstVisit=" + Date.now() + ";max-age=" + 30 * 24 * 3600;
-                } else {
-                    if (+firstVisit < Date.now() - 4 * 3600 * 1000) {
-                        showModal('#ur');
-                    }
-                }
-            }
-        });
+        // desuqcafe: upstream's other usage-reporting nag lived here -- it set
+        // a firstVisit cookie and raised the modal four hours later, on every
+        // config load, until answered. Removed for the same reason as the one
+        // above. See lib/build/desuq_telemetry.go.
 
         $scope.$on(Events.CONFIG_SAVED, function (event, arg) {
             updateLocalConfig(arg.data);
@@ -1865,8 +1846,15 @@ angular.module('syncthing.core')
                 if ($scope.tmpOptions.upgrades == "candidate") {
                     $scope.tmpOptions.autoUpgradeIntervalH = $scope.tmpOptions.autoUpgradeIntervalH || 12;
                     $scope.tmpOptions.upgradeToPreReleases = true;
-                    $scope.tmpOptions.urAccepted = $scope.system.urVersionMax;
-                    $scope.tmpOptions.urSeen = $scope.system.urVersionMax;
+                    // desuqcafe: upstream also sets urAccepted/urSeen to
+                    // urVersionMax here, so picking the release-candidate
+                    // upgrade channel silently opts you into usage reporting.
+                    // This is the last path in the GUI that could write a
+                    // telemetry-on value into config.xml, and it is not
+                    // obviously an opt-in from where the user is standing.
+                    // The server would ignore it either way
+                    // (lib/build/desuq_telemetry.go); this keeps config.xml
+                    // from claiming otherwise.
                 } else if ($scope.tmpOptions.upgrades == "stable") {
                     $scope.tmpOptions.autoUpgradeIntervalH = $scope.tmpOptions.autoUpgradeIntervalH || 12;
                     $scope.tmpOptions.upgradeToPreReleases = false;

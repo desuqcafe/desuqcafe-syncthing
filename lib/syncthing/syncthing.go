@@ -285,7 +285,11 @@ func (a *App) startup() error {
 
 	a.cfg.Modify(func(cfg *config.Configuration) {
 		// Candidate builds always run with usage reporting.
-		if build.IsCandidate {
+		// desuqcafe: except this fork, which runs with none. IsCandidate is
+		// strings.Contains(Version, "-rc."), so it is false for our
+		// v2.1.4-desuq.N tags anyway -- but that is a naming convention, and
+		// this is not. See lib/build/desuq_telemetry.go.
+		if build.IsCandidate && build.TelemetryEnabled {
 			slog.Info("Anonymous usage reporting is always enabled for candidate releases")
 			if cfg.Options.URAccepted != ur.Version {
 				cfg.Options.URAccepted = ur.Version

@@ -67,19 +67,15 @@
           </div>
 
           <div class="row">
+            <!-- desuqcafe: upstream's "Anonymous Usage Reporting" dropdown was
+                 here. This build sends none, and the setting could not turn any
+                 back on (lib/build/desuq_telemetry.go), so offering the control
+                 would be offering a switch wired to nothing. -->
             <div class="col-md-6">
               <div class="form-group">
-                <label translate for="urVersion">Anonymous Usage Reporting</label> (<a href="" translate data-toggle="modal" data-target="#urPreview">Preview</a>)
-                <div ng-if="tmpOptions.upgrades != 'candidate' && !version.isCandidate">
-                  <select class="form-control" id="urVersion" ng-model="tmpOptions._urAcceptedStr">
-                    <option ng-repeat="n in urVersions()" value="{{n}}">{{'Version' | translate}} {{n}}</option>
-                    <!-- 1 does not exist, as we did not support incremental formats back then. -->
-                    <option value="0" translate>Undecided (will prompt)</option>
-                    <option value="-1" translate>Disabled</option>
-                  </select>
-                </div>
-                <p class="help-block" ng-if="tmpOptions.upgrades == 'candidate' || version.isCandidate">
-                  <span translate>Usage reporting is always enabled for candidate releases.</span>
+                <label>Telemetry</label>
+                <p class="help-block">
+                  <span class="fas fa-check text-success"></span>&nbsp;<span>This build sends no usage reports, crash reports or panic logs. There is no setting because there is nothing to switch off.</span>
                 </p>
               </div>
             </div>

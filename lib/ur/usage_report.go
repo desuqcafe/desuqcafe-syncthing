@@ -382,6 +382,15 @@ func (s *Service) sendUsageReport(ctx context.Context) error {
 }
 
 func (s *Service) Serve(ctx context.Context) error {
+	// desuqcafe: this fork sends no usage reports. The service is still
+	// constructed and still answers ReportData/ReportDataPreview, because the
+	// GUI's "preview" builds the report locally and that is harmless -- but it
+	// never posts one. See lib/build/desuq_telemetry.go.
+	if !build.TelemetryEnabled {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+
 	s.cfg.Subscribe(s)
 	defer s.cfg.Unsubscribe(s)
 
