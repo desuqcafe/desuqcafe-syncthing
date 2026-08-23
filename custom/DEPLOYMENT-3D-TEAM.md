@@ -947,3 +947,24 @@ instruction rather than a default, and is applied whatever is already there.
 
 `custom/scripts/test-seed-naming.ps1` runs all of that against the real script
 and the real binary in a throwaway directory.
+
+**Watch for this on the next release.** `$SeedVersion` is now 2, so installing
+over an existing machine re-seeds it -- and observed on a real install, that
+renamed the device from `desuq` to `Alex`. The rule worked exactly as written:
+the machine's host name *is* `desuq`, so that is a name `generate` picked
+rather than one a person typed, and the Windows user name replaced it. It is
+still worth knowing that a **deliberately meaningful host name gets treated as
+auto-generated**, because the test cannot tell the two apart. If any of the
+three machines has a host name somebody chose on purpose, set the device name
+explicitly before shipping the upgrade:
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\desuq-syncthing\seed-config.ps1" `
+    -DataDir "$env:LOCALAPPDATA\desuqcafe-syncthing" `
+    -Binary  "$env:LOCALAPPDATA\Programs\desuq-syncthing\desuq-syncthing.exe" `
+    -DeviceName "Studio Workstation" -Force
+```
+
+`-DeviceName` is an instruction rather than a default, so it wins over the
+heuristic and over anything already there. The other two people see whatever
+this ends up as, and a rename is invisible from the machine it happened on.
