@@ -1,0 +1,51 @@
+/* Added by the desuqcafe fork. Upstream has no such directory, so this file
+   cannot conflict on a merge.
+
+   The note that sits under a rate limit and says whether it applies.
+
+   Same convention as handshake.css and selective.css: every colour is
+   var(--v-*, <fallback>), so the violet theme supplies the palette and stock
+   Syncthing's light theme gets a legible stand-in. */
+
+.desuq-lanlimit {
+    display: block;
+    margin: 4px 0 8px;
+    padding: 8px 11px;
+    border-radius: var(--v-radius-sm, 5px);
+    border-left: 3px solid transparent;
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+/* Deliberately not styled as an error. Nothing is broken; the limit is simply
+   narrower than it looks, and a red box here would teach people to dismiss a
+   colour that elsewhere means a folder has failed. */
+.desuq-lanlimit-off {
+    border-left-color: var(--v-warning, #d99414);
+    background: var(--v-surface-sunken, #fdf7e9);
+    color: var(--v-text, #4a3c12);
+}
+
+.desuq-lanlimit-off .fas {
+    color: var(--v-warning-bright, #b07b0c);
+}
+
+.desuq-lanlimit-on {
+    border-left-color: var(--v-accent-strong, #8b5cf6);
+    background: var(--v-surface-sunken, #f7f4ff);
+    color: var(--v-text-muted, #4b4360);
+}
+
+.desuq-lanlimit-on .fas {
+    color: var(--v-accent, #7c4ddb);
+}
+
+/* The sentence about this particular device's live connection. Set apart
+   because it is the concrete half: the rest is policy, this is fact. */
+.desuq-lanlimit-live {
+    display: block;
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid var(--v-border, rgba(0, 0, 0, 0.08));
+    font-weight: 600;
+}

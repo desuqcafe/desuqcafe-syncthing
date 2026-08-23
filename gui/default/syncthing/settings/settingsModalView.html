@@ -210,6 +210,14 @@
               </div>
             </div>
           </div>
+          <!-- desuqcafe fork: a rate limit does nothing on the local network
+               unless the checkbox below is ticked, and nothing said so. -->
+          <div class="row">
+            <div class="col-md-12">
+              <desuq-lan-limit recv="tmpOptions.maxRecvKbps" send="tmpOptions.maxSendKbps"
+                               in-lan="tmpOptions.limitBandwidthInLan"></desuq-lan-limit>
+            </div>
+          </div>
           <div class="row">
             <div class="col-md-6">
               <div class="form-group">

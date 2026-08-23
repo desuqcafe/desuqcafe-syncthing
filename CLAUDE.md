@@ -22,7 +22,7 @@ boring. Concretely:
   `--home`, `STGUIASSETS`, build tags, and the `ST_BRAND_*` env vars.
 - Record any new upstream-file edit in the table in `custom/CUSTOMIZATIONS.md`.
 
-Six upstream files are modified, none by more than a few dozen lines, and every
+Seven upstream files are modified, none by more than a few dozen lines, and every
 edit is additive. `custom/CUSTOMIZATIONS.md` has the table; keep it current.
 Only one of the six — `syncthingController.js` — is edited *inside* an upstream
 function rather than beside one, and that edit is a guarded early return.
@@ -40,6 +40,7 @@ function rather than beside one, and that edit is a guarded early return.
 | `custom/scripts/start-test-pair.ps1` | Two throwaway instances sharing a folder, for two-device testing |
 | `custom/scripts/check-handshake-words.ps1` | Asserts the verification wordlists stay distinct. Run by the build |
 | `custom/scripts/test-selective-render.js` | Drives the selective-sync picker through real Angular and a live instance. Needs jsdom and a running test pair |
+| `custom/scripts/test-lanlimit-render.js` | Renders the LAN rate-limit note through real Angular. Needs jsdom; no instance required |
 | `custom/scripts/disable-inherited-ci.ps1` | Turn off upstream's workflows |
 | `custom/CUSTOMIZATIONS.md` | Divergence register and merge guide |
 | `custom/DEPLOYMENT-3D-TEAM.md` | Recommended config for the target users |

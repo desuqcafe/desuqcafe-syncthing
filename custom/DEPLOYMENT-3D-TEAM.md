@@ -494,7 +494,62 @@ after removal the marker files stay, pointing at an icon that is gone, and
 Explorer silently falls back to the ordinary folder icon. Harmless, but it is
 litter, and worth clearing by hand before uninstalling if it matters.
 
-## 11. What is verified, and what is not
+## 11. Rate limits do nothing on the local network, and nothing said so
+
+`limitBandwidthInLan` defaults to `false`
+(`lib/config/optionsconfiguration.go`), and while it is off the limiter skips
+every connection it considers local:
+
+```go
+// lib/connections/limiter.go
+func (w waiterHolder) unlimited() bool {
+	if w.isLAN && !w.limitsLAN.Load() {
+		return true
+	}
+```
+
+`isLAN` is `c.IsLocal()` from `lib/connections/service.go`. So somebody sets a
+limit, tests it against the machine on the next desk -- or against a second
+instance on loopback, which is also "local" -- sees no effect at all, and
+concludes rate limiting is broken.
+
+Measured, 2 MB over loopback with `maxSendKbps` at 64 KiB/s:
+
+| `limitBandwidthInLan` | Time |
+| --- | --- |
+| `false` (the default) | **1.5 s** |
+| `true` | **25.1 s** |
+
+25 seconds rather than the 32 the arithmetic suggests, because the first
+512 KiB comes out of the limiter's burst allowance
+(`limiterBurstSize = 4 * 128 << 10`) before any throttling begins.
+
+**The default is deliberately left alone.** Throttling LAN transfers is the
+wrong thing for a studio moving tens of gigabytes of textures between machines
+in one room, and for anyone whose colleagues are remote the setting changes
+nothing at all — those connections are not local, so the limit already
+applies. The problem was never the default. It was that the default was
+invisible: the checkbox is three fields below the rate inputs in *Settings →
+Connections*, and in *Edit Device → Advanced* it is not on the screen at all.
+
+So the fork surfaces it instead. Under both pairs of rate fields, and only once
+a limit is actually set, there is now a note saying whether that limit applies:
+
+> **Not applied on the local network.** Only traffic that leaves this network
+> is limited. Change that with "Limit Bandwidth in LAN" in Actions → Settings →
+> Connections.
+> *This device is connected over the local network right now, so nothing is
+> being limited.*
+
+That last sentence is not a guess. `/rest/system/connections` reports `isLocal`
+per connection, from the same `IsLocal()` the limiter consults, so in the
+device editor the note reports what is happening to that device rather than
+what might happen to some device. With the checkbox ticked it flips to
+confirming — "Applies to every connection, including devices on this network" —
+rather than vanishing, because a note that disappears when you fix something
+teaches nobody what they fixed.
+
+## 12. What is verified, and what is not
 
 Verified 2026-08-23 against **two instances on separate ports sharing a real
 folder**, not just single-device:
@@ -546,14 +601,24 @@ folder**, not just single-device:
 - `--clear-folder-icons` was run from the shipped binary with Syncthing
   stopped: marker gone, read-only attribute cleared, icon removed, exit 0.
 
+- The LAN rate-limit note was rendered through real Angular and asserted on,
+  16 checks in `custom/scripts/test-lanlimit-render.js`: that it stays silent
+  until a limit is actually set, that it points at the checkbox below it in
+  Settings and at the other dialogue in the device editor, that it reports a
+  device's live connection but claims nothing about one that has dropped, and
+  that ticking the box turns it into a confirmation rather than making it
+  vanish. The claim itself was measured against the two instances -- the table
+  in section 11 is that measurement, not arithmetic.
+
 **Not verified:** uninstall. It shares `StopRunningInstance` with the upgrade
 path, which is exercised, but the `DelTree` prompt has never been run.
 
-## 12. Things that surprised us, worth knowing before changing anything
+## 13. Things that surprised us, worth knowing before changing anything
 
 - **`limitBandwidthInLan` defaults to `false`.** Rate limits are silently
   ignored on LAN and loopback until it is switched on. If a limit "does not
-  work", this is why.
+  work", this is why. The GUI now says so next to the rate fields; see below
+  for why the default was left where it is.
 - **`/rest/db/browse` returns the *global* tree**, not the local one — it lists
   files the remote has that were never pulled. That is the hook the file picker
   hangs off (see §2).
