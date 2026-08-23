@@ -581,8 +581,9 @@ folder**, not just single-device:
 
 - The selective-sync picker was driven end to end against those two instances
   through real Angular and the real fancytree, with the assertions reading the
-  filesystem rather than the API: 42 checks in
-  `custom/scripts/test-selective-render.js`. The ones that matter are that
+  filesystem rather than the API: 50 checks in
+  `custom/scripts/test-selective-render.js`, which builds its own fixture tree
+  on the sending instance so that it is repeatable. The ones that matter are that
   nothing at all was on disk while the tree was being browsed; that
   `Textures/Source` was **never created**, rather than created and hidden; that
   `asset[1].png` could be excluded without taking `asset1.png` with it; that

@@ -61,6 +61,10 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 const dom = new JSDOM(
     '<!DOCTYPE html><html><body><div id="host">' +
     '<desuq-selective-modal></desuq-selective-modal>' +
+    // The offer in the folder editor's Ignores tab, on a scope standing in for
+    // the folder editor's.
+    '<div id="offer" ng-controller="FolderEditorStub">' +
+    '<desuq-selective-option></desuq-selective-option></div>' +
     '</div></body></html>',
     { runScripts: 'outside-only', pretendToBeVisual: true, url: BASE + '/' }
 );
@@ -154,6 +158,11 @@ angular.module('syncthing.core')
     .run(['$templateCache', function ($templateCache) {
         $templateCache.put('syncthing/desuq/selectiveSyncModalView.html', templateHtml);
     }]);
+
+angular.module('syncthing.core').controller('FolderEditorStub', ['$scope', function ($scope) {
+    // The two flags the directive touches, as the folder editor holds them.
+    $scope.currentFolder = { id: FOLDER, _editing: 'new-pending' };
+}]);
 
 angular.bootstrap(window.document.body, ['syncthing.core']);
 
@@ -290,6 +299,30 @@ async function main() {
     const fixture = await buildFixture();
     console.log('  (fixture on the sender: ' + fixture.localFiles + ' files, ' +
         fixture.localDirectories + ' directories)');
+
+    console.log('\n-- the offer in the folder editor');
+
+    const offer = host.querySelector('#offer');
+    const offerScope = angular.element(offer.querySelector('desuq-selective-option')).scope();
+    const box = offer.querySelector('input[type=checkbox]');
+    check('it renders in the Ignores tab', !!box);
+    check('and says what it will do',
+        /Nothing is downloaded until you choose/.test(offer.textContent), offer.textContent);
+    check('it is off unless asked for', !offerScope.currentFolder._desuqPick);
+
+    // The two options answer the same question, and upstream's flow would
+    // otherwise open its ignore textarea on top of the picker.
+    offerScope.$apply(function () {
+        offerScope.currentFolder._addIgnores = true;
+        offerScope.currentFolder._desuqPick = true;
+        offerScope.desuqPickChanged();
+    });
+    check('choosing the picker turns off "Add ignore patterns"',
+        offerScope.currentFolder._addIgnores === false);
+
+    offerScope.$apply(function () { offerScope.currentFolder._addIgnores = true; });
+    check('and choosing that instead turns the picker back off',
+        offerScope.currentFolder._desuqPick === false);
 
     // Start from nothing, the way a modeller who has just been offered the
     // share does.

@@ -81,6 +81,11 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
 - The branded binary is linked `-H windowsgui`. PowerShell's call operator
   neither waits for it nor sets `$LASTEXITCODE`; use `Start-Process -Wait
   -PassThru`. Same for the tray.
+- Stop the test pair before rebuilding if you pointed it at
+  `custom\dist\desuq-syncthing.exe`. The build fails on `Move-Item -Force`
+  with *"Cannot create a file when that file already exists"*, which is
+  Windows' way of saying the destination is running, not that the flag was
+  missed.
 - `syncthing serve` exits **0** when an instance is already serving that home.
   Anything supervising it must check reachability first, or it respawn-loops.
 - `lib/api/auto/gui.files.go` is gitignored and regenerated whenever `gui/`
