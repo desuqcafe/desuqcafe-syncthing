@@ -78,7 +78,7 @@ warning fires. It is not "before you click accept", but it is still long before
 the disk fills, and it names the exact shortfall instead of leaving the folder
 to wedge at "Out of Sync" with a full drive.
 
-## 2. Selective sync: it exists, but it is ignore patterns
+## 2. Selective sync existed, but only as ignore patterns — now there is a picker
 
 There is no per-file "tick what you want" UI like Dropbox. The mechanisms are:
 
@@ -112,6 +112,82 @@ GUI adds it **paused**, opens the Ignore Patterns tab pre-filled with the
 configured defaults, and only starts syncing once they save. That is a genuinely
 good flow — it means a modeller can deselect the 200 GB of source textures
 *before* anything downloads. It is easy to miss if nobody tells them it is there.
+
+But what it opens is a textarea, and what it wants is globs. For the people
+this fork is for, "deselect the source textures" and "write
+`/Textures/Source`" are not the same instruction, and the second one does not
+get done.
+
+### What the fork does about it
+
+The Ignores tab of the folder editor now offers **Choose what to sync**, and
+the folder panel has a **Choose Files** button that reopens the same picker on
+a folder that already exists. Ticking the option at accept time runs this
+sequence:
+
+1. the folder is added **paused**;
+2. `*` is written as its only ignore line, so it will hold everything back;
+3. it is started. The index arrives; no file data does;
+4. the picker shows the whole remote tree with everything ticked, the weight of
+   the selection against the free space on the target drive, and per-row sizes;
+5. what is left unticked is written back as ignore patterns, and the rest pulls.
+
+Step 2 is the part that makes the rest safe. Between accepting a share and
+choosing what to take from it, **not one byte of content is downloaded** —
+verified with 18 files known and 0 files local, with an empty directory on
+disk, while the entire tree was browsable.
+
+The hook that makes this possible at all is that `/rest/db/browse` calls
+`GlobalDirectoryTree`, which walks the *global* index rather than the local
+disk. It therefore lists files that were never pulled, which is exactly the
+list a picker needs and is not obtainable any other way.
+
+Some deliberate decisions:
+
+- **It writes the paths you did *not* tick, not the ones you did.** A file
+  added remotely inside a directory you kept then arrives on its own, which is
+  what ticking the directory meant. The walk emits the minimal set: a wholly
+  unticked node is one line and its children need none, and only partially
+  ticked directories are descended into — which is also why no `!` re-include
+  lines are ever needed.
+- **The picker owns a marked block and nothing else.** Everything outside
+  `//// desuqcafe selective sync` … `end` is preserved verbatim through every
+  rewrite, so the seeded Blender set from §3 and any `#include` line survive.
+  Managed lines that no longer match anything in the tree are kept rather than
+  dropped, under a comment saying so: silently discarding a rule is how
+  something that was holding back 200 GB quietly stops.
+- **Backing out means "sync everything".** Closing the picker by any route on
+  a freshly accepted share clears the `*`. The alternative is a folder that
+  reports itself perfectly up to date while syncing nothing, forever, which is
+  a far worse failure than downloading more than you meant to.
+- **Past 20,000 files it shows directories only.** Fetching and rendering a
+  six-figure texture library file by file is not something a browser will do
+  well. The count comes from `/rest/db/status` before the tree is fetched, so
+  the oversized fetch never happens. Files sitting outside any directory are
+  kept either way in that mode, and the picker says so.
+- **Names are escaped, with the platform's escape character.** This one is a
+  trap. `asset[1].png` is a glob for `asset1.png`, which in a render output
+  directory is very likely to be the file next to it. And `lib/ignore` picks
+  its escape character at init — backslash normally, but **pipe on Windows**,
+  because backslash is the path separator there. Writing `asset\[1\].png` on
+  Windows does not escape anything: the parser runs `ToSlash` over the line
+  first, so it becomes `asset/[1/].png` and matches nothing at all. An explicit
+  `#escape=` line would settle it, but the parser rejects one that appears
+  after any pattern and ours would have to follow the user's own lines, so the
+  picker asks `/rest/system/version` instead.
+- **A parse error is reported rather than swallowed.** `POST /rest/db/ignores`
+  answers 200 and *then* reports in the body that Syncthing cannot read what it
+  just stored. A folder in that state refuses to scan or pull at all, so
+  letting it pass looks exactly like a folder that simply never syncs.
+
+**Do not put an `#include` in the *defaults*.** It deadlocks every newly
+accepted folder: the included file lives inside the folder, so it cannot arrive
+until the folder syncs, and the folder will not start until the include
+resolves. Syncthing logs `failed to load include file team.stignore: file not
+found` and sits in an error state indefinitely. Add the `#include` line to a
+folder's own patterns *after* its first sync, not to
+*Actions → Advanced → Defaults*. The picker surfaces the error rather than
+appearing to succeed, but it cannot fix it.
 
 ## 3. Default ignore patterns are supported — use them
 
@@ -386,6 +462,17 @@ folder**, not just single-device:
   came through the fork's own `/rest/system/diskfree`; and removing a
   `.stfolder` marker produced the folder-error toast.
 
+- The selective-sync picker was driven end to end against those two instances
+  through real Angular and the real fancytree, with the assertions reading the
+  filesystem rather than the API: 42 checks in
+  `custom/scripts/test-selective-render.js`. The ones that matter are that
+  nothing at all was on disk while the tree was being browsed; that
+  `Textures/Source` was **never created**, rather than created and hidden; that
+  `asset[1].png` could be excluded without taking `asset1.png` with it; that
+  the seeded ignore block survived two rewrites; that dismissing a fresh accept
+  left the folder syncing all 18 files rather than stranded on `*`; and that an
+  unreadable ignore file was reported instead of passing for success.
+
 **Not verified:** uninstall. It shares `StopRunningInstance` with the upgrade
 path, which is exercised, but the `DelTree` prompt has never been run.
 
@@ -395,8 +482,13 @@ path, which is exercised, but the `DelTree` prompt has never been run.
   ignored on LAN and loopback until it is switched on. If a limit "does not
   work", this is why.
 - **`/rest/db/browse` returns the *global* tree**, not the local one — it lists
-  files the remote has that were never pulled. That is the hook any real
-  "tick what you want" selective-sync UI would hang off (see §2).
+  files the remote has that were never pulled. That is the hook the file picker
+  hangs off (see §2).
+- **The ignore-pattern escape character is `|` on Windows, not `\`.**
+  `lib/ignore` swaps it at init because backslash is the path separator.
+  A backslash-escaped pattern on Windows is silently rewritten into a different
+  path and matches nothing (§2).
+- **An `#include` in the default ignores deadlocks every new folder** (§2).
 - **A pending folder carries no size** (§1), so nothing can be decided about
   capacity until the folder actually starts.
 - **`.stfolder` is created hidden**, so a synced folder has *no* visible marker

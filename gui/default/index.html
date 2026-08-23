@@ -26,6 +26,8 @@
   <link href="assets/css/theme.css" rel="stylesheet"/>
   <!-- desuqcafe fork: device verification card -->
   <link href="syncthing/desuq/handshake.css" rel="stylesheet"/>
+  <!-- desuqcafe fork: selective-sync file picker -->
+  <link href="syncthing/desuq/selective.css" rel="stylesheet"/>
 </head>
 
 <body>
@@ -657,6 +659,16 @@
                       <button type="button" class="btn btn-sm btn-default" ng-click="rescanFolder(folder.id)" ng-disabled="['idle', 'stopped', 'unshared', 'outofsync', 'faileditems', 'localadditions'].indexOf(folderStatus(folder)) < 0">
                         <span class="fas fa-refresh"></span>&nbsp;<span translate>Rescan</span>
                       </button>
+                      <!-- desuqcafe fork: reopen the selective-sync picker on a folder that
+                           already exists. Not offered for receive-encrypted folders, where
+                           upstream disables ignore patterns altogether, nor for send-only
+                           ones, where excluding a path would stop us offering it rather
+                           than stop us taking it. -->
+                      <button type="button" class="btn btn-sm btn-default"
+                              ng-if="folder.type == 'sendreceive' || folder.type == 'receiveonly'"
+                              ng-click="desuqSelective.open(folder)" ng-disabled="folder.paused">
+                        <span class="far fa-check-square"></span>&nbsp;<span>Choose Files</span>
+                      </button>
                       <button type="button" class="btn btn-sm btn-default" ng-click="editFolderExisting(folder)">
                         <span class="fas fa-pencil-alt"></span>&nbsp;<span translate>Edit</span>
                       </button>
@@ -1069,6 +1081,9 @@
   <ng-include src="'syncthing/device/removeDeviceDialogView.html'"></ng-include>
   <ng-include src="'syncthing/core/logViewerModalView.html'"></ng-include>
   <ng-include src="'syncthing/device/shareDeviceIdDialogView.html'"></ng-include>
+  <!-- desuqcafe fork: the selective-sync file picker. A directive rather than
+       an ng-include because it owns its own state and lifecycle. -->
+  <desuq-selective-modal></desuq-selective-modal>
 
   <!-- vendor scripts -->
   <script type="text/javascript" src="vendor/jquery/jquery-3.7.1.js"></script>
@@ -1110,6 +1125,7 @@
   <script type="text/javascript" src="syncthing/desuq/diskFreeDirective.js"></script>
   <script type="text/javascript" src="syncthing/desuq/handshakeWords.js"></script>
   <script type="text/javascript" src="syncthing/desuq/deviceHandshakeDirective.js"></script>
+  <script type="text/javascript" src="syncthing/desuq/selectiveSync.js"></script>
   <script type="text/javascript" src="assets/lang/valid-langs.js"></script>
   <script type="text/javascript" src="assets/lang/prettyprint.js"></script>
   <script type="text/javascript" src="meta.js"></script>

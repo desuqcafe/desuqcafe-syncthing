@@ -2676,6 +2676,19 @@ angular.module('syncthing.core')
                 return;
             }
 
+            // desuqcafe fork: "Choose what to sync" was ticked in the Ignores
+            // tab, so the fork's picker owns the rest of this save -- it adds
+            // the folder with everything ignored, waits for the index, and
+            // writes the selection. Both halves of the guard are fork-only:
+            // with gui/default/syncthing/desuq/ removed, nothing ever sets the
+            // flag and nothing publishes the service, so this branch is dead
+            // and the save proceeds exactly as upstream's.
+            if ($scope.currentFolder._desuqPick && $rootScope.desuqSelective) {
+                $rootScope.desuqSelective.acceptAndPick(folderCfg);
+                hideModal('#editFolder');
+                return;
+            }
+
             // This is a new folder where ignores should apply before it first starts.
             if ($scope.currentFolder._addIgnores) {
                 folderCfg.paused = true;

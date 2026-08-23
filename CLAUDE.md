@@ -22,7 +22,10 @@ boring. Concretely:
   `--home`, `STGUIASSETS`, build tags, and the `ST_BRAND_*` env vars.
 - Record any new upstream-file edit in the table in `custom/CUSTOMIZATIONS.md`.
 
-As of now exactly **one** upstream file is modified: `build.go` (16 lines).
+Six upstream files are modified, none by more than a few dozen lines, and every
+edit is additive. `custom/CUSTOMIZATIONS.md` has the table; keep it current.
+Only one of the six — `syncthingController.js` — is edited *inside* an upstream
+function rather than beside one, and that edit is a guarded early return.
 
 ## Layout
 
@@ -36,6 +39,7 @@ As of now exactly **one** upstream file is modified: `build.go` (16 lines).
 | `custom/scripts/sync-upstream.ps1` | Merge upstream and verify the build |
 | `custom/scripts/start-test-pair.ps1` | Two throwaway instances sharing a folder, for two-device testing |
 | `custom/scripts/check-handshake-words.ps1` | Asserts the verification wordlists stay distinct. Run by the build |
+| `custom/scripts/test-selective-render.js` | Drives the selective-sync picker through real Angular and a live instance. Needs jsdom and a running test pair |
 | `custom/scripts/disable-inherited-ci.ps1` | Turn off upstream's workflows |
 | `custom/CUSTOMIZATIONS.md` | Divergence register and merge guide |
 | `custom/DEPLOYMENT-3D-TEAM.md` | Recommended config for the target users |
@@ -99,6 +103,17 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
 - `window.crypto.subtle` is **undefined** in the GUI whenever it is reached at
   anything but `127.0.0.1` over plain http — a LAN address is not a secure
   context. Anything cryptographic in `gui/` has to carry its own implementation.
+- **Ignore patterns escape with `|` on Windows, not `\`.** `lib/ignore` swaps
+  the escape character at init because backslash is the path separator, and a
+  backslash-escaped pattern is silently rewritten into a different path rather
+  than rejected. Ask `/rest/system/version` rather than assuming.
+- `POST /rest/db/ignores` answers **200 and then reports the parse failure in
+  the response body**. A folder whose ignore file will not parse refuses to
+  scan or pull at all, so ignoring that field looks exactly like a folder that
+  never syncs.
+- An `#include` line in the *default* ignores deadlocks every newly accepted
+  folder: the included file is inside the folder, which cannot sync until the
+  include resolves. See `DEPLOYMENT-3D-TEAM.md` section 2.
 - The device-verification wordlists in `gui/default/syncthing/desuq/` are data,
   not prose: a word's *index* is its meaning. Re-ordering a list or inserting
   into the middle of one silently invalidates every verification anyone has

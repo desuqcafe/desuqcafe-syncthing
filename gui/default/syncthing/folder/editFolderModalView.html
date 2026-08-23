@@ -207,6 +207,10 @@
 
         <div id="folder-ignores" class="tab-pane" ng-switch="editingFolderNew()">
           <div ng-switch-when="true">
+            <!-- desuqcafe fork: the alternative to hand-writing globs. Ticking it
+                 hands the rest of the save to the picker; see
+                 gui/default/syncthing/desuq/selectiveSync.js. -->
+            <desuq-selective-option ng-if="!currentFolder._recvEnc"></desuq-selective-option>
             <label>
               <input type="checkbox" ng-model="currentFolder._addIgnores" >&nbsp;<span translate>Add ignore patterns</span>
             </label>

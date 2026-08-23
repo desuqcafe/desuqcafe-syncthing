@@ -1,0 +1,131 @@
+<!-- Added by the desuqcafe fork. Upstream has no such directory, so this file
+     cannot conflict on a merge.
+
+     Deliberately plain Bootstrap markup rather than upstream's <modal>
+     directive: that one calls scope.$parent.modalLoaded(), which gates
+     initController on every <modal> in the page having compiled. Hanging the
+     whole GUI's start-up off a fork template is not a trade worth making. -->
+
+<div class="modal fade desuq-pick" id="desuqSelective" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content desuq-pick-content">
+
+      <div class="modal-header desuq-pick-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+        <div class="desuq-pick-eyebrow">Manifest</div>
+        <h4 class="modal-title desuq-pick-title">{{st.folderLabel}}</h4>
+        <div class="desuq-pick-sub">
+          <span ng-if="st.fresh">This share has been accepted, and nothing has been downloaded yet.</span>
+          <span ng-if="!st.fresh">Tick what this machine should keep a copy of.</span>
+        </div>
+      </div>
+
+      <div class="modal-body desuq-pick-body">
+
+        <!-- Setting up, and waiting for the other device to send its file
+             list. On a fresh accept this is where most of the time goes. -->
+        <div ng-if="st.phase == 'creating' || st.phase == 'starting' || st.phase == 'waiting' || st.phase == 'loading' || st.phase == 'applying'"
+             class="desuq-pick-wait">
+          <div class="desuq-pick-scan"><span></span></div>
+          <div class="desuq-pick-wait-text">
+            <span ng-if="st.phase == 'creating'">Adding the folder with everything held back&hellip;</span>
+            <span ng-if="st.phase == 'starting'">Starting it&hellip;</span>
+            <span ng-if="st.phase == 'waiting'">Waiting for the file list from the other device&hellip;</span>
+            <span ng-if="st.phase == 'loading'">Reading the file list&hellip;</span>
+            <span ng-if="st.phase == 'applying'">Saving your selection&hellip;</span>
+          </div>
+          <div class="desuq-pick-wait-note" ng-if="st.phase == 'waiting'">
+            The other device has to be online and finished scanning before it can
+            say what it has. Nothing is being downloaded while you wait.
+          </div>
+        </div>
+
+        <div ng-if="st.phase == 'error'" class="desuq-pick-error">
+          <span class="fas fa-exclamation-triangle"></span>&nbsp;{{st.error}}
+        </div>
+
+        <div ng-if="st.phase == 'ready'" class="row desuq-pick-grid">
+
+          <div class="col-md-8 desuq-pick-treecol">
+            <div class="desuq-pick-toolbar">
+              <input class="form-control input-sm desuq-pick-filter" type="text"
+                     placeholder="Filter by name" ng-model="filter" ng-change="applyFilter()"/>
+              <button type="button" class="btn btn-xs btn-default" ng-click="svc.selectAll(true)">
+                <span class="far fa-check-square"></span>&nbsp;All
+              </button>
+              <button type="button" class="btn btn-xs btn-default" ng-click="svc.selectAll(false)">
+                <span class="far fa-square"></span>&nbsp;None
+              </button>
+            </div>
+            <div class="desuq-pick-treewrap">
+              <div id="desuqSelectiveTree"></div>
+            </div>
+            <div class="desuq-pick-dirsonly" ng-if="st.dirsOnly">
+              <span class="fas fa-info-circle"></span>&nbsp;This folder holds {{st.globalFiles}}
+              files, too many to list one by one, so the picker is showing directories only.
+              Ticking a directory takes everything in it, and any files sitting outside a
+              directory are kept either way.
+            </div>
+          </div>
+
+          <div class="col-md-4 desuq-pick-payload">
+            <div class="desuq-pick-gauge" ng-class="{'desuq-pick-gauge-empty': st.selectedFiles == 0}">
+              <div class="desuq-pick-gauge-label">Selected</div>
+              <div class="desuq-pick-gauge-value">
+                <span ng-if="!st.dirsOnly">{{st.selectedBytes | binary}}B</span>
+                <span ng-if="st.dirsOnly">{{st.selectedFiles}}</span>
+              </div>
+              <div class="desuq-pick-gauge-of">
+                <span ng-if="!st.dirsOnly">of {{st.totalBytes | binary}}B on offer</span>
+                <span ng-if="st.dirsOnly">of {{st.totalFiles}} items on offer</span>
+              </div>
+              <div class="desuq-pick-meter">
+                <div class="desuq-pick-meter-fill"
+                     ng-style="{width: (st.totalBytes ? (100 * st.selectedBytes / st.totalBytes) : (st.totalFiles ? (100 * st.selectedFiles / st.totalFiles) : 0)) + '%'}"></div>
+              </div>
+              <div class="desuq-pick-gauge-files">
+                {{st.selectedFiles}} of {{st.totalFiles}} items
+                <span class="desuq-pick-all" ng-if="st.everything">&mdash; everything</span>
+              </div>
+            </div>
+
+            <div class="desuq-pick-disk">
+              <disk-free path="st.folderPath" need-bytes="st.selectedBytes"></disk-free>
+            </div>
+
+            <p class="desuq-pick-note">
+              Unticked items are written to this folder's ignore patterns. They stay
+              on the other device; they are simply never pulled here.
+            </p>
+            <p class="desuq-pick-note">
+              This choice is per machine &mdash; ignore patterns are never synced &mdash;
+              so it does not change what anyone else receives.
+            </p>
+            <p class="desuq-pick-note desuq-pick-note-warn" ng-if="!st.fresh && !st.everything">
+              Unticking something that is already on this disk does not delete it.
+              Syncthing stops maintaining it and leaves the copy where it is.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer desuq-pick-footer">
+        <button type="button" class="btn btn-sm btn-default" data-dismiss="modal"
+                ng-if="st.phase == 'error' || st.phase == 'waiting'">
+          <span class="fas fa-times"></span>&nbsp;Close
+        </button>
+        <button type="button" class="btn btn-sm btn-default" ng-click="svc.syncEverything()"
+                ng-if="st.phase == 'ready'">
+          <span class="fas fa-cloud-download-alt"></span>&nbsp;Sync Everything
+        </button>
+        <button type="button" class="btn btn-sm btn-primary desuq-pick-go" ng-click="svc.apply()"
+                ng-if="st.phase == 'ready'" ng-disabled="st.selectedFiles == 0 && !st.dirsOnly">
+          <span class="fas fa-check"></span>&nbsp;Sync Selection
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>

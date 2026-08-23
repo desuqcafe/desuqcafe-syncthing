@@ -1,0 +1,415 @@
+/* Added by the desuqcafe fork. Upstream has no such directory, so this file
+   cannot conflict on a merge.
+
+   The selective-sync picker.
+
+   Same convention as handshake.css: every colour is var(--v-*, <fallback>), so
+   the fork's violet theme supplies the real palette and stock Syncthing's
+   light theme gets a legible stand-in. No images, no fonts, no external
+   requests -- the GUI is served from the machine itself and is expected to
+   work with no network at all.
+
+   The picker is meant to read as a manifest being checked over before it is
+   accepted, rather than as a settings dialogue: the weight of what you have
+   ticked is the largest thing on screen, because on this team the number that
+   matters is how many gigabytes are about to land on a laptop. */
+
+/* ==========================================================================
+   Shell
+   ========================================================================== */
+
+.desuq-pick .desuq-pick-content {
+    border: 1px solid var(--v-border-strong, #cfc3e6);
+    border-radius: var(--v-radius-lg, 12px);
+    overflow: hidden;
+    box-shadow: var(--v-shadow-pop, 0 16px 44px -12px rgba(40, 20, 70, 0.35));
+}
+
+.desuq-pick-header {
+    position: relative;
+    border-bottom: 1px solid var(--v-border, #e0d7f0);
+    background:
+        radial-gradient(120% 180% at 0% 0%,
+            var(--v-accent-wash-strong, rgba(139, 92, 246, 0.22)) 0%,
+            transparent 60%),
+        var(--v-surface-raised, #f6f2fd);
+    padding-bottom: 14px;
+}
+
+/* A hairline of accent along the bottom edge, so the header reads as a plate
+   rather than as the top of a plain box. */
+.desuq-pick-header::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -1px;
+    height: 2px;
+    background: linear-gradient(90deg,
+        var(--v-accent-deep, #6d34d6) 0%,
+        var(--v-accent, #a78bfa) 35%,
+        transparent 90%);
+}
+
+.desuq-pick-eyebrow {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--v-accent, #7c4ddb);
+    margin-bottom: 2px;
+}
+
+.desuq-pick-title.modal-title {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--v-text, #241a35);
+}
+
+.desuq-pick-sub {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--v-text-muted, #6b6280);
+}
+
+.desuq-pick-body {
+    background: var(--v-surface, #fff);
+    padding: 16px 20px;
+}
+
+.desuq-pick-footer {
+    background: var(--v-surface-sunken, #faf7ff);
+    border-top: 1px solid var(--v-border, #e0d7f0);
+}
+
+/* ==========================================================================
+   Waiting
+   ========================================================================== */
+
+.desuq-pick-wait {
+    padding: 44px 24px 52px;
+    text-align: center;
+}
+
+/* A scanline sweeping a track: this state can legitimately last a minute
+   while the other device finishes scanning, and a static "please wait" makes
+   that look like a hang. */
+.desuq-pick-scan {
+    position: relative;
+    width: 260px;
+    height: 3px;
+    margin: 0 auto 22px;
+    border-radius: 3px;
+    overflow: hidden;
+    background: var(--v-surface-hover, #ece4f8);
+}
+
+.desuq-pick-scan > span {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 38%;
+    border-radius: 3px;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        var(--v-accent, #8b5cf6) 50%,
+        transparent 100%);
+    animation: desuq-pick-sweep 1.35s ease-in-out infinite;
+}
+
+@keyframes desuq-pick-sweep {
+    0%   { left: -40%; }
+    100% { left: 102%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .desuq-pick-scan > span {
+        animation: none;
+        left: 31%;
+    }
+}
+
+.desuq-pick-wait-text {
+    font-size: 15px;
+    color: var(--v-text, #241a35);
+}
+
+.desuq-pick-wait-note {
+    margin: 10px auto 0;
+    max-width: 420px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--v-text-muted, #6b6280);
+}
+
+.desuq-pick-error {
+    padding: 26px 22px;
+    border-radius: var(--v-radius, 8px);
+    background: var(--v-surface-sunken, #fdf2f2);
+    border: 1px solid var(--v-danger, #dc4b41);
+    color: var(--v-danger-bright, #b6362d);
+    line-height: 1.55;
+}
+
+/* ==========================================================================
+   Tree
+   ========================================================================== */
+
+.desuq-pick-toolbar {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.desuq-pick-filter {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.desuq-pick-treewrap {
+    height: 380px;
+    overflow: auto;
+    padding: 6px 4px;
+    border: 1px solid var(--v-border, #ddd4ec);
+    border-radius: var(--v-radius, 8px);
+    background: var(--v-surface-sunken, #fcfaff);
+}
+
+/* Rows. Kept tight -- this list is routinely hundreds long and the density is
+   what makes it scannable. */
+.desuq-pick-treewrap .fancytree-node {
+    padding: 1px 6px 1px 0;
+    border-radius: var(--v-radius-sm, 5px);
+    line-height: 22px;
+}
+
+.desuq-pick-treewrap .fancytree-node:hover {
+    background: var(--v-accent-wash, rgba(139, 92, 246, 0.1));
+}
+
+.desuq-pick-treewrap span.fancytree-title {
+    color: var(--v-text, #241a35);
+    padding-left: 6px;
+    word-break: break-word;
+}
+
+.desuq-pick-treewrap .fancytree-expander,
+.desuq-pick-treewrap .fancytree-icon {
+    color: var(--v-text-dim, #9b90b5);
+}
+
+.desuq-pick-treewrap .fancytree-folder > .fancytree-icon {
+    color: var(--v-accent, #8b5cf6);
+}
+
+.desuq-pick-treewrap .fancytree-folder > span.fancytree-title {
+    font-weight: 600;
+}
+
+/* Checkboxes. Selected is accent-filled, indeterminate is the same hue at
+   half weight, so "some of this directory" is distinguishable from both
+   states at a glance rather than only on inspection. */
+.desuq-pick-treewrap .fancytree-checkbox {
+    color: var(--v-text-dim, #b0a5c6);
+    width: 16px;
+    margin-top: 4px;
+    vertical-align: top;
+    display: inline-block;
+}
+
+.desuq-pick-treewrap .fancytree-selected > .fancytree-checkbox,
+.desuq-pick-treewrap .fancytree-partsel > .fancytree-checkbox {
+    color: var(--v-accent-strong, #7c4ddb);
+}
+
+.desuq-pick-treewrap .fancytree-helper-indeterminate-cb {
+    opacity: 0.45;
+}
+
+/* An unticked row is dimmed, so the shape of what is being left behind is
+   visible without reading a single checkbox. */
+.desuq-pick-treewrap .fancytree-node:not(.fancytree-selected):not(.fancytree-partsel)
+    > span.fancytree-title {
+    color: var(--v-text-dim, #a79cbd);
+    text-decoration: line-through;
+    text-decoration-color: var(--v-border-strong, #cabde3);
+}
+
+.desuq-pick-size {
+    float: right;
+    margin-left: 12px;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--v-text-dim, #9b90b5);
+}
+
+.desuq-pick-treewrap .fancytree-node:not(.fancytree-selected):not(.fancytree-partsel)
+    .desuq-pick-size {
+    opacity: 0.5;
+}
+
+.desuq-pick-dirsonly {
+    margin-top: 8px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--v-text-muted, #6b6280);
+}
+
+/* ==========================================================================
+   Payload column
+   ========================================================================== */
+
+.desuq-pick-gauge {
+    position: relative;
+    padding: 16px 16px 14px;
+    border-radius: var(--v-radius, 8px);
+    border: 1px solid var(--v-border, #ddd4ec);
+    background:
+        radial-gradient(140% 120% at 100% 0%,
+            var(--v-accent-wash, rgba(139, 92, 246, 0.16)) 0%,
+            transparent 65%),
+        var(--v-surface-raised, #faf7ff);
+    overflow: hidden;
+}
+
+.desuq-pick-gauge-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--v-text-muted, #6b6280);
+}
+
+/* The headline number. Deliberately the largest thing in the dialogue. */
+.desuq-pick-gauge-value {
+    font-size: 30px;
+    line-height: 1.15;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    color: var(--v-accent-bright, #6d34d6);
+    margin-top: 2px;
+}
+
+.desuq-pick-gauge-empty .desuq-pick-gauge-value {
+    color: var(--v-text-dim, #9b90b5);
+}
+
+.desuq-pick-gauge-of {
+    font-size: 12px;
+    color: var(--v-text-muted, #6b6280);
+}
+
+.desuq-pick-meter {
+    height: 6px;
+    margin: 12px 0 8px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--v-surface-hover, #ece4f8);
+}
+
+.desuq-pick-meter-fill {
+    height: 100%;
+    border-radius: 6px;
+    background: linear-gradient(90deg,
+        var(--v-accent-deep, #6d34d6) 0%,
+        var(--v-accent, #a78bfa) 100%);
+    transition: width 160ms ease;
+}
+
+.desuq-pick-gauge-files {
+    font-size: 12px;
+    color: var(--v-text-muted, #6b6280);
+    font-variant-numeric: tabular-nums;
+}
+
+.desuq-pick-all {
+    color: var(--v-accent, #7c4ddb);
+    font-weight: 600;
+}
+
+.desuq-pick-disk {
+    margin: 12px 2px 14px;
+    font-size: 12px;
+}
+
+.desuq-pick-note {
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: var(--v-text-muted, #6b6280);
+    margin-bottom: 8px;
+}
+
+.desuq-pick-note-warn {
+    color: var(--v-warning-bright, #9a6b06);
+}
+
+.desuq-pick-go {
+    background: var(--v-accent-deep, #6d34d6);
+    border-color: var(--v-accent-deep, #6d34d6);
+}
+
+/* Narrow windows: the payload column drops under the tree, so it needs air
+   above it or it collides with the tree's border. */
+@media (max-width: 991px) {
+    .desuq-pick-payload {
+        margin-top: 16px;
+    }
+    .desuq-pick-treewrap {
+        height: 300px;
+    }
+}
+
+/* ==========================================================================
+   The offer in the folder editor's Ignores tab
+   ========================================================================== */
+
+.desuq-pick-offer {
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    border-radius: var(--v-radius, 8px);
+    border: 1px solid var(--v-border, #ddd4ec);
+    background: var(--v-surface-sunken, #fbf9ff);
+    transition: border-color 120ms ease, background 120ms ease;
+}
+
+.desuq-pick-offer-on {
+    border-color: var(--v-accent-strong, #8b5cf6);
+    background:
+        radial-gradient(120% 160% at 0% 0%,
+            var(--v-accent-wash, rgba(139, 92, 246, 0.16)) 0%,
+            transparent 70%),
+        var(--v-surface-raised, #f6f2fd);
+}
+
+.desuq-pick-offer-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    font-weight: 400;
+    cursor: pointer;
+}
+
+.desuq-pick-offer-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--v-text, #241a35);
+}
+
+.desuq-pick-offer-badge {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 999px;
+    color: var(--v-accent-bright, #5b2fb8);
+    background: var(--v-accent-wash-strong, rgba(139, 92, 246, 0.18));
+}
+
+.desuq-pick-offer-body {
+    margin: 0;
+}

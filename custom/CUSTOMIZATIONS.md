@@ -23,9 +23,10 @@ This is the complete list. Keep it that way, and keep this table current.
 | --- | --- | --- |
 | `build.go` | Added an `envOr()` helper and used it for the six Windows version-resource strings in `shouldBuildSyso()` (product name, publisher, description, internal/original filename, icon). | **Low.** 16 lines in one rarely-touched function. With the `ST_BRAND_*` variables unset the behaviour is byte-for-byte upstream's, so the change is safe to keep across merges. |
 | `lib/api/api.go` | **One line**, registering `GET /rest/system/diskfree`. The handler itself is in a new file, `lib/api/api_diskfree.go`. | **Low.** One entry in a long, alphabetically-ordered, append-only route table. If it ever conflicts the resolution is "keep both sides". |
-| `gui/default/index.html` | Four additive hunks, ~20 lines: a `<link>` and three `<script>` tags for the fork's GUI files, a "Disk Space" row in the folder detail table, and a "Verification" row in the device detail table. | **Low–medium.** The file is large and upstream does edit it, but every hunk is additive and they are far apart. |
-| `gui/default/syncthing/folder/editFolderModalView.html` | Three lines showing free space under the Folder Path field. | **Low.** |
+| `gui/default/index.html` | Seven additive hunks, ~36 lines: two `<link>` and four `<script>` tags for the fork's GUI files, the `<desuq-selective-modal>` element, a "Disk Space" row in the folder detail table, a "Verification" row in the device detail table, and a "Choose Files" button in the folder panel's footer. | **Low–medium.** The file is large and upstream does edit it, but every hunk is additive and they are far apart. |
+| `gui/default/syncthing/folder/editFolderModalView.html` | Seven lines: three showing free space under the Folder Path field, four placing `<desuq-selective-option>` at the top of the Ignores tab. | **Low.** |
 | `gui/default/syncthing/device/editDeviceModalView.html` | Five lines placing the device verification card under the Device ID field. | **Low.** |
+| `gui/default/syncthing/core/syncthingController.js` | **One branch**, 13 lines with the comment, at the top of `saveFolder`'s new-folder handling. It hands the save to the selective-sync picker, and is guarded on both a flag only the fork's directive sets and a service only the fork publishes — so with `syncthing/desuq/` removed it is unreachable and the function is upstream's. | **Low–medium.** The only fork edit inside an upstream *function* rather than beside one. It sits between two comment-led blocks that have been stable for years, and it is a self-contained early return, so a conflict resolves by re-inserting it wherever the equivalent point ends up. |
 
 Everything else the fork adds lives in files upstream does not have, so it
 cannot conflict at all:
@@ -62,6 +63,7 @@ In particular we have **not**:
 | Notification-area icon | `custom/tray/`, **a separate Go module** — see below. It talks to Syncthing only over the REST API. |
 | Desktop notifications | Also `custom/tray/`. It subscribes to Syncthing's `/rest/events` long poll and raises Windows toasts through WinRT. No source change, and no new dependency: WinRT is reached through `combase.dll` with `syscall`, and toast clicks use protocol activation so nothing has to be registered with COM. |
 | Verified device handshake | `gui/default/syncthing/desuq/`, plus five lines in the device modal and one row in the device panel. Entirely client-side: the phrase is a SHA-256 of the two device IDs, computed in the browser, so there is **no new REST route and no server code at all**. See `DEPLOYMENT-3D-TEAM.md` section 9. |
+| Selective sync file picker | `gui/default/syncthing/desuq/selectiveSync.js` and friends, plus the four upstream hunks above. Also **no server code**: it is built entirely out of `/rest/db/browse`, which already serves the *global* tree, and `/rest/db/ignores`. The fancytree it renders in is one upstream already ships for the version restorer. See `DEPLOYMENT-3D-TEAM.md` section 2. |
 
 ## Why the tray is its own Go module
 
