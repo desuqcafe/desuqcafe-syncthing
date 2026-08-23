@@ -70,21 +70,71 @@ jobs:
         shell: pwsh
         run: ./custom/build-windows.ps1 -Version "${{ steps.ver.outputs.version }}" -Installer -SkipTests
 
+      # Only the installer is published. custom/dist also holds the bare daemon
+      # and the tray, which are build intermediates the installer already
+      # carries -- publishing them put three executables on a page the README
+      # sends non-technical people to, two of which they must not download.
       - name: Checksums
         shell: pwsh
         run: |
-          Get-ChildItem custom/dist/*.exe | ForEach-Object {
-            $h = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
-            "$h  $($_.Name)"
-          } | Set-Content custom/dist/SHA256SUMS.txt
+          $setup = Get-ChildItem custom/dist/*-setup-*.exe
+          if ($setup.Count -ne 1) {
+            throw "expected exactly one installer in custom/dist, found $($setup.Count)"
+          }
+          $h = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLower()
+          "$h  $($setup.Name)" | Set-Content custom/dist/SHA256SUMS.txt
           Get-Content custom/dist/SHA256SUMS.txt
 
+      # The artifact keeps everything, including the bare binaries: it is for
+      # debugging a build, not for handing to anybody.
       - uses: actions/upload-artifact@v7
         with:
           name: desuq-syncthing-windows
           path: |
             custom/dist/*.exe
             custom/dist/SHA256SUMS.txt
+
+      # The release body, assembled rather than inlined.
+      #
+      # softprops/action-gh-release ignores `body` entirely when `body_path` is
+      # set -- it is fallback, not a second half -- so the two parts are joined
+      # here instead: what changed, which is written by hand in
+      # custom/RELEASE-NOTES.md, and how to install it, which never changes.
+      - name: Compose release notes
+        shell: pwsh
+        run: |
+          $notes = 'custom/RELEASE-NOTES.md'
+          $out   = 'custom/dist/release-notes.md'
+          if (Test-Path $notes) {
+            Get-Content $notes -Raw | Set-Content $out -Encoding utf8
+          } else {
+            # Thin notes beat a release that failed to publish.
+            Write-Warning "$notes is missing; publishing with the install section only."
+            "desuqcafe Syncthing ${{ steps.ver.outputs.version }}" | Set-Content $out -Encoding utf8
+          }
+          # An array rather than a here-string: a here-string's body has to sit
+          # at column 0, and column 0 inside a YAML block scalar ends the block.
+          $install = @(
+            ''
+            '---'
+            ''
+            '## Installing'
+            ''
+            'Download **`desuq-syncthing-setup-*.exe`** below and run it. No administrator'
+            'rights are needed -- it installs into your own account only.'
+            ''
+            'Windows will warn that the installer is unsigned: **More info -> Run anyway**.'
+            '`SHA256SUMS.txt` is next to it if you would rather check the download first.'
+            ''
+            '**Already have it installed?** Run this installer over the top of it. Your'
+            'device identity, your folders and your settings are all kept.'
+            ''
+            "There is no in-app auto-upgrade: Syncthing verifies updates against upstream's"
+            'signing key, which cannot validate builds from this fork. Updating means'
+            'running a newer installer.'
+          )
+          Add-Content $out -Value $install -Encoding utf8
+          Get-Content $out
 
       - name: Publish release
         if: github.event_name == 'push'
@@ -94,13 +144,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           draft: false
           prerelease: false
-          body: |
-            desuqcafe Syncthing ${{ steps.ver.outputs.version }}
-
-            **Install (Windows):** download `desuq-syncthing-setup-*.exe` and run it.
-            No administrator rights are needed — it installs for the current user only.
-
-            Built with in-app auto-upgrade disabled; update by running a newer installer.
+          body_path: custom/dist/release-notes.md
           files: |
-            custom/dist/*.exe
+            custom/dist/*-setup-*.exe
             custom/dist/SHA256SUMS.txt

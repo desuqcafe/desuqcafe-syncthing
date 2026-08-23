@@ -84,10 +84,28 @@ if (-not $Version) {
 }
 Write-Host "Version: $Version" -ForegroundColor DarkGray
 
-# Inno Setup requires a numeric x.y.z version; derive one from the tag and fall
-# back to 0.0.0 for untagged builds.
-$numeric = '0.0.0'
-if ($Version -match '(\d+)\.(\d+)\.(\d+)') { $numeric = "$($Matches[1]).$($Matches[2]).$($Matches[3])" }
+# Inno Setup and the Windows version resource both want a purely numeric
+# version. Derive one from the tag, falling back to 0.0.0.0 for untagged builds.
+#
+# The fourth component is the N in "-desuq.N", and it is not decoration. Two
+# releases off the same upstream base -- v2.1.4-desuq.1 and v2.1.4-desuq.2 --
+# have identical x.y.z, so a three-part number made them indistinguishable in
+# file properties *and* produced two different installers with the same
+# published filename. The first release of this fork and the second would both
+# have been "desuq-syncthing-setup-2.1.4.exe".
+$verBase = '0.0.0'
+if ($Version -match '(\d+)\.(\d+)\.(\d+)') {
+    $verBase = "$($Matches[1]).$($Matches[2]).$($Matches[3])"
+}
+$verRev = 0
+if ($Version -match '-desuq\.(\d+)') { $verRev = [int]$Matches[1] }
+$numeric = "$verBase.$verRev"
+
+# The installer is named after the tag rather than the numeric version, because
+# the person downloading it is looking for "the one I was told to get" and the
+# tag is what they were told. Anything a file name cannot carry is dropped;
+# in practice a tag has none of it.
+$setupName = "$($Brand.Binary)-setup-" + ($Version -replace '[^A-Za-z0-9._-]', '')
 
 # --- Checks ---------------------------------------------------------------
 
@@ -174,11 +192,15 @@ try {
     # properties and Task Manager as the daemon does. build.go does this for the
     # daemon via goversioninfo; the tray is a separate module, so it gets the
     # same treatment here from the same branding block.
-    $verMajor, $verMinor, $verPatch = $numeric -split '\.'
+    $verMajor, $verMinor, $verPatch, $verBuild = $numeric -split '\.'
+    $fixed = [ordered]@{
+        Major = [int]$verMajor; Minor = [int]$verMinor
+        Patch = [int]$verPatch; Build = [int]$verBuild
+    }
     $versionInfo = [ordered]@{
         FixedFileInfo  = [ordered]@{
-            FileVersion    = [ordered]@{ Major = [int]$verMajor; Minor = [int]$verMinor; Patch = [int]$verPatch }
-            ProductVersion = [ordered]@{ Major = [int]$verMajor; Minor = [int]$verMinor; Patch = [int]$verPatch }
+            FileVersion    = $fixed
+            ProductVersion = $fixed
         }
         StringFileInfo = [ordered]@{
             CompanyName      = $Brand.Company
@@ -225,6 +247,7 @@ if ($Installer) {
     & $iscc `
         "/DMyAppVersion=$numeric" `
         "/DMyAppVersionFull=$Version" `
+        "/DMyAppSetupName=$setupName" `
         "/DMyAppName=$($Brand.Product)" `
         "/DMyAppBinary=$($Brand.Binary)" `
         "/DMyAppPublisher=$($Brand.Company)" `

@@ -17,10 +17,17 @@
   #define MyAppPublisher   "desuqcafe"
 #endif
 #ifndef MyAppVersion
-  #define MyAppVersion     "0.0.0"
+  #define MyAppVersion     "0.0.0.0"
 #endif
 #ifndef MyAppVersionFull
   #define MyAppVersionFull "dev"
+#endif
+; Base name of the installer itself. Named after the tag rather than the
+; numeric version, so two releases off the same upstream base -- desuq.1 and
+; desuq.2, whose x.y.z are identical -- do not publish two different files
+; under one name.
+#ifndef MyAppSetupName
+  #define MyAppSetupName   MyAppBinary + "-setup-" + MyAppVersionFull
 #endif
 #ifndef MyAppUrl
   #define MyAppUrl         "https://github.com/desuqcafe/desuqcafe-syncthing"
@@ -53,7 +60,7 @@ DisableProgramGroupPage=yes
 DisableDirPage=auto
 
 OutputDir=..\dist
-OutputBaseFilename={#MyAppBinary}-setup-{#MyAppVersion}
+OutputBaseFilename={#MyAppSetupName}
 SetupIconFile=..\..\assets\logo.ico
 UninstallDisplayIcon={app}\{#MyAppBinary}.exe
 UninstallDisplayName={#MyAppName}
