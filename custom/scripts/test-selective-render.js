@@ -37,10 +37,17 @@ const desuq = path.join(gui, 'syncthing', 'desuq');
 // Instance B from start-test-pair.ps1 -- the side that receives the share.
 const BASE = process.env.DESUQ_TEST_URL || 'http://127.0.0.1:8391';
 const KEY = process.env.DESUQ_TEST_KEY || 'desuqtestkeyBBBBBBBBBBBBBBBBBBBB';
+// Instance A, the side that offers it. Needed because this test builds its own
+// fixture tree over there rather than relying on whatever happens to be in the
+// shared folder -- start-test-pair only makes six flat files, and a picker
+// test with no directories in it would assert almost nothing.
+const SENDER = process.env.DESUQ_TEST_SENDER_URL || 'http://127.0.0.1:8390';
+const SENDER_KEY = process.env.DESUQ_TEST_SENDER_KEY || 'desuqtestkeyAAAAAAAAAAAAAAAAAAAA';
 const FOLDER = 'assets-test';
-const DATA = path.join(
-    process.env.TEMP || process.env.TMP || '/tmp',
-    'desuq-syncthing-testpair', 'dataB', 'assets');
+const PAIR_ROOT = path.join(
+    process.env.TEMP || process.env.TMP || '/tmp', 'desuq-syncthing-testpair');
+const DATA = path.join(PAIR_ROOT, 'dataB', 'assets');
+const SOURCE = path.join(PAIR_ROOT, 'dataA', 'assets');
 
 let failures = 0;
 function check(name, ok, detail) {
@@ -189,16 +196,57 @@ async function waitFor(what, predicate, timeoutMs) {
     return false;
 }
 
-function api(method, p, body) {
-    return fetch(BASE + p, {
+function call(base, key, method, p, body) {
+    return fetch(base + p, {
         method: method,
-        headers: Object.assign({ 'X-API-Key': KEY },
+        headers: Object.assign({ 'X-API-Key': key },
             body ? { 'Content-Type': 'application/json' } : {}),
         body: body ? JSON.stringify(body) : undefined
     }).then(async r => {
         const t = await r.text();
         try { return JSON.parse(t); } catch (e) { return t; }
     });
+}
+
+function api(method, p, body) { return call(BASE, KEY, method, p, body); }
+function sender(method, p, body) { return call(SENDER, SENDER_KEY, method, p, body); }
+
+// Deterministic bytes, so a rerun does not depend on the machine's entropy --
+// but *different* per file, because Syncthing reconstructs a file from blocks
+// the receiver already holds rather than transferring it, and identical
+// payloads would quietly stop being transfers at all.
+function payload(size, seed) {
+    const b = Buffer.alloc(size);
+    let x = seed >>> 0;
+    for (let i = 0; i < size; i++) {
+        x = (x * 1664525 + 1013904223) >>> 0;
+        b[i] = x >>> 24;
+    }
+    return b;
+}
+
+// The fixture the picker is tested against: nested directories, a file at the
+// root, and a name that is itself a glob for the file next to it.
+async function buildFixture() {
+    const dirs = ['Characters/Hero', 'Characters/Villain', 'Environments/Forest',
+        'Textures/Source', 'Textures/Baked'];
+    let seed = 1;
+    for (const d of dirs) {
+        fs.mkdirSync(path.join(SOURCE, d), { recursive: true });
+        for (const n of ['asset1.png', 'asset2.png']) {
+            fs.writeFileSync(path.join(SOURCE, d, n), payload(512 * 1024, seed++));
+        }
+    }
+    fs.writeFileSync(path.join(SOURCE, 'README.txt'), 'top level file');
+    fs.writeFileSync(path.join(SOURCE, BRACKET_NAME), payload(256 * 1024, seed++));
+
+    await sender('POST', '/rest/db/scan?folder=' + FOLDER);
+    for (let i = 0; i < 40; i++) {
+        await sleep(1000);
+        const s = await sender('GET', '/rest/db/status?folder=' + FOLDER);
+        if (s.state === 'idle' && s.localFiles >= 18) { return s; }
+    }
+    throw new Error('the sender never finished indexing the fixture');
 }
 
 function tree() {
@@ -232,11 +280,16 @@ async function main() {
     console.log('Selective sync, through Angular and fancytree, against ' + BASE);
 
     const ping = await api('GET', '/rest/system/ping').catch(() => null);
-    if (!ping || !ping.ping) {
-        console.error('Instance B is not answering on ' + BASE + '.');
+    const pingA = await sender('GET', '/rest/system/ping').catch(() => null);
+    if (!ping || !ping.ping || !pingA || !pingA.ping) {
+        console.error('The test pair is not answering on ' + SENDER + ' and ' + BASE + '.');
         console.error('Run:  .\\custom\\scripts\\start-test-pair.ps1 -Fresh -WithFolder');
         process.exit(2);
     }
+
+    const fixture = await buildFixture();
+    console.log('  (fixture on the sender: ' + fixture.localFiles + ' files, ' +
+        fixture.localDirectories + ' directories)');
 
     // Start from nothing, the way a modeller who has just been offered the
     // share does.
