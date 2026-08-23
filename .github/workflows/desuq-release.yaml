@@ -106,7 +106,13 @@ jobs:
           $notes = 'custom/RELEASE-NOTES.md'
           $out   = 'custom/dist/release-notes.md'
           if (Test-Path $notes) {
-            Get-Content $notes -Raw | Set-Content $out -Encoding utf8
+            # Strip the leading HTML comment. Markdown hides it when rendered,
+            # but it is still in the body the API serves and in every "view
+            # source" of the release, and it is a note to whoever edits the
+            # file rather than to anybody reading the release.
+            $raw = Get-Content $notes -Raw
+            $raw = [regex]::Replace($raw, '^\s*<!--.*?-->\s*', '', 'Singleline')
+            $raw | Set-Content $out -Encoding utf8
           } else {
             # Thin notes beat a release that failed to publish.
             Write-Warning "$notes is missing; publishing with the install section only."

@@ -19,10 +19,10 @@ installing for the first time, this is the one to install.
   working — upstream has no tray icon and no service mode, so started at
   sign-in it was completely invisible. Right-click for **Open**, **Pause
   Syncing** and **Quit**.
-- **Windows notifications** for the five things that actually need a person: a
+- **Windows notifications** for the six things that actually need a person: a
   device asking to connect, a folder being offered, a sync finishing, a folder
-  in trouble, and a disk about to fill. Every one is rate-limited and clicks
-  through to the page that can act on it.
+  in trouble, a disk about to fill, and a teammate on a newer version. Every
+  one is rate-limited and clicks through to the page that can act on it.
 - **Synced folders look synced in Explorer** — a violet folder icon on every
   one, written per user with no shell extension, no COM registration and no
   administrator.
