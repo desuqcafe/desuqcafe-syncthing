@@ -1,110 +1,153 @@
-[![Syncthing][14]][15]
+# desuqcafe Syncthing
+
+A fork of [Syncthing](https://github.com/syncthing/syncthing), packaged as a
+**per-user Windows installer** for a small team sharing large binary assets —
+`.blend` files, textures, renders.
+
+The syncing is upstream's, unchanged: the same peer-to-peer protocol, the same
+end-to-end encryption, the same no-server-in-the-middle design. What is
+different is everything around it. It installs without an administrator, it
+puts an icon in the notification area and tells you when something happens, it
+lets you tick which files you want *before* any of them download, and it sends
+nothing to anybody.
+
+[![desuq tests](https://github.com/desuqcafe/desuqcafe-syncthing/actions/workflows/desuq-test.yaml/badge.svg)](https://github.com/desuqcafe/desuqcafe-syncthing/actions/workflows/desuq-test.yaml)
+[![MPLv2 License](https://img.shields.io/badge/license-MPLv2-blue.svg?style=flat-square)](https://www.mozilla.org/MPL/2.0/)
 
 ---
 
-[![MPLv2 License](https://img.shields.io/badge/license-MPLv2-blue.svg?style=flat-square)](https://www.mozilla.org/MPL/2.0/)
-[![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/88/badge)](https://bestpractices.coreinfrastructure.org/projects/88)
-[![Go Report Card](https://goreportcard.com/badge/github.com/syncthing/syncthing)](https://goreportcard.com/report/github.com/syncthing/syncthing)
+## Install it (Windows 10/11, 64-bit)
 
-## Goals
+1. Download **`desuq-syncthing-setup-*.exe`** from the
+   [latest release](https://github.com/desuqcafe/desuqcafe-syncthing/releases/latest).
+2. Run it. **No administrator rights are needed** — it installs into your own
+   account and asks for nothing.
+3. Windows will probably say *"Windows protected your PC"*. That is because the
+   installer is not code-signed, not because anything is wrong with it. Click
+   **More info**, then **Run anyway**. If you would rather check first, every
+   release ships a `SHA256SUMS.txt` next to the installer.
+4. Leave both tickboxes as they are and click through. It opens the web
+   interface for you when it finishes.
 
-Syncthing is a **continuous file synchronization program**. It synchronizes
-files between two or more computers. We strive to fulfill the goals below.
-The goals are listed in order of importance, the most important ones first.
-This is the summary version of the goal list - for more
-commentary, see the full [Goals document][13].
+That is the whole installation. There is no service to configure, no account to
+create, and nothing to sign in to.
 
-Syncthing should be:
+### What you get
 
-1. **Safe From Data Loss**
+- **A violet icon by the clock**, bottom-right. That icon *is* the app — it
+  starts Syncthing, keeps it running, and is the only thing on screen that says
+  whether syncing is working. Right-click it for **Open**, **Pause Syncing** and
+  **Quit**. Quitting stops syncing until you sign in again.
+- **It starts by itself when you sign in.** You should not have to think about
+  it again.
+- **Windows notifications** when something actually needs you: a new device
+  wants to connect, someone has offered you a folder, a sync finished, a folder
+  is in trouble, the disk is nearly full. Nothing else — see
+  [§8](custom/DEPLOYMENT-3D-TEAM.md#8-nothing-reached-the-user-unless-the-gui-was-open---now-it-does)
+  for why the list is deliberately that short.
+- **Synced folders look different in Explorer** — a violet folder with a sync
+  ring, so you can tell at a glance which folder is the shared one.
+- **Sensible defaults already set**: 30 days of file history, a 20 GB disk
+  reserve, and Blender's `.blend1`/`.blend2` backups excluded so they do not
+  churn across the network.
 
-   Protecting the user's data is paramount. We take every reasonable
-   precaution to avoid corrupting the user's files.
+Everything lives in `%LOCALAPPDATA%\desuqcafe-syncthing`, which is why a stock
+Syncthing can be installed alongside this one without the two interfering.
 
-2. **Secure Against Attackers**
+To remove it: **Settings → Apps → desuqcafe Syncthing → Uninstall**. Your files
+are never touched, and your configuration is kept unless you tick the box that
+says otherwise.
 
-   Again, protecting the user's data is paramount. Regardless of our other
-   goals, we must never allow the user's data to be susceptible to
-   eavesdropping or modification by unauthorized parties.
+## What this fork adds
 
-3. **Easy to Use**
+| | What | Detail |
+| --- | --- | --- |
+| **Installs like an app** | Per-user Windows installer. No administrator, no service, no command line. Starts at sign-in. | [`installer.iss`](custom/installer/installer.iss) |
+| **You can see it running** | A notification-area icon with five states, which also supervises Syncthing and restarts nothing behind your back. Upstream has no tray icon and no service mode: started at sign-in it is completely invisible, and if it stops, nothing says so. | [§7](custom/DEPLOYMENT-3D-TEAM.md#7-nothing-showed-that-syncthing-was-running--now-the-tray-does) |
+| **It tells you things** | Real Windows toasts for five events, every one rate-limited, each click-through to the page that can act on it. Upstream has a full event stream and no notifications of any kind. | [§8](custom/DEPLOYMENT-3D-TEAM.md#8-nothing-reached-the-user-unless-the-gui-was-open---now-it-does) |
+| **Choose what to sync** | A real file picker over the *global* tree. Accepting a share holds everything back, the index arrives, you tick what you want, and only then does any file data move. Upstream's answer is a textarea full of globs. | [§2](custom/DEPLOYMENT-3D-TEAM.md#2-selective-sync-existed-but-only-as-ignore-patterns--now-there-is-a-picker) |
+| **Disk space you can see** | Free space shown under the folder path and in the folder detail, and a warning when a folder will not fit. Upstream checks capacity per file and never up front, so a 400 GB share can be accepted onto a 250 GB drive. | [§1](custom/DEPLOYMENT-3D-TEAM.md#1-disk-space-the-check-is-weaker-than-it-looks) |
+| **Verified device handshake** | Both devices show the same collectible card — `《 CRIMSON TALISMAN NOCTURNE 》Rank CLXXVI` — derived from the two device IDs. Read it to each other on a call. Confirming means picking the right card out of three, because a checkbox saying "it matched" gets ticked by reflex. | [§9](custom/DEPLOYMENT-3D-TEAM.md#9-adding-a-device-is-mutual-but-it-is-not-authentication) |
+| **Folders look synced** | A violet folder icon in Explorer for every synced folder. No shell extension, no COM registration, no administrator. | [§10](custom/DEPLOYMENT-3D-TEAM.md#10-a-synced-folder-looked-like-any-other-folder--now-it-does-not) |
+| **Rate limits that admit the truth** | Upstream ignores rate limits on the local network by default and says so nowhere, so people conclude the feature is broken. The limit fields now carry a note saying whether the limit applies — and in the device editor, whether it is applying *right now*. | [§11](custom/DEPLOYMENT-3D-TEAM.md#11-rate-limits-do-nothing-on-the-local-network-and-nothing-said-so) |
+| **No telemetry at all** | Not a setting: a compile-time constant every reporter consults. See below. | [§12](custom/DEPLOYMENT-3D-TEAM.md#12-syncthing-phoned-home-on-a-crash-and-never-asked) |
+| **Defaults for this work** | Staggered versioning at 30 days, a 20 GB absolute disk reserve, the Blender ignore set, the violet theme, and a device named after you rather than `DESKTOP-A1B2C3`. Seeded into `config.xml` before Syncthing first starts. | [seed-config.ps1](custom/scripts/seed-config.ps1) |
+| **Violet** | A theme for the web interface, seeded as the default, plus the tray and folder icons to match. | [`gui/violet/`](gui/violet) |
 
-   Syncthing should be approachable, understandable, and inclusive.
+## What it deliberately does not do
 
-4. **Automatic**
+- **It sends no telemetry, and that is a constant rather than a setting.**
+  Upstream has three reporters gated by two options, and the third — the
+  panic-log upload — is **on by default and never asks**: a stock build that
+  crashes uploads goroutine stacks and the tail of its log, which for us means
+  folder names and paths. All three now consult
+  `const TelemetryEnabled = false`, the consent modal and the settings control
+  are gone with them, and three tests assert the wire stays silent with every
+  telemetry option forced *on*.
+- **No in-app auto-upgrade.** Syncthing verifies upgrades against upstream's
+  signing key, which cannot validate builds from this fork — leaving it on would
+  either fail or quietly replace this build with stock Syncthing. Update by
+  running a newer installer.
+- **The installer is not code-signed**, which is why Windows warns about it.
+- **Global discovery and relays are still on.** They are a much larger
+  third-party surface than the telemetry ever was, and turning them off is still
+  the wrong call: they are load-bearing, and their failure mode is silent and
+  indistinguishable from the other machine being switched off.
+  [§14](custom/DEPLOYMENT-3D-TEAM.md#14-global-discovery-and-relays-a-bigger-surface-and-a-different-question)
+  has the reasoning and what to do instead.
+- **Windows only.** The installer, the tray, the notifications and the folder
+  icons are all Win32. For any other platform, use
+  [upstream Syncthing](https://syncthing.net/) — it is the same protocol and the
+  two interoperate.
 
-   User interaction should be required only when absolutely necessary.
+## Relationship to upstream Syncthing
 
-5. **Universally Available**
+This is a fork of [syncthing/syncthing](https://github.com/syncthing/syncthing),
+and almost all of the code here is theirs. Twelve upstream files carry fork
+edits; everything else the fork adds lives in files upstream does not have —
+`custom/`, `gui/violet/`, `gui/default/syncthing/desuq/` and a handful more.
+[`custom/CUSTOMIZATIONS.md`](custom/CUSTOMIZATIONS.md) lists every one of those
+edits, what it does, and how a conflict resolves.
 
-   Syncthing should run on every common computer. We are mindful that the
-   latest technology is not always available to every individual.
+Please do not take fork problems to upstream:
 
-6. **For Individuals**
+- **A bug in this fork** → [this issue tracker](https://github.com/desuqcafe/desuqcafe-syncthing/issues).
+- **A bug in Syncthing itself** → the [Syncthing forum](https://forum.syncthing.net/)
+  or [upstream's tracker](https://github.com/syncthing/syncthing/issues), and a
+  security vulnerability in Syncthing to security@syncthing.net as their
+  [README](https://github.com/syncthing/syncthing/blob/main/README.md) asks.
+  That address is upstream's, not ours.
+- **How Syncthing works** → the [Syncthing documentation](https://docs.syncthing.net/)
+  applies to this build too. Upstream's goals are in [GOALS.md](GOALS.md), and
+  [README-Docker.md](README-Docker.md) documents upstream's Docker image, which
+  this fork does not build or change.
 
-   Syncthing is primarily about empowering the individual user with safe,
-   secure, and easy to use file synchronization.
+## Building from source
 
-7. **Everything Else**
+Needs [Go](https://go.dev/dl/) (the version in [`go.mod`](go.mod)) and
+[Inno Setup 6](https://jrsoftware.org/isdl.php). The build script provisions
+`goversioninfo` itself.
 
-   There are many things we care about that don't make it on to the list. It
-   is fine to optimize for these values, as long as they are not in conflict
-   with the stated goals above.
+```powershell
+.\custom\build-windows.ps1 -Installer     # binary + installer into custom\dist
+.\custom\scripts\run-tests.ps1            # all eight suites; -Quick for the fast six
+```
 
-## Getting Started
+`go run build.go` still builds a stock, unbranded Syncthing binary the way
+upstream's does.
 
-Take a look at the [getting started guide][2].
+The three documents worth reading before changing anything:
 
-There are a few examples for keeping Syncthing running in the background
-on your system in [the etc directory][3]. There are also several [GUI
-implementations][11] for Windows, Mac, and Linux.
+| | |
+| --- | --- |
+| [`CLAUDE.md`](CLAUDE.md) | How to work in this repository, and the gotchas that cost somebody an afternoon |
+| [`custom/CUSTOMIZATIONS.md`](custom/CUSTOMIZATIONS.md) | Every divergence from upstream, and the merge plan |
+| [`custom/DEPLOYMENT-3D-TEAM.md`](custom/DEPLOYMENT-3D-TEAM.md) | What the fork adds, why each thing exists, and what is verified against a running pair rather than assumed |
 
-## Docker
+## Licence
 
-To run Syncthing in Docker, see [the Docker README][16].
+All code is licensed under the [MPLv2 License](LICENSE), as upstream's is.
 
-## Getting in Touch
-
-The first and best point of contact is the [Forum][8].
-If you've found something that is clearly a
-bug, feel free to report it in the [GitHub issue tracker][10].
-
-If you believe that you’ve found a Syncthing-related security vulnerability,
-please report it by emailing security@syncthing.net. Do not report it in the
-Forum or issue tracker.
-
-## Building
-
-Building Syncthing from source is easy. After extracting the source bundle from
-a release or checking out git, you just need to run `go run build.go` and the
-binaries are created in `./bin`. There's [a guide][5] with more details on the
-build process.
-
-## Signed Releases
-
-Release binaries are GPG signed with the key available from
-https://syncthing.net/security/. There is also a built-in automatic
-upgrade mechanism (disabled in some distribution channels) which uses a
-compiled in ECDSA signature. macOS and Windows binaries are also
-code-signed.
-
-## Documentation
-
-Please see the Syncthing [documentation site][6] [[source]][17].
-
-All code is licensed under the [MPLv2 License][7].
-
-[1]: https://docs.syncthing.net/specs/bep-v1.html
-[2]: https://docs.syncthing.net/intro/getting-started.html
-[3]: https://github.com/syncthing/syncthing/blob/main/etc
-[5]: https://docs.syncthing.net/dev/building.html
-[6]: https://docs.syncthing.net/
-[7]: https://github.com/syncthing/syncthing/blob/main/LICENSE
-[8]: https://forum.syncthing.net/
-[10]: https://github.com/syncthing/syncthing/issues
-[11]: https://docs.syncthing.net/users/contrib.html#gui-wrappers
-[13]: https://github.com/syncthing/syncthing/blob/main/GOALS.md
-[14]: assets/logo-text-128.png
-[15]: https://syncthing.net/
-[16]: https://github.com/syncthing/syncthing/blob/main/README-Docker.md
-[17]: https://github.com/syncthing/docs
+Syncthing is copyright the Syncthing Authors — see [AUTHORS](AUTHORS) — and this
+fork keeps their licence, their copyright notices and their protocol. It is not
+affiliated with or endorsed by the Syncthing project.

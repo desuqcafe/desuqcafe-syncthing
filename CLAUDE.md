@@ -32,13 +32,18 @@ future `git merge upstream/main` is work you can plan rather than a surprise:
   A line in the root `go.mod`/`go.sum` is a conflict on every upstream
   dependency bump: a recurring tax for a one-off convenience.
 
-Twelve upstream files carry fork edits today, 159 insertions against 51
+Thirteen upstream files carry fork edits today, 307 insertions against 156
 deletions. Stripping the telemetry is what changed the character of that: it
 is the first work that had to *delete* upstream behaviour rather than sit
 beside it, because there is no additive way to remove a consent nag or a
-settings control that no longer does anything. Four of the twelve rows in
-`CUSTOMIZATIONS.md` are marked **Medium** for that reason; the rest still
-resolve by keeping both sides.
+settings control that no longer does anything. Four rows in
+`CUSTOMIZATIONS.md` are marked **Medium** for that reason.
+
+`README.md` is the thirteenth, added last and the only row marked **High**:
+it is a full rewrite, so every upstream README change conflicts. That was
+chosen rather than accepted — the file has no behaviour and nothing reads it,
+so a conflict costs one discarded diff, and "keep ours" is always the answer.
+Everything else still resolves by keeping both sides.
 
 ## Layout
 

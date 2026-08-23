@@ -46,31 +46,40 @@ Keep this table current. It is the only place the merge cost is written down.
 | `cmd/syncthing/monitor.go` | **One guard**, 7 lines, at the top of `maybeReportPanics`. This is the reporter upstream leaves *on*. | **Low.** Additive, first statement of the function. |
 | `lib/syncthing/syncthing.go` | **One condition**, `if build.IsCandidate` becomes `if build.IsCandidate && build.TelemetryEnabled`, plus four comment lines. | **Low.** One token on one line. If it conflicts, re-add the conjunct. |
 | `gui/default/syncthing/settings/settingsModalView.html` (2) | Upstream's "Anonymous Usage Reporting" `<select>` replaced by a static note saying the build sends none. | **Low–medium.** This one *replaces* rather than inserts. A conflict resolves by deleting upstream's control again. |
+| `README.md` | **Rewritten, not appended to.** Upstream's landing page replaced by the fork's: what this is, an install a non-technical reader can follow, a table of what the fork adds linking into `DEPLOYMENT-3D-TEAM.md`, what it deliberately does not do, and where to take a bug. Upstream's goals, documentation, forum and security address are linked rather than inlined. | **High, and knowingly so** — see below. Every upstream README edit conflicts. The resolution is always "keep ours": nothing reads this file, so a stale merge costs one discarded diff. Read their side only for a link worth carrying over. |
 
-## One upstream file we have deliberately *not* touched yet
+## Why the README is a rewrite
 
-`README.md` is still upstream Syncthing's, unmodified. That is now a known
-problem rather than a decision: this repository's GitHub landing page reads as
-though it *is* Syncthing, with nothing at the top saying what the fork is, who
-it is for, or how to install it without a command line.
+This is the fork's highest-conflict file by some distance, and it is the one
+place where taking the conflict is obviously right.
 
-It is called out here rather than just done because it is the fork's
-**highest-conflict edit by some distance**, and the shape is worth choosing
-deliberately:
+The choice was between rewriting and a fork header sitting above upstream's
+content. The header conflicts far less, but it reads like a patch set on
+somebody else's product, and it leaves the two people this fork exists for —
+non-technical modellers who need "download, run, no administrator" — scrolling
+past Syncthing's goal list and `go run build.go` to find out whether they are
+in the right place. Both audiences the file has, the ten-second visitor and the
+modeller, are served worse by every line of upstream's that stays.
 
-- **Rewrite it.** Far better for anyone arriving at the page, and the honest
-  representation of a fork that is becoming its own product. Every future
-  upstream README change conflicts, but resolving is always "keep ours" and
-  the file has no behaviour, so a stale merge costs nothing but a diff to
-  discard.
-- **Fork header above upstream's content.** Conflicts far less, and keeps
-  upstream's goals and build instructions available. Reads like a patch set
-  rather than a product, which is no longer what this is.
+Against that, the merge cost is close to nothing in kind even though it is
+certain in frequency: `README.md` has no behaviour, nothing in the tree reads
+it, and no test depends on it. A conflict here can only ever cost a diff to
+look at and discard, which is the cheapest conflict there is.
 
-Whichever is chosen, it goes in the table above with that reasoning, and the
-**MPLv2 notice and the attribution to upstream Syncthing stay intact** — that
-is a licence obligation, not a courtesy. `README-Docker.md` wants a decision
-at the same time; a Windows-only per-user installer has no use for it.
+What upstream's README carried that is worth keeping is carried as links, not
+as text: the documentation site, the forum, `GOALS.md`, and **their** security
+address, which the new file is explicit about being upstream's rather than
+ours. The **MPLv2 notice and the attribution to the Syncthing Authors stay**,
+because that is a licence obligation rather than a courtesy.
+
+**`README-Docker.md` is deliberately left alone**, which was the other half of
+the decision. Deleting it would be the tidy-looking move — a Windows-only
+per-user installer has no use for Docker — but it buys nothing and costs
+something. It would introduce a modify/delete conflict class the fork does not
+have today, it would delete a document that is still perfectly accurate about
+upstream's published image, and it would be incoherent while all seven
+`Dockerfile*`s remain in the tree. So it stays, unlinked from anywhere except
+one line in the new README saying whose image it documents.
 
 Everything else the fork adds lives in files upstream does not have, so it
 cannot conflict at all:
@@ -86,8 +95,9 @@ cannot conflict at all:
 | `cmd/syncthing/desuq_telemetry_test.go` | Asserts no panic log is uploaded |
 | `.github/workflows/desuq-test.yaml` | Runs every suite; reusable, so the release gates on it |
 
-Where the fork stands today: **159 inserted lines against 51 deleted**, across
-those twelve files.
+Where the fork stands today: **307 inserted lines against 156 deleted**, across
+those thirteen files. Half of that is the README, which replaced 105 lines with
+148 of its own.
 
 Up to the telemetry work almost every edit was inserted *beside* upstream's
 code rather than in place of it, which is why merges had been boring. Stripping
@@ -97,8 +107,10 @@ release-candidate upgrade channel quietly opts you in. There was no additive
 way to remove a control, and a switch left on screen wired to nothing would
 have been worse than a merge conflict.
 
-So the four rows marked **Medium** above are the ones to read before a merge.
-Everything else still resolves by keeping both sides.
+So before a merge there are two things to read: the four rows marked
+**Medium**, which are removals inside upstream functions and resolve by
+deleting their side again, and the README, which is **High** and resolves by
+keeping ours every time. Everything else still resolves by keeping both sides.
 
 ## How the branding is done without touching upstream
 
