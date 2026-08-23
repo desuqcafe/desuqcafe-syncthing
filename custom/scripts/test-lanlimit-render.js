@@ -54,7 +54,7 @@ const angular = window.angular;
 angular.module('syncthing.core', []);
 window.eval(fs.readFileSync(path.join(desuq, 'lanLimitDirective.js'), 'utf8'));
 
-const PEER = 'FPO7Q4M-MRCMFBX-J6USL2R-AMFSYOJ-3Z6QEFP-HT56GPB-4KPIAV6-MFOSUAU';
+const PEER = 'DOTXM4D-P5KQMPR-E4GKNVC-P56RCRR-HEFJ4NT-IDLZTFD-ETSTCJN-X7BGOAJ';
 
 angular.module('syncthing.core').controller('TestCtrl', ['$scope', function ($scope) {
     $scope.recv = 0;

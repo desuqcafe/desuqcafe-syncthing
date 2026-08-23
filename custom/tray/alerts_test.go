@@ -263,7 +263,7 @@ func TestDiskWarningIsPerDrive(t *testing.T) {
 }
 
 func TestVolumeOf(t *testing.T) {
-	if got := volumeOf(`C:\Users\Alex\Assets`); got != "C:" {
+	if got := volumeOf(`C:\Users\Modeller\Assets`); got != "C:" {
 		t.Errorf("volumeOf = %q, want C:", got)
 	}
 }

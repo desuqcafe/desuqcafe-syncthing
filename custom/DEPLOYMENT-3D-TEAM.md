@@ -950,11 +950,12 @@ and the real binary in a throwaway directory.
 
 **Watch for this on the next release.** `$SeedVersion` is now 2, so installing
 over an existing machine re-seeds it -- and observed on a real install, that
-renamed the device from `desuq` to `Alex`. The rule worked exactly as written:
-the machine's host name *is* `desuq`, so that is a name `generate` picked
-rather than one a person typed, and the Windows user name replaced it. It is
-still worth knowing that a **deliberately meaningful host name gets treated as
-auto-generated**, because the test cannot tell the two apart. If any of the
+renamed the device from the machine's host name to the Windows user name. The
+rule worked exactly as written: the device name still matched `os.Hostname()`,
+so it counted as a name `generate` picked rather than one a person typed, and
+the user name replaced it. That machine's host name had in fact been chosen
+deliberately, which is the finding: a **deliberately meaningful host name gets
+treated as auto-generated**, because the test cannot tell the two apart. If any of the
 three machines has a host name somebody chose on purpose, set the device name
 explicitly before shipping the upgrade:
 

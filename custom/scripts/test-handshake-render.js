@@ -49,9 +49,9 @@ angular.module('syncthing.core', []);
 window.eval(fs.readFileSync(path.join(desuq, 'handshakeWords.js'), 'utf8'));
 window.eval(fs.readFileSync(path.join(desuq, 'deviceHandshakeDirective.js'), 'utf8'));
 
-const ID_SELF = 'A4F454V-3C73UF5-BDUQ6CH-Y4DTSND-B4ODDZK-F3E3CL3-36TLXUE-RZ47VQM';
-const ID_PEER = 'ONJMGXO-DTKYWNV-5VVAL6R-SWIPFSU-RRGPGHW-IKPOTDO-XDFBAEK-UJP6DAW';
-const ID_OTHER = '5GPBTOE-SWYHRWH-J3HOAG7-YPLFEYX-LTWC5OA-GLHVAYJ-7TFKA4B-254GHQY';
+const ID_SELF = 'RZAJ5B5-27A7VV3-YKNLPEN-XNCBYFW-GCPS5Z5-G37WIZQ-A6QRJ56-WHPUXQJ';
+const ID_PEER = 'XJXAFN4-GWDLBZX-MWGHOJB-VLKE4ZS-DK7V6CK-Y4BZIKR-5YRQPT5-LP2ZSQF';
+const ID_OTHER = '2FGMV2I-HEBG5DU-72FQ7O7-E6IKBAK-ICDG7YI-SYX3GXD-7BQ4XON-KXXT5Q6';
 
 angular.module('syncthing.core').controller('TestCtrl', ['$scope', function ($scope) {
     $scope.myID = ID_SELF;
@@ -97,17 +97,26 @@ console.log('  phrase     : ' + phrase);
 console.log('  rank line  : ' + rankLine);
 console.log('');
 
+// The known answer for ID_SELF paired with ID_PEER, written out rather than
+// asked of the module, so that this asserts the whole pipeline -- hash, word
+// lookup, rank, template -- rather than that the template agrees with itself.
+// Change the fixture IDs above and these four values must be recomputed; the
+// test prints what it got, so the run that fails also tells you the answer.
+var WANT_WORDS = ['AWAKENED', 'ANNAL', 'UMBRAGRASP'];
+var WANT_RANK_ROMAN = 'CXXIII';
+var WANT_RANK_NUMBER = '123';
+
 check('phrase shows all three words',
-    phrase.indexOf('CRIMSON') >= 0 && phrase.indexOf('TALISMAN') >= 0 && phrase.indexOf('NOCTURNE') >= 0, phrase);
+    WANT_WORDS.every(function (w) { return phrase.indexOf(w) >= 0; }), phrase);
 check('decorative brackets rendered', phrase.indexOf('《') >= 0 && phrase.indexOf('》') >= 0);
 check('rank shown as numeral and as a number',
-    rankLine.indexOf('CLXXVI') >= 0 && rankLine.indexOf('176') >= 0, rankLine);
+    rankLine.indexOf(WANT_RANK_ROMAN) >= 0 && rankLine.indexOf(WANT_RANK_NUMBER) >= 0, rankLine);
 
 // The card face must carry the same identity as the text beside it, or the
 // two could disagree and there would be no way to tell which was right.
 check('card face repeats the same three words',
-    cardWords.indexOf('CRIMSON') >= 0 && cardWords.indexOf('TALISMAN') >= 0 && cardWords.indexOf('NOCTURNE') >= 0, cardWords);
-check('card face repeats the same rank', cardRank === 'CLXXVI', cardRank);
+    WANT_WORDS.every(function (w) { return cardWords.indexOf(w) >= 0; }), cardWords);
+check('card face repeats the same rank', cardRank === WANT_RANK_ROMAN, cardRank);
 check('card face names a rarity tier', /^(COMMON|RARE|EPIC|LEGENDARY)$/.test(tier), tier);
 
 // The sigil is the third encoding of the same bytes.
@@ -189,7 +198,7 @@ check('returning to a confirmed pair restores the tick', iso.confirmed === true)
 
 // Half-typed input must render nothing rather than a card built from a partial
 // ID, which would show a phrase that means nothing.
-rootScope.$apply(function () { rootScope.peer = 'A4F454V'; });
+rootScope.$apply(function () { rootScope.peer = 'RZAJ5B5'; });
 check('a half-typed ID renders no card at all', card(full) === null);
 
 rootScope.$apply(function () { rootScope.peer = ID_SELF; });

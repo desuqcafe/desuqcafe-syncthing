@@ -75,9 +75,9 @@ check('SHA-256 matches Node crypto on ' + vectors.length + ' vectors', shaBad ==
 
 // --- the handshake -------------------------------------------------------
 
-const A = 'A4F454V-3C73UF5-BDUQ6CH-Y4DTSND-B4ODDZK-F3E3CL3-36TLXUE-RZ47VQM';
-const B = 'ONJMGXO-DTKYWNV-5VVAL6R-SWIPFSU-RRGPGHW-IKPOTDO-XDFBAEK-UJP6DAW';
-const C = '5GPBTOE-SWYHRWH-J3HOAG7-YPLFEYX-LTWC5OA-GLHVAYJ-7TFKA4B-254GHQY';
+const A = 'RZAJ5B5-27A7VV3-YKNLPEN-XNCBYFW-GCPS5Z5-G37WIZQ-A6QRJ56-WHPUXQJ';
+const B = 'XJXAFN4-GWDLBZX-MWGHOJB-VLKE4ZS-DK7V6CK-Y4BZIKR-5YRQPT5-LP2ZSQF';
+const C = '2FGMV2I-HEBG5DU-72FQ7O7-E6IKBAK-ICDG7YI-SYX3GXD-7BQ4XON-KXXT5Q6';
 
 const ab = handshake.of(A, B);
 const ba = handshake.of(B, A);
@@ -92,7 +92,7 @@ const ac = handshake.of(A, C);
 check('a different peer gives a different phrase', ac.phrase !== ab.phrase || ac.rank !== ab.rank);
 
 check('a device paired with itself is rejected', handshake.of(A, A) === null);
-check('a half-typed ID is rejected', handshake.of(A, 'A4F454V-CXE4TYJ') === null);
+check('a half-typed ID is rejected', handshake.of(A, 'RZAJ5B5-27A7VV3') === null);
 check('empty input is rejected', handshake.of(A, '') === null && handshake.of('', B) === null);
 check('valid() accepts a real ID', handshake.valid(A) === true);
 check('valid() rejects a short one', handshake.valid('ABC') === false);
