@@ -129,10 +129,12 @@ $null = New-Item -ItemType Directory -Force -Path $Root
 
 # --- generate ------------------------------------------------------------
 
+$generated = @{}
 foreach ($n in $Nodes) {
     $home2 = Home-For $n.Name
     $null = New-Item -ItemType Directory -Force -Path $home2, (Data-For $n.Name)
     if (Test-Path -LiteralPath (Join-Path $home2 'config.xml')) { continue }
+    $generated[$n.Name] = $true
 
     Write-Host "Generating keys for instance $($n.Name)..."
     # -H windowsgui: the call operator neither waits nor sets $LASTEXITCODE.
@@ -173,10 +175,15 @@ foreach ($n in $Nodes) {
     # The default 60 s makes every test a waiting game.
     Set-Single $x '/configuration/options/reconnectionIntervalS' '10'
     # `generate` creates a default folder; drop it so tests start from nothing.
-    foreach ($f in @($x.SelectNodes('/configuration/folder'))) { $null = $f.ParentNode.RemoveChild($f) }
+    # Only on the run that generated this config: without the guard, restarting
+    # the pair without -Fresh deleted every folder the previous run had set up,
+    # including the one -WithFolder makes, and left a pair that connects and
+    # shares nothing while claiming to have started normally.
+    if ($generated[$n.Name]) {
+        foreach ($f in @($x.SelectNodes('/configuration/folder'))) { $null = $f.ParentNode.RemoveChild($f) }
+    }
     $x.Save($cfg)
 
-    $ids[$n.Name] = ($x.configuration.device | Select-Object -First 1).id
 }
 
 # --- start ---------------------------------------------------------------
@@ -198,6 +205,16 @@ Write-Host ''
 foreach ($n in $Nodes) {
     if (-not (Test-Up $n)) { throw "Instance $($n.Name) did not come up. See $Root\st$($n.Name).log" }
 }
+
+# Ask each instance who it is, rather than reading the first <device> out of
+# its config.xml. After the first run that file holds two devices, sorted by
+# ID, so "the first one" is whichever of the pair sorts lower -- and on a
+# restart without -Fresh both instances were reported as, and paired against,
+# the same device.
+foreach ($n in $Nodes) {
+    $ids[$n.Name] = (Api -Node $n -Path '/rest/system/status').myID
+}
+if ($ids['A'] -eq $ids['B']) { throw "Both instances report device ID $($ids['A']); the homes are not distinct." }
 
 # --- pair them -----------------------------------------------------------
 #
