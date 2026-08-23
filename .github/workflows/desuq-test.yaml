@@ -58,7 +58,7 @@ jobs:
       # directory rather than reinstalling 30 MB of transitive dependencies on
       # every run.
       - name: Cache jsdom
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/desuq-jsdom
           key: desuq-jsdom-${{ runner.os }}-v1
