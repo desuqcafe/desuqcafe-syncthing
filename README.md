@@ -42,7 +42,8 @@ create, and nothing to sign in to.
   it again.
 - **Windows notifications** when something actually needs you: a new device
   wants to connect, someone has offered you a folder, a sync finished, a folder
-  is in trouble, the disk is nearly full. Nothing else — see
+  is in trouble, the disk is nearly full, a teammate is on a newer version.
+  Nothing else — see
   [§8](custom/DEPLOYMENT-3D-TEAM.md#8-nothing-reached-the-user-unless-the-gui-was-open---now-it-does)
   for why the list is deliberately that short.
 - **Synced folders look different in Explorer** — a violet folder with a sync
@@ -64,12 +65,14 @@ says otherwise.
 | --- | --- | --- |
 | **Installs like an app** | Per-user Windows installer. No administrator, no service, no command line. Starts at sign-in. | [`installer.iss`](custom/installer/installer.iss) |
 | **You can see it running** | A notification-area icon with five states, which also supervises Syncthing and restarts nothing behind your back. Upstream has no tray icon and no service mode: started at sign-in it is completely invisible, and if it stops, nothing says so. | [§7](custom/DEPLOYMENT-3D-TEAM.md#7-nothing-showed-that-syncthing-was-running--now-the-tray-does) |
-| **It tells you things** | Real Windows toasts for five events, every one rate-limited, each click-through to the page that can act on it. Upstream has a full event stream and no notifications of any kind. | [§8](custom/DEPLOYMENT-3D-TEAM.md#8-nothing-reached-the-user-unless-the-gui-was-open---now-it-does) |
+| **It tells you things** | Real Windows toasts for six events, every one rate-limited, each click-through to the page that can act on it. Upstream has a full event stream and no notifications of any kind. | [§8](custom/DEPLOYMENT-3D-TEAM.md#8-nothing-reached-the-user-unless-the-gui-was-open---now-it-does) |
+| **It shows you what to do first** | A four-step setup guide on a fresh install: name this machine, send your code, check it is really them, choose what to sync. Every step is closeable and comes back where it left off. Upstream's first-run screen is an empty folder list, with the device code you need behind *Actions → Show ID*. | [§16](custom/DEPLOYMENT-3D-TEAM.md#16-the-first-ten-minutes-were-an-empty-screen) |
 | **Choose what to sync** | A real file picker over the *global* tree. Accepting a share holds everything back, the index arrives, you tick what you want, and only then does any file data move. Upstream's answer is a textarea full of globs. | [§2](custom/DEPLOYMENT-3D-TEAM.md#2-selective-sync-existed-but-only-as-ignore-patterns--now-there-is-a-picker) |
 | **Disk space you can see** | Free space shown under the folder path and in the folder detail, and a warning when a folder will not fit. Upstream checks capacity per file and never up front, so a 400 GB share can be accepted onto a 250 GB drive. | [§1](custom/DEPLOYMENT-3D-TEAM.md#1-disk-space-the-check-is-weaker-than-it-looks) |
 | **Verified device handshake** | Both devices show the same collectible card — `《 CRIMSON TALISMAN NOCTURNE 》Rank CLXXVI` — derived from the two device IDs. Read it to each other on a call. Confirming means picking the right card out of three, because a checkbox saying "it matched" gets ticked by reflex. | [§9](custom/DEPLOYMENT-3D-TEAM.md#9-adding-a-device-is-mutual-but-it-is-not-authentication) |
 | **Folders look synced** | A violet folder icon in Explorer for every synced folder. No shell extension, no COM registration, no administrator. | [§10](custom/DEPLOYMENT-3D-TEAM.md#10-a-synced-folder-looked-like-any-other-folder--now-it-does-not) |
 | **Rate limits that admit the truth** | Upstream ignores rate limits on the local network by default and says so nowhere, so people conclude the feature is broken. The limit fields now carry a note saying whether the limit applies — and in the device editor, whether it is applying *right now*. | [§11](custom/DEPLOYMENT-3D-TEAM.md#11-rate-limits-do-nothing-on-the-local-network-and-nothing-said-so) |
+| **You are told when there is an update** | The tray notices when a machine you sync with is running a newer build and says so. It does this **without contacting anything** — Syncthing already reports every connected device's version, so there is no releases API to poll and no signing key to guard. | [§17](custom/DEPLOYMENT-3D-TEAM.md#17-nothing-ever-said-a-new-version-existed) |
 | **No telemetry at all** | Not a setting: a compile-time constant every reporter consults. See below. | [§12](custom/DEPLOYMENT-3D-TEAM.md#12-syncthing-phoned-home-on-a-crash-and-never-asked) |
 | **Defaults for this work** | Staggered versioning at 30 days, a 20 GB absolute disk reserve, the Blender ignore set, the violet theme, and a device named after you rather than `DESKTOP-A1B2C3`. Seeded into `config.xml` before Syncthing first starts. | [seed-config.ps1](custom/scripts/seed-config.ps1) |
 | **Violet** | A theme for the web interface, seeded as the default, plus the tray and folder icons to match. | [`gui/violet/`](gui/violet) |
@@ -87,7 +90,8 @@ says otherwise.
 - **No in-app auto-upgrade.** Syncthing verifies upgrades against upstream's
   signing key, which cannot validate builds from this fork — leaving it on would
   either fail or quietly replace this build with stock Syncthing. Update by
-  running a newer installer.
+  running a newer installer over the top of the old one; your device identity,
+  folders and settings are kept. The tray will tell you when there is one.
 - **The installer is not code-signed**, which is why Windows warns about it.
 - **Global discovery and relays are still on.** They are a much larger
   third-party surface than the telemetry ever was, and turning them off is still
@@ -103,7 +107,7 @@ says otherwise.
 ## Relationship to upstream Syncthing
 
 This is a fork of [syncthing/syncthing](https://github.com/syncthing/syncthing),
-and almost all of the code here is theirs. Twelve upstream files carry fork
+and almost all of the code here is theirs. Thirteen upstream files carry fork
 edits; everything else the fork adds lives in files upstream does not have —
 `custom/`, `gui/violet/`, `gui/default/syncthing/desuq/` and a handful more.
 [`custom/CUSTOMIZATIONS.md`](custom/CUSTOMIZATIONS.md) lists every one of those

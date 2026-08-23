@@ -344,6 +344,7 @@ on the thing being reported.
 | Sync complete | A folder that was behind reaches zero | 10 s settle, then one toast for all folders that finished; 2 min per folder |
 | Problem with *folder* | A folder enters the error state | One per folder per 30 min, reset when it recovers |
 | Disk nearly / completely full | Free space falls under twice the folder's reserve | One per **drive** per 6 h, reset when space recovers |
+| An update is available | A device you sync with is running a newer build of this fork | One per version per 24 h (§17) |
 
 **The restraint is the feature.** `LocalChangeDetected` fires once per file and
 `FolderSummary` every few seconds per folder; a naive "toast on interesting
@@ -671,7 +672,8 @@ folder**, not just single-device:
   changes. The in-page SHA-256 matches Node's `crypto` byte for byte, and
   across 20,000 synthetic pairs every one of the 256 values in each of the
   four positions is reachable with no collisions, so the space really is 2^32.
-- **All five notifications fired end to end against those two instances**, and
+- **All five of the original notifications fired end to end against those two
+  instances**, and
   were confirmed on screen. In order: an unknown device dialling in raised one
   toast despite Syncthing emitting the underlying event ten times; the folder
   offer named the offering device and the folder label; the completion toast
@@ -791,16 +793,43 @@ folder**, not just single-device:
   large entries are still PNG, because regenerating with that branch dropped
   would look like nothing at all except a much larger binary.
 
+- The first-run guide was driven through real Angular against canned REST
+  responses: 34 checks in `custom/scripts/test-wizard-render.js`. The ones that
+  matter are that it does **not** open over a machine that already has a device
+  or a folder; that closing it remembers the step without marking it finished,
+  while *Done* stops it opening itself again for good; that each step's tick
+  follows the real state rather than what was clicked; and that the Copy button
+  works through `execCommand` with no `navigator.clipboard` present, which is
+  the path that runs at any LAN address. The wording of the sentence the whole
+  handshake depends on -- read it on a call, not in the chat that carried the
+  code -- is asserted rather than left to survive an edit.
+
+- The update notice was run for real, on **two instances built from two
+  different tags**: a pair on `v2.1.4-desuq.2` and `v2.1.4-desuq.3`, with the
+  tray attached to the older one. `/rest/system/connections` on the older
+  machine reported the newer peer's `clientVersion` verbatim, and bouncing the
+  connection produced exactly the intended toast --
+
+  > **An update is available**
+  > Yuki Laptop is running v2.1.4-desuq.3 and you have v2.1.4-desuq.2. Click to
+  > download the new installer.
+
+  -- and then a second reconnect produced **no** second toast, which is the
+  cooldown doing its job. The rule that carries the feature -- that a peer
+  running **stock** Syncthing can never trigger it, at any version -- has its
+  own test case, because getting it wrong produces a permanent, unactionable
+  notice pointing at a release that does not exist.
+
 **Not verified:** the `DelTree` branch of uninstall -- the one that runs when
 somebody answers *Yes* to "also delete your configuration and database". Every
 other path through the uninstaller has now been run against a live install.
 
 **Not verified:** anything about layout or paint. Every GUI check in this
-document -- the picker, the verification card, the LAN note, the telemetry
-removals -- was made through real Angular, real fancytree and the real REST
-API under jsdom, or by reading what the server served. jsdom does not lay out
-or paint, so what is asserted is structure and behaviour, not appearance. No
-browser has rendered any of it.
+document -- the picker, the verification card, the LAN note, the first-run
+guide, the telemetry removals -- was made through real Angular, real fancytree
+and the real REST API under jsdom, or by reading what the server served. jsdom
+does not lay out or paint, so what is asserted is structure and behaviour, not
+appearance. No browser has rendered any of it.
 
 ## 14. Global discovery and relays: a bigger surface, and a different question
 
@@ -891,6 +920,131 @@ explains why a laptop stopped syncing at home.
   call `CoInitializeEx` first or it will conclude the feature is broken while
   Explorer shows the icon perfectly well. It also caches per path, so probing a
   folder *before* customising it poisons the answer you get afterwards.
+
+## 16. The first ten minutes were an empty screen
+
+Everything above improves a screen somebody has already found. This is about
+the screen they land on, and it was the worst one in the product.
+
+A modeller who has just run the installer gets: an empty folder list with an
+*Add Folder* button, a device panel showing only their own machine, and nothing
+else. There is no next action anywhere on it. Worse, the one thing they
+actually need in order to make progress -- their device code, to send to
+whoever is sharing files with them -- is behind a menu called **Actions**,
+under an entry called **Show ID**, in a dialogue that also offers to share it
+by SMS.
+
+That is where the install ends and the phone call to the developer starts, and
+it happens to every new machine.
+
+**What the fork does about it**
+
+A four-step guide, opened automatically the first time and reachable
+afterwards from *Actions → Setup guide*:
+
+| | Step | Done when |
+| --- | --- | --- |
+| 1 | **Name this machine** | always; it is prefilled with the seeded name |
+| 2 | **Send your code** -- the device ID large, with Copy and the QR upstream already serves at `/qr/` | somebody adds this device, or asks to connect to it |
+| 3 | **Check it is really them** -- the verification card from §9, with the "read it on a call" warning | a card has been confirmed |
+| 4 | **Choose what to sync** -- what a folder offer looks like, and the button that hands it to the picker from §2 | a folder exists |
+
+The steps tick themselves off against the actual state of the world rather than
+against what the person has clicked, so reopening it a week later shows what is
+genuinely still outstanding.
+
+Some deliberate decisions:
+
+- **It never traps anybody.** Three of the four steps cannot be completed by
+  the person in front of the screen: they complete when somebody else adds
+  them, calls them, or shares a folder. Step 2 in particular will routinely sit
+  unfinished until tomorrow. So the guide closes on Escape, on the backdrop and
+  on an explicit *Finish this later*, remembers the step it was on, and reopens
+  there. A wizard that demands a third party's attention before it will release
+  the screen is worse than no wizard: the tab gets closed and never reopened.
+- **It does not open over a working setup.** If the machine already has a
+  device or a folder, the person found their own way here and a modal on top of
+  it is an interruption. Only *Actions → Setup guide* opens it then.
+- **Only "Done" on the last step stops it coming back by itself.** Closing is
+  not the same as finishing, and neither is reaching step 4.
+- **It reads its state over REST, not off `syncthingController`'s scope.** That
+  keeps the merge cost to four additive lines in `index.html`, and it is what
+  lets `custom/scripts/test-wizard-render.js` drive the whole thing through
+  real Angular without standing up the controller.
+- **Step 4 does not re-implement accepting a folder.** It calls upstream's own
+  `addFolderAndShare`, passed in as a binding, so the path and folder-type
+  defaults stay upstream's and the picker keeps working exactly as it does from
+  the offer bar.
+- **The Copy button carries the `execCommand` fallback.** `navigator.clipboard`
+  is undefined outside a secure context, and the GUI is routinely opened at
+  `http://192.168.x.x` from the machine next door -- the same trap that made
+  the handshake carry its own SHA-256 (§9). That fallback is not legacy
+  support here; it is the path that runs for half the users.
+
+**What it does not do.** It does not gate anything, it does not configure
+anything beyond the device name, and it cannot make the other person add you.
+It is a signpost on a screen that had none.
+
+## 17. Nothing ever said a new version existed
+
+In-app auto-upgrade is compiled out of this fork, and has to be: Syncthing
+verifies downloads against upstream's release signing key, which cannot
+validate our builds. Leaving it on would either fail or quietly replace this
+build with stock Syncthing.
+
+Installing a newer version over an older one works, and is verified -- the Inno
+`AppId` is fixed, so it is recognised as an upgrade; the installer stops the
+tray and the daemon first so nothing is locked; `key.pem`, `cert.pem` and
+`config.xml` survive; and the seed script no-ops unless its `$SeedVersion` has
+been bumped. Even the *Start automatically when I sign in* choice is restored,
+because Inno records the selected tasks in the uninstall key.
+
+The gap was never the mechanism. It was that **nothing anywhere told anybody a
+newer version existed**, so an install ran the version it was given forever,
+until a human was handed a new installer and watched running it.
+
+**What the fork does about it**
+
+The tray compares itself to the machines it is already talking to.
+
+Syncthing's Hello message carries the client version, `lib/model` puts it in
+`ConnectionStats`, and `/rest/system/connections` has served it all along --
+upstream's own GUI shows it in the device detail table. So when a connected
+device is running a newer build of this fork, the tray says so and the toast
+opens the releases page.
+
+The obvious alternative was polling GitHub's releases API. It was rejected:
+the README's central claim is that this build contacts nobody, and a daily
+request to `api.github.com` carrying the user's IP would be a footnote on that
+claim forever -- for information that was already on the wire.
+
+Some deliberate decisions:
+
+- **A peer on stock Syncthing can never trigger it.** Upstream's release train
+  runs ahead of whatever base version this fork sits on, so a modeller
+  connected to somebody on plain Syncthing 2.3.0 would otherwise be told
+  forever to update to something that does not exist. Only versions carrying
+  this fork's own `-desuq.N` suffix are compared at all.
+- **A build made between tags is never nagged.** That is the developer's own
+  machine, they know what they are running, and `git describe`'s suffix sorts
+  oddly against the tags by design.
+- **One toast per version, with a day's cooldown.** Every reconnect re-checks;
+  a version that was newer an hour ago is not more true for being repeated.
+  A *different*, newer version still gets through inside the cooldown.
+- **Nothing is fetched.** The releases URL is the only external address in the
+  tray and it is only ever handed to a browser by somebody clicking the toast.
+
+**What it does not do.** It cannot fire before a peer connects, so a machine
+sitting alone stays quiet -- which for this team is right, because a machine
+with no peers has nothing to be out of date *for*. It also fires in the order
+this actually happens: the person who cuts the releases upgrades first, and the
+other two find out from their own machines rather than from a message they have
+to be online to read.
+
+The real alternative, if this ever stops being enough, is the one previously
+ruled out of scope: our own signing key, signing each release, and replacing
+`SigningKey` in `lib/upgrade`. That is a feature with a private key to guard,
+not a config change.
 
 ## Recommended configuration
 

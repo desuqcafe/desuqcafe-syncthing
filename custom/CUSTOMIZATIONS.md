@@ -34,7 +34,7 @@ Keep this table current. It is the only place the merge cost is written down.
 | --- | --- | --- |
 | `build.go` | Added an `envOr()` helper and used it for the six Windows version-resource strings in `shouldBuildSyso()` (product name, publisher, description, internal/original filename, icon). | **Low.** 16 lines in one rarely-touched function. With the `ST_BRAND_*` variables unset the behaviour is byte-for-byte upstream's, so the change is safe to keep across merges. |
 | `lib/api/api.go` | **One line**, registering `GET /rest/system/diskfree`. The handler itself is in a new file, `lib/api/api_diskfree.go`. | **Low.** One entry in a long, alphabetically-ordered, append-only route table. If it ever conflicts the resolution is "keep both sides". |
-| `gui/default/index.html` | Eight additive hunks, ~41 lines, plus one removal (the two `<ng-include>`s for upstream's usage-report modals, replaced by a comment saying why): three `<link>` and five `<script>` tags for the fork's GUI files, the `<desuq-selective-modal>` element, a "Disk Space" row in the folder detail table, a "Verification" row in the device detail table, and a "Choose Files" button in the folder panel's footer. | **Low–medium.** The file is large and upstream does edit it, but every hunk is additive and they are far apart. |
+| `gui/default/index.html` | Twelve additive hunks, ~62 lines, plus one removal (the two `<ng-include>`s for upstream's usage-report modals, replaced by a comment saying why): four `<link>` and six `<script>` tags for the fork's GUI files, the `<desuq-selective-modal>` and `<desuq-first-run-wizard>` elements, a "Setup guide" entry in the Actions menu, a "Disk Space" row in the folder detail table, a "Verification" row in the device detail table, and a "Choose Files" button in the folder panel's footer. | **Low–medium.** The file is large and upstream does edit it, but every hunk is additive and they are far apart. |
 | `gui/default/syncthing/folder/editFolderModalView.html` | Seven lines: three showing free space under the Folder Path field, four placing `<desuq-selective-option>` at the top of the Ignores tab. | **Low.** |
 | `gui/default/syncthing/device/editDeviceModalView.html` | Ten lines: five placing the device verification card under the Device ID field, five placing `<desuq-lan-limit>` under the per-device rate limits. | **Low.** |
 | `gui/default/syncthing/settings/settingsModalView.html` | Seven lines placing `<desuq-lan-limit>` between the rate fields and the "Limit Bandwidth in LAN" checkbox. | **Low.** |
@@ -88,6 +88,8 @@ cannot conflict at all:
 | --- | --- |
 | `lib/api/api_diskfree.go` | The `/rest/system/diskfree` handler |
 | `gui/default/syncthing/desuq/` | The fork's Angular directives, its wordlists and its CSS |
+| `custom/tray/update.go` | The peer-version comparison behind the "an update is available" toast |
+| `custom/scripts/test-wizard-render.js` | Drives the first-run wizard through real Angular |
 | `gui/violet/` | The violet theme |
 | `custom/` | Everything else |
 | `lib/build/desuq_telemetry.go` | The `TelemetryEnabled` constant all three reporters consult |
@@ -95,9 +97,9 @@ cannot conflict at all:
 | `cmd/syncthing/desuq_telemetry_test.go` | Asserts no panic log is uploaded |
 | `.github/workflows/desuq-test.yaml` | Runs every suite; reusable, so the release gates on it |
 
-Where the fork stands today: **307 inserted lines against 156 deleted**, across
-those thirteen files. Half of that is the README, which replaced 105 lines with
-148 of its own.
+Where the fork stands today: **324 inserted lines against 156 deleted**, across
+those thirteen files. Nearly half of that is the README, which replaced 105
+lines with 148 of its own.
 
 Up to the telemetry work almost every edit was inserted *beside* upstream's
 code rather than in place of it, which is why merges had been boring. Stripping
@@ -128,6 +130,8 @@ keeping ours every time. Everything else still resolves by keeping both sides.
 | Desktop notifications | Also `custom/tray/`. It subscribes to Syncthing's `/rest/events` long poll and raises Windows toasts through WinRT. No source change, and no new dependency: WinRT is reached through `combase.dll` with `syscall`, and toast clicks use protocol activation so nothing has to be registered with COM. |
 | Verified device handshake | `gui/default/syncthing/desuq/`, plus five lines in the device modal and one row in the device panel. Entirely client-side: the phrase is a SHA-256 of the two device IDs, computed in the browser, so there is **no new REST route and no server code at all**. See `DEPLOYMENT-3D-TEAM.md` section 9. |
 | Selective sync file picker | `gui/default/syncthing/desuq/selectiveSync.js` and friends, plus the four upstream hunks above. Also **no server code**: it is built entirely out of `/rest/db/browse`, which already serves the *global* tree, and `/rest/db/ignores`. The fancytree it renders in is one upstream already ships for the version restorer. See `DEPLOYMENT-3D-TEAM.md` section 2. |
+| First-run setup guide | `gui/default/syncthing/desuq/firstRunWizard.js` and its template and stylesheet, plus four additive lines in `index.html`. Four steps -- name, code, verify, sync -- over a fresh install that otherwise has no next action on it at all. It reads its own state over **REST rather than off `syncthingController`'s scope**, which is why the merge cost is those four lines and why `test-wizard-render.js` can drive it without standing up the controller. The one thing passed in is upstream's own pending-folder accept, so step 4 hands an offer to `addFolderAndShare` rather than re-implementing its defaults. See `DEPLOYMENT-3D-TEAM.md` section 16. |
+| Knowing an update exists, without contacting anybody | `custom/tray/update.go`. Syncthing already tells every device it connects to what version it is running, and serves it back at `/rest/system/connections` -- upstream's own GUI shows it. The tray compares itself to its peers and toasts when one is ahead. **No polling, no releases API, no signing key**, and the one external URL in the tray is only ever handed to a browser by somebody clicking the toast. See `DEPLOYMENT-3D-TEAM.md` section 17. |
 | A rate limit that says whether it applies | `gui/default/syncthing/desuq/lanLimitDirective.js`, plus a line in each of the two dialogues with rate fields. Reads `options.limitBandwidthInLan` and, where there is a device, `isLocal` from `/rest/system/connections`. No server code. The **default is left as upstream's**; see `DEPLOYMENT-3D-TEAM.md` section 11 for why changing it would be wrong. |
 | No telemetry of any kind | `lib/build/desuq_telemetry.go` — a `const TelemetryEnabled = false` that all three of upstream's reporters consult, plus the GUI removals above and two seeded config values. See the section below. |
 | Synced folders visible in Explorer | `custom/tray/foldericon*.go`. A `desktop.ini` per folder, written by the tray -- per user, no administrator, no COM, no registration, and **no upstream change of any kind**. Explicitly *not* an overlay-icon shell extension: those need a registered in-process COM server and compete for about fifteen global slots Dropbox and OneDrive already fill. See `DEPLOYMENT-3D-TEAM.md` section 10. |
@@ -250,9 +254,9 @@ upstream's version of the function and re-apply the `envOr(...)` wrappers.
 .\custom\scripts\run-tests.ps1 -Quick     # the six that need no binary and no pair
 ```
 
-Eight suites in three languages, three of them needing jsdom and one needing
-two live Syncthing instances. Until `run-tests.ps1` existed the only way to run
-them all was to remember eight command lines, so nothing did.
+Nine suites in three languages, four of them needing jsdom and one needing two
+live Syncthing instances. Until `run-tests.ps1` existed the only way to run
+them all was to remember nine command lines, so nothing did.
 
 A missing prerequisite -- no Go, no jsdom, no built binary -- is reported as
 SKIP rather than as failure, and the exit code stays 0. But the summary says

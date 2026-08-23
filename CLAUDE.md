@@ -32,7 +32,7 @@ future `git merge upstream/main` is work you can plan rather than a surprise:
   A line in the root `go.mod`/`go.sum` is a conflict on every upstream
   dependency bump: a recurring tax for a one-off convenience.
 
-Thirteen upstream files carry fork edits today, 307 insertions against 156
+Thirteen upstream files carry fork edits today, 324 insertions against 156
 deletions. Stripping the telemetry is what changed the character of that: it
 is the first work that had to *delete* upstream behaviour rather than sit
 beside it, because there is no additive way to remove a consent nag or a
@@ -56,12 +56,14 @@ Everything else still resolves by keeping both sides.
 | `custom/scripts/seed-config.ps1` | Writes first-run `config.xml` defaults |
 | `custom/scripts/sync-upstream.ps1` | Merge upstream and verify the build |
 | `custom/scripts/start-test-pair.ps1` | Two throwaway instances sharing a folder, for two-device testing |
-| `custom/scripts/run-tests.ps1` | **Runs all eight suites.** `-Quick` skips the two needing a binary or a live pair. What the build and CI both call |
+| `custom/scripts/run-tests.ps1` | **Runs all nine suites.** `-Quick` skips the two needing a binary or a live pair. What the build and CI both call |
 | `custom/scripts/check-handshake-words.ps1` | Asserts the verification wordlists stay distinct. Run by the build even with `-SkipTests` |
 | `custom/scripts/test-selective-render.js` | Drives the selective-sync picker through real Angular and a live instance. Needs jsdom and a running test pair |
 | `custom/scripts/test-lanlimit-render.js` | Renders the LAN rate-limit note through real Angular. Needs jsdom; no instance required |
+| `custom/scripts/test-wizard-render.js` | Drives the first-run setup guide through real Angular against canned REST. Needs jsdom; no instance required |
 | `custom/scripts/test-seed-naming.ps1` | Asserts a re-seed never takes a device name somebody chose |
 | `custom/scripts/disable-inherited-ci.ps1` | Turn off upstream's workflows |
+| `custom/RELEASE-NOTES.md` | The body of the **next** release, rewritten each time. The release workflow reads it and appends the install section |
 | `custom/CUSTOMIZATIONS.md` | Divergence register and merge guide |
 | `custom/DEPLOYMENT-3D-TEAM.md` | Recommended config for the target users |
 | `.github/workflows/desuq-test.yaml` | Runs every suite on push and PR. Reusable, so the release gates on it |
