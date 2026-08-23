@@ -32,11 +32,13 @@ future `git merge upstream/main` is work you can plan rather than a surprise:
   A line in the root `go.mod`/`go.sum` is a conflict on every upstream
   dependency bump: a recurring tax for a one-off convenience.
 
-Seven upstream files carry fork edits today, 99 insertions against 6 deletions.
-Only two of those deletions are a behaviour change (`build.go`'s `envOr`
-wrappers); everything else is inserted beside upstream's code. One edit,
-in `syncthingController.js`, sits *inside* an upstream function rather than
-beside one, and it is a guarded early return.
+Twelve upstream files carry fork edits today, 159 insertions against 51
+deletions. Stripping the telemetry is what changed the character of that: it
+is the first work that had to *delete* upstream behaviour rather than sit
+beside it, because there is no additive way to remove a consent nag or a
+settings control that no longer does anything. Four of the twelve rows in
+`CUSTOMIZATIONS.md` are marked **Medium** for that reason; the rest still
+resolve by keeping both sides.
 
 ## Layout
 
@@ -49,21 +51,24 @@ beside one, and it is a guarded early return.
 | `custom/scripts/seed-config.ps1` | Writes first-run `config.xml` defaults |
 | `custom/scripts/sync-upstream.ps1` | Merge upstream and verify the build |
 | `custom/scripts/start-test-pair.ps1` | Two throwaway instances sharing a folder, for two-device testing |
-| `custom/scripts/check-handshake-words.ps1` | Asserts the verification wordlists stay distinct. Run by the build |
+| `custom/scripts/run-tests.ps1` | **Runs all eight suites.** `-Quick` skips the two needing a binary or a live pair. What the build and CI both call |
+| `custom/scripts/check-handshake-words.ps1` | Asserts the verification wordlists stay distinct. Run by the build even with `-SkipTests` |
 | `custom/scripts/test-selective-render.js` | Drives the selective-sync picker through real Angular and a live instance. Needs jsdom and a running test pair |
 | `custom/scripts/test-lanlimit-render.js` | Renders the LAN rate-limit note through real Angular. Needs jsdom; no instance required |
 | `custom/scripts/test-seed-naming.ps1` | Asserts a re-seed never takes a device name somebody chose |
 | `custom/scripts/disable-inherited-ci.ps1` | Turn off upstream's workflows |
 | `custom/CUSTOMIZATIONS.md` | Divergence register and merge guide |
 | `custom/DEPLOYMENT-3D-TEAM.md` | Recommended config for the target users |
-| `.github/workflows/desuq-release.yaml` | Our release pipeline |
+| `.github/workflows/desuq-test.yaml` | Runs every suite on push and PR. Reusable, so the release gates on it |
+| `.github/workflows/desuq-release.yaml` | Our release pipeline. Its build job `needs:` the test job |
 
 Everything else is upstream Syncthing, unmodified.
 
 ## Common commands
 
 ```powershell
-.\custom\build-windows.ps1 -Installer          # build binary + installer
+.\custom\scripts\run-tests.ps1                 # all eight suites; -Quick for the fast six
+.\custom\build-windows.ps1 -Installer          # build binary + installer (runs -Quick first)
 .\custom\scripts\sync-upstream.ps1 -DryRun     # preview upstream changes
 git tag v2.1.4-desuq.2; git push origin v2.1.4-desuq.2   # cut a release
 
@@ -105,6 +110,11 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
   angular-translate renders `{%placeholders%}` literally for any string missing
   from `assets/lang`, which ours always are.
 
+- **This build sends no telemetry, and that is a constant, not a setting.**
+  `lib/build/desuq_telemetry.go`. Upstream has three reporters gated by two
+  options, and the third -- the panic-log upload, `crashReportingEnabled` --
+  is **on by default and never asks**. The config values are seeded off too,
+  but only so `config.xml` does not claim otherwise. See `CUSTOMIZATIONS.md`.
 - Auto-upgrade is compiled out (`-no-upgrade`). Syncthing verifies upgrades
   against upstream's signing key, which cannot validate our builds.
 - Upstream's inherited GitHub workflows are disabled **via the GitHub API**, not

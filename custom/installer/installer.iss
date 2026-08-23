@@ -144,6 +144,35 @@ begin
   Sleep(500);
 end;
 
+// Take the violet folder icons off every synced folder before the files that
+// make them work are deleted.
+//
+// desktop.ini names {app}\folder.ico by absolute path, so after an uninstall
+// every marker points at a file that is gone. Explorer falls back to the plain
+// icon silently, which makes this litter rather than breakage -- but it is
+// litter in the user's own project folders, and it also leaves them carrying
+// the read-only attribute that says "customised".
+//
+// This has to run at usUninstall, not usPostUninstall: it needs the tray
+// binary, which is still on disk at that point, and config.xml, which holds
+// the folder list and is only removed later (and only if the user says yes).
+// It is right either way -- if they keep the data directory to reinstall
+// later, the tray re-marks every folder on its next reconcile.
+procedure ClearFolderIcons();
+var
+  Tray: String;
+  ResultCode: Integer;
+begin
+  Tray := ExpandConstant('{app}\{#MyAppBinary}-tray.exe');
+  if not FileExists(Tray) then
+    Exit;
+  // Failure here is never a reason to block an uninstall, so the result is
+  // deliberately not checked.
+  Exec(Tray,
+       ExpandConstant('--home="{localappdata}\{#MyDataDir}" --clear-folder-icons'),
+       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   StopRunningInstance();
@@ -155,7 +184,10 @@ var
   DataDir: String;
 begin
   if CurUninstallStep = usUninstall then
+  begin
     StopRunningInstance();
+    ClearFolderIcons();
+  end;
 
   if CurUninstallStep = usPostUninstall then
   begin

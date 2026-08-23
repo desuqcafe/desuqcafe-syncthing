@@ -1,0 +1,90 @@
+# Runs every test suite this fork has.
+#
+# Until this existed nothing in CI ran a single test: desuq-release.yaml built
+# and published, and build-windows.ps1 checked the wordlists and nothing else.
+# There were six suites in the tree that only ever ran when somebody remembered
+# to type their command lines.
+#
+# It is a reusable workflow as well as a standalone one, so desuq-release.yaml
+# can call it and gate the build on it -- a release cannot be cut from a tree
+# whose tests are red.
+#
+# Windows only, and not by oversight: half the suites are PowerShell, the tray
+# and the Explorer folder icons are Win32, and the shipped artifact is a
+# Windows installer. A Linux runner would run about a third of this and give a
+# green tick that meant less than nothing.
+#
+# Upstream has no file by this name, so it never conflicts on a merge.
+name: desuq tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desuq-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: All suites
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # build-windows.ps1 falls back to `git describe`, which needs tags.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      # jsdom is a test-only dependency of three scripts and is deliberately
+      # not in any package.json, so run-tests.ps1 caches it in TEMP. Cache that
+      # directory rather than reinstalling 30 MB of transitive dependencies on
+      # every run.
+      - name: Cache jsdom
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/desuq-jsdom
+          key: desuq-jsdom-${{ runner.os }}-v1
+
+      # test-seed-naming.ps1 and test-selective-render.js both run against the
+      # real binary rather than a `go run`, because what they are checking
+      # includes things only the shipped executable does -- the -H windowsgui
+      # subsystem among them.
+      - name: Build the binary
+        shell: pwsh
+        run: ./custom/build-windows.ps1 -SkipTests
+
+      # -RequireAll makes a skipped suite a failure. Locally a skip is honest --
+      # no Go, no jsdom, no binary yet. Here everything is installed on
+      # purpose, so a skip means the detection broke, and a green tick over
+      # four skips is worse than a red one.
+      - name: Run every suite
+        shell: pwsh
+        run: ./custom/scripts/run-tests.ps1 -InstallJsdom -RequireAll
+
+      - name: Test pair logs
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-ChildItem "$env:TEMP\desuq-syncthing-testpair\*.log" -EA SilentlyContinue |
+            ForEach-Object {
+              Write-Host "===== $($_.Name) ====="
+              Get-Content $_.FullName -Tail 200
+            }

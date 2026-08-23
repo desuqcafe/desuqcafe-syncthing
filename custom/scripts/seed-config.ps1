@@ -102,6 +102,29 @@ $IgnoreLines = @(
     '(?d)~*'
 )
 
+# An #include in the *defaults* deadlocks every folder anyone accepts from now
+# on: the included file lives inside the folder, the folder cannot sync until
+# the include resolves, and the include cannot resolve until the folder syncs.
+# Syncthing logs "failed to load include file" and the folder sits in an error
+# state indefinitely -- see DEPLOYMENT-3D-TEAM.md section 2, where the safe
+# ordering is written out.
+#
+# The recipe is tempting enough, and the failure quiet enough, that a warning
+# in a document is not sufficient. This is checked here rather than inside the
+# try below because everything in there is caught and swallowed -- seeding must
+# never fail an installation -- and a swallowed throw would abandon the whole
+# seed rather than just this line. Up here it is what it actually is: a mistake
+# in this file, caught the first time anybody runs it.
+foreach ($pattern in $IgnoreLines) {
+    if ($pattern.TrimStart() -match '^#include\b') {
+        Write-Host ("seed-config.ps1: refusing to seed an #include into the default " +
+            "ignores: '$pattern'. It deadlocks every newly accepted folder. Put it in " +
+            "a folder's own patterns after that folder's first sync instead.") `
+            -ForegroundColor Red
+        exit 1
+    }
+}
+
 # --- Plumbing --------------------------------------------------------------
 
 $script:LogPath = $null

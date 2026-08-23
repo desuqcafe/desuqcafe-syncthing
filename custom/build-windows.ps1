@@ -26,7 +26,8 @@
 [CmdletBinding()]
 param(
     [string]$Version,
-    [switch]$Installer
+    [switch]$Installer,
+    [switch]$SkipTests
 )
 
 $ErrorActionPreference = 'Stop'
@@ -90,14 +91,33 @@ if ($Version -match '(\d+)\.(\d+)\.(\d+)') { $numeric = "$($Matches[1]).$($Match
 
 # --- Checks ---------------------------------------------------------------
 
-# The device-verification wordlists have to stay phonetically distinct or the
-# handshake silently stops being able to catch a mismatch. Cheap to check, and
-# a build is the last point at which a bad edit can be caught.
-$wordCheck = Join-Path $PSScriptRoot 'scripts\check-handshake-words.ps1'
-if (Test-Path -LiteralPath $wordCheck) {
-    Write-Host "Checking device-verification wordlists..." -ForegroundColor DarkGray
+# Every suite that needs nothing but Go and Node runs before the build. Twenty
+# seconds here is cheaper than shipping a binary whose telemetry guard or tray
+# logic regressed. The two suites that need a built binary or two live
+# instances are left to run-tests.ps1 and to CI: they cannot run yet, and they
+# take minutes rather than seconds.
+#
+# -SkipTests is for a tight edit loop, and it is what CI passes -- the test
+# workflow builds here and then runs every suite itself, so the quick set would
+# otherwise run twice.
+$runTests  = Join-Path $PSScriptRoot 'scripts/run-tests.ps1'
+$wordCheck = Join-Path $PSScriptRoot 'scripts/check-handshake-words.ps1'
+
+if (-not $SkipTests -and (Test-Path -LiteralPath $runTests)) {
+    & $runTests -Quick
+    if ($LASTEXITCODE -ne 0) {
+        throw 'tests failed; re-run custom\scripts\run-tests.ps1 for the detail, or pass -SkipTests'
+    }
+} elseif (Test-Path -LiteralPath $wordCheck) {
+    # Even with the suites skipped, this one still runs. The wordlists have to
+    # stay phonetically distinct or the device handshake silently stops being
+    # able to catch a mismatch, and re-ordering a list invalidates every
+    # verification anyone has already done -- so it is a property of the thing
+    # being compiled in, not just a test, and a build is the last point at
+    # which a bad edit can be caught.
+    Write-Host 'Checking device-verification wordlists...' -ForegroundColor DarkGray
     & $wordCheck
-    if ($LASTEXITCODE -ne 0) { throw "handshake wordlist check failed" }
+    if ($LASTEXITCODE -ne 0) { throw 'handshake wordlist check failed' }
 }
 
 # --- Build ----------------------------------------------------------------

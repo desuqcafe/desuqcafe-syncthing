@@ -105,7 +105,41 @@ the `#include` directive: commit a `team.stignore` file inside the synced folder
 #include team.stignore
 ```
 
-Now you maintain the rules in one place and everyone picks them up.
+**The order this is done in matters, and getting it wrong wedges the folder.**
+The included file lives inside the folder. The folder will not start until the
+include resolves, and the include cannot resolve until the folder has synced,
+so a device that is given the `#include` line *before* its first sync deadlocks
+on itself: Syncthing logs `failed to load include file team.stignore: file not
+found` and sits in an error state indefinitely, syncing nothing, forever.
+
+There is no way to make the line itself safe. `lib/ignore` has no tolerant
+form of `#include`, and adding one would be the wrong fix anyway — a rule set
+that silently loses the 200 GB it was holding back is a worse failure than one
+that stops and says so.
+
+So the safe recipe is an ordering:
+
+1. The sender commits `team.stignore` **into the folder**, and lets it sync.
+2. Each receiver accepts the share and lets it sync **once**, with whatever
+   patterns it already has (the seeded set from §3, or a picker selection).
+   Confirm `team.stignore` is actually on disk.
+3. *Then* add `#include team.stignore` to that folder's own patterns, in
+   *Edit Folder → Ignore Patterns*.
+
+Two traps that follow from the same cause:
+
+- **Never put the `#include` in *Actions → Advanced → Defaults*.** There it
+  deadlocks every folder anyone accepts from then on, not just one.
+  `seed-config.ps1` refuses to write one into the seeded defaults for exactly
+  this reason, rather than trusting a warning in a document.
+- **Removing and re-accepting a folder re-arms the trap**, because the new
+  copy starts empty again. The `#include` has to come off before the folder is
+  removed, or be added back only after the re-accept has synced.
+
+For three people, weigh this against just seeding the rules per machine (§3),
+which has no ordering to get wrong. The `#include` buys central maintenance;
+whether that is worth an indefinite wedge on a mis-ordered rollout is a real
+question, not a rhetorical one.
 
 **Ignores are set at accept time.** When someone adds or accepts a folder, the
 GUI adds it **paused**, opens the Ignore Patterns tab pre-filled with the
@@ -180,14 +214,10 @@ Some deliberate decisions:
   just stored. A folder in that state refuses to scan or pull at all, so
   letting it pass looks exactly like a folder that simply never syncs.
 
-**Do not put an `#include` in the *defaults*.** It deadlocks every newly
-accepted folder: the included file lives inside the folder, so it cannot arrive
-until the folder syncs, and the folder will not start until the include
-resolves. Syncthing logs `failed to load include file team.stignore: file not
-found` and sits in an error state indefinitely. Add the `#include` line to a
-folder's own patterns *after* its first sync, not to
-*Actions → Advanced → Defaults*. The picker surfaces the error rather than
-appearing to succeed, but it cannot fix it.
+**On the `#include` deadlock**, see the ordering above. The picker surfaces the
+error rather than appearing to succeed — that is what the last bullet is
+about — but it cannot fix it, and neither can anything else: the only remedy
+is not to write the line until the file is there.
 
 ## 3. Default ignore patterns are supported — use them
 
@@ -710,8 +740,32 @@ folder**, not just single-device:
   settings view has no `urVersion` control, and the served controller contains
   no `showModal('#ur')`.
 
+- The Explorer icon cache is now poked with `SHChangeNotify(SHCNE_UPDATEDIR,
+  SHCNF_PATHW | SHCNF_FLUSHNOWAIT, ...)` after a marker is written or removed,
+  so a folder already open in Explorer repaints instead of keeping its plain
+  icon until the cache next happens to be rebuilt. Two things about this are
+  asserted and one is not. Asserted: that the export resolves, because a
+  misspelled `LazyProc` name is a panic in the tray on a user's machine rather
+  than a build error; and that the shell is told **only when something actually
+  changed**, which is the real risk, since the tray reconciles every folder
+  every two minutes. **Not asserted: the repaint itself.** `SHGetFileInfo`
+  answers out of a per-process cache that is not the one a folder view draws
+  from, and it returns the marked answer whether or not the notification was
+  sent -- a test built on it passes with the call removed, which is worse than
+  no test. Confirming the repaint needs a person with a folder open.
+
+- The uninstaller now runs the tray's `--clear-folder-icons` at `usUninstall`,
+  while the tray binary and `config.xml` are both still on disk, so the violet
+  markers come off before the icon they name is deleted. The exact invocation
+  it makes -- quoted `--home` on a path containing a space, against a
+  GUI-subsystem binary -- was run against a throwaway home with two marked
+  folders: exit 0, both `desktop.ini` files gone, both read-only attributes
+  cleared. What has still not been run is the uninstaller itself.
+
 **Not verified:** uninstall. It shares `StopRunningInstance` with the upgrade
-path, which is exercised, but the `DelTree` prompt has never been run.
+path, which is exercised, and the folder-icon clearing it now does was checked
+in isolation, but the uninstaller has never been run end to end and the
+`DelTree` prompt has never been answered.
 
 **Not verified:** anything about layout or paint. Every GUI check in this
 document -- the picker, the verification card, the LAN note, the telemetry

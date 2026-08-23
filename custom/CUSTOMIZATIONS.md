@@ -56,6 +56,10 @@ cannot conflict at all:
 | `gui/default/syncthing/desuq/` | The fork's Angular directives, its wordlists and its CSS |
 | `gui/violet/` | The violet theme |
 | `custom/` | Everything else |
+| `lib/build/desuq_telemetry.go` | The `TelemetryEnabled` constant all three reporters consult |
+| `lib/ur/desuq_telemetry_test.go` | Asserts nothing is posted, by watching the wire |
+| `cmd/syncthing/desuq_telemetry_test.go` | Asserts no panic log is uploaded |
+| `.github/workflows/desuq-test.yaml` | Runs every suite; reusable, so the release gates on it |
 
 Where the fork stands today: **159 inserted lines against 51 deleted**, across
 those twelve files.
@@ -201,6 +205,40 @@ To track stable releases rather than upstream's development branch, pass a tag:
 
 If `build.go` ever does conflict, the resolution is always the same: take
 upstream's version of the function and re-apply the `envOr(...)` wrappers.
+
+## Running the tests
+
+```powershell
+.\custom\scripts\run-tests.ps1            # all eight suites
+.\custom\scripts\run-tests.ps1 -Quick     # the six that need no binary and no pair
+```
+
+Eight suites in three languages, three of them needing jsdom and one needing
+two live Syncthing instances. Until `run-tests.ps1` existed the only way to run
+them all was to remember eight command lines, so nothing did.
+
+A missing prerequisite -- no Go, no jsdom, no built binary -- is reported as
+SKIP rather than as failure, and the exit code stays 0. But the summary says
+loudly what did not run, because "all green" over four skips is how a suite
+quietly stops covering anything. `-RequireAll` turns a skip into a failure, and
+is what CI passes: there, everything is installed on purpose, so a skip means
+the detection broke.
+
+`build-windows.ps1` runs the quick set before compiling; `-SkipTests` opts out
+for a tight edit loop, and still runs the wordlist check, which is a property
+of the data being compiled in rather than a test of it.
+
+## CI runs them, and a release cannot skip them
+
+`.github/workflows/desuq-test.yaml` runs every suite on push and pull request.
+It is also a **reusable** workflow, so `desuq-release.yaml` calls it as a job
+its build `needs:` -- a tagged release cannot be cut from a tree whose tests
+are red, and the suites are defined once rather than twice.
+
+Windows-only, and not by oversight: half the suites are PowerShell, the tray
+and the Explorer folder icons are Win32, and the artifact is a Windows
+installer. A Linux runner would run about a third of it and give a green tick
+that meant less than nothing.
 
 ## Upstream's CI is disabled on this fork
 

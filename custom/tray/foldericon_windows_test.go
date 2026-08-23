@@ -115,7 +115,7 @@ const shgfiIconLocation = 0x000001000
 const shgfiSysIconIndex = 0x000004000
 
 var (
-	shell32          = syscall.NewLazyDLL("shell32.dll")
+	// shell32 is declared in foldericon_windows.go, for SHChangeNotify.
 	procSHGetFileInf = shell32.NewProc("SHGetFileInfoW")
 	ole32            = syscall.NewLazyDLL("ole32.dll")
 	procCoInit       = ole32.NewProc("CoInitializeEx")
@@ -267,5 +267,76 @@ func TestClearRemovesEverythingItWrote(t *testing.T) {
 	// re-run, or a flag typed by hand after an uninstall, both land here.
 	if _, err := m.clear(); err != nil {
 		t.Errorf("second clear: %v", err)
+	}
+}
+
+// TestShellChangeNotifyExportResolves catches the failure mode of a LazyProc:
+// a misspelled export is not an error, it is a panic at the first call, in the
+// tray, on a user's machine.
+func TestShellChangeNotifyExportResolves(t *testing.T) {
+	if err := procSHChangeNotify.Find(); err != nil {
+		t.Fatalf("shell32!SHChangeNotify: %v", err)
+	}
+	// And calling it is harmless on a directory nothing is looking at.
+	notifyShellDirChanged(t.TempDir())
+}
+
+// TestShellIsToldOnlyWhenSomethingChanged is the assertion that matters for
+// the notification, because it is the one with a cost.
+//
+// What cannot be asserted here is the part everybody wants: that an Explorer
+// window already showing the folder repaints. SHGetFileInfo answers out of a
+// per-process cache that is not the one a folder view draws from, and it
+// returns the marked answer whether or not SHChangeNotify was called -- a test
+// built on it passes with the notification removed, which is worse than no
+// test. That claim is left unverified in DEPLOYMENT-3D-TEAM.md rather than
+// asserted by something that does not assert it.
+//
+// What is verifiable, and is the real risk of adding this call, is the
+// opposite: the tray reconciles every folder every two minutes, and telling
+// the shell that a hundred folders changed every two minutes would be worse
+// than never telling it at all.
+func TestShellIsToldOnlyWhenSomethingChanged(t *testing.T) {
+	var notified []string
+	real := notifyShellDirChanged
+	notifyShellDirChanged = func(dir string) { notified = append(notified, dir) }
+	t.Cleanup(func() { notifyShellDirChanged = real })
+
+	dir := t.TempDir()
+	ini := desktopIniFor(`C:\icons\a.ico`, "Project Assets")
+
+	if err := writeFolderMarker(dir, ini); err != nil {
+		t.Fatalf("first write: %v", err)
+	}
+	if len(notified) != 1 {
+		t.Fatalf("marking a fresh folder notified %d times; want 1", len(notified))
+	}
+
+	// The reconcile loop's steady state: same content, folder already marked.
+	// Nothing changed, so the shell must not be told.
+	for i := 0; i < 3; i++ {
+		if err := writeFolderMarker(dir, ini); err != nil {
+			t.Fatalf("reconcile pass %d: %v", i, err)
+		}
+	}
+	if len(notified) != 1 {
+		t.Errorf("three no-op reconciles produced %d notifications; want none "+
+			"after the first (%v)", len(notified)-1, notified)
+	}
+
+	// A changed icon path is a real change and must be announced.
+	if err := writeFolderMarker(dir, desktopIniFor(`C:\icons\b.ico`, "Project Assets")); err != nil {
+		t.Fatalf("rewrite with a different icon: %v", err)
+	}
+	if len(notified) != 2 {
+		t.Errorf("rewriting the marker notified %d times in total; want 2", len(notified))
+	}
+
+	// And so is removing it.
+	if err := removeFolderMarker(dir); err != nil {
+		t.Fatalf("removeFolderMarker: %v", err)
+	}
+	if len(notified) != 3 {
+		t.Errorf("clearing the marker notified %d times in total; want 3", len(notified))
 	}
 }
