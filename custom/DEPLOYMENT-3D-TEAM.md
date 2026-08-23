@@ -610,6 +610,12 @@ folder**, not just single-device:
   vanish. The claim itself was measured against the two instances -- the table
   in section 11 is that measurement, not arithmetic.
 
+- Seeded device naming was run against the real script and binary, 8 checks in
+  `custom/scripts/test-seed-naming.ps1`: a fresh install is renamed, a forced
+  re-seed over "Yuki's Workstation" keeps it *and still applies the other
+  defaults*, the host name and the `DESKTOP-`/`LAPTOP-` forms are still
+  replaced, "Desktop upstairs" is not, and an explicit `-DeviceName` wins.
+
 **Not verified:** uninstall. It shares `StopRunningInstance` with the upgrade
 path, which is exercised, but the `DelTree` prompt has never been run.
 
@@ -667,7 +673,7 @@ What is seeded, and what is deliberately not:
 | `defaults/folder/minDiskFree` — 20 GB | Folder type (Receive Only) — that is a per-folder, per-person choice |
 | `defaults/ignores` — the §3 block | The GUI password — set it per machine if the LAN is not trusted |
 | `gui/theme` — `violet` | |
-| `device/@name` — the Windows user name, rather than upstream's host name, because `DESKTOP-A1B2C3` tells nobody which machine they are looking at | |
+| `device/@name` — the Windows user name, rather than upstream's host name, because `DESKTOP-A1B2C3` tells nobody which machine they are looking at. **Only when the existing name is one Syncthing picked**; see below | A device name somebody has chosen |
 
 Re-running the installer does **not** re-seed: a sentinel file in the data
 directory records that it has been done, so an upgrade never overwrites
@@ -680,3 +686,20 @@ recommended values, bump `$SeedVersion` in the script, or run it by hand:
     -Binary  "$env:LOCALAPPDATA\Programs\desuq-syncthing\desuq-syncthing.exe" `
     -Force
 ```
+
+**The device name is the one seeded value that is not simply overwritten.**
+Everything else in the table above is a default that a re-seed is *meant* to
+reset. A device name is not: it is the label the other two people see in their
+device list, and taking it back is both surprising and invisible from the
+machine it happened on.
+
+So the name is replaced only when the existing one is a name Syncthing picked
+rather than a person. `generate` writes `os.Hostname()`
+(`lib/config/config.go`), so the test is: empty, equal to this machine's host
+name, or one of Windows' own out-of-box forms (`DESKTOP-`, `LAPTOP-`, `WIN-`
+followed by the generated suffix). The pattern is anchored, so *Desktop
+upstairs* is a name and stays. Passing `-DeviceName` explicitly is an
+instruction rather than a default, and is applied whatever is already there.
+
+`custom/scripts/test-seed-naming.ps1` runs all of that against the real script
+and the real binary in a throwaway directory.

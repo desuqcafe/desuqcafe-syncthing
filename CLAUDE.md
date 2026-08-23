@@ -41,6 +41,7 @@ function rather than beside one, and that edit is a guarded early return.
 | `custom/scripts/check-handshake-words.ps1` | Asserts the verification wordlists stay distinct. Run by the build |
 | `custom/scripts/test-selective-render.js` | Drives the selective-sync picker through real Angular and a live instance. Needs jsdom and a running test pair |
 | `custom/scripts/test-lanlimit-render.js` | Renders the LAN rate-limit note through real Angular. Needs jsdom; no instance required |
+| `custom/scripts/test-seed-naming.ps1` | Asserts a re-seed never takes a device name somebody chose |
 | `custom/scripts/disable-inherited-ci.ps1` | Turn off upstream's workflows |
 | `custom/CUSTOMIZATIONS.md` | Divergence register and merge guide |
 | `custom/DEPLOYMENT-3D-TEAM.md` | Recommended config for the target users |
