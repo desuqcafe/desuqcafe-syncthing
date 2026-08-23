@@ -762,6 +762,17 @@ folder**, not just single-device:
   folders: exit 0, both `desktop.ini` files gone, both read-only attributes
   cleared. What has still not been run is the uninstaller itself.
 
+- `folder.ico` went from **365 KB to 50 KB**, and the tray binary with it,
+  because its 128 and 256 pixel entries are now PNG rather than DIB. A DIB
+  entry is uncompressed, so those two were 90% of the file. The tray's own
+  status icons stay DIB at every size deliberately -- systray hands their path
+  to `LoadImage()`, which is fussier than Explorer, and at 16-48 pixels the
+  compression would buy nothing. That it still *works* is the same
+  `SHGetFileInfo` assertion as before, unchanged and still resolving the
+  marked folder to its own image-list slot; a second test asserts the two
+  large entries are still PNG, because regenerating with that branch dropped
+  would look like nothing at all except a much larger binary.
+
 **Not verified:** uninstall. It shares `StopRunningInstance` with the upgrade
 path, which is exercised, and the folder-icon clearing it now does was checked
 in isolation, but the uninstaller has never been run end to end and the

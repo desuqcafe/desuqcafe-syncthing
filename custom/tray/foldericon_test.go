@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/binary"
 	"strings"
 	"testing"
 )
@@ -100,5 +102,62 @@ func TestAppendedIgnoreIsWhatTheSeedWrites(t *testing.T) {
 	if desktopIniIgnore != "(?d)desktop.ini" {
 		t.Errorf("appended line is %q; seed-config.ps1 writes (?d)desktop.ini",
 			desktopIniIgnore)
+	}
+}
+
+// TestFolderIconUsesPngAtLargeSizes guards a 320 KB regression.
+//
+// An .ico entry may hold a DIB or a whole PNG file. A DIB is uncompressed, so
+// the 256 and 128 pixel entries cost 264 KB and 66 KB respectively -- they
+// were 90% of what used to be a 365 KB folder.ico, embedded in every copy of
+// the tray. make-icons.ps1 writes those two as PNG, which Explorer has
+// understood since Vista.
+//
+// The assertion that this still *works* is TestShellResolvesOurFolderIcon,
+// which asks the shell. This one only asserts it is still being done, because
+// regenerating the icons with the PNG branch dropped would look like nothing
+// at all except a much larger binary.
+func TestFolderIconUsesPngAtLargeSizes(t *testing.T) {
+	const maxBytes = 128 * 1024
+	if len(iconFolder) > maxBytes {
+		t.Errorf("folder.ico is %d bytes, over the %d byte guard -- are the "+
+			"128 and 256 entries DIB again? See custom/tray/icons/make-icons.ps1",
+			len(iconFolder), maxBytes)
+	}
+
+	// ICONDIR: reserved(2) type(2) count(2), then count x 16-byte entries.
+	if len(iconFolder) < 6 {
+		t.Fatal("folder.ico is too short to be an icon")
+	}
+	count := int(binary.LittleEndian.Uint16(iconFolder[4:6]))
+	pngSig := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
+
+	var checked int
+	for i := 0; i < count; i++ {
+		e := 6 + 16*i
+		if e+16 > len(iconFolder) {
+			t.Fatalf("entry %d runs past the end of the file", i)
+		}
+		// A 256 pixel entry records its dimension as 0.
+		w := int(iconFolder[e])
+		if w == 0 {
+			w = 256
+		}
+		if w < 128 {
+			continue
+		}
+		size := int(binary.LittleEndian.Uint32(iconFolder[e+8 : e+12]))
+		off := int(binary.LittleEndian.Uint32(iconFolder[e+12 : e+16]))
+		if off+size > len(iconFolder) {
+			t.Fatalf("%dpx entry claims %d bytes at %d, past the end", w, size, off)
+		}
+		if !bytes.HasPrefix(iconFolder[off:off+size], pngSig) {
+			t.Errorf("the %dpx entry is not a PNG; as a DIB it costs %d KB on its own",
+				w, w*w*4/1024)
+		}
+		checked++
+	}
+	if checked != 2 {
+		t.Errorf("checked %d entries at 128px or above; expected 2 (128 and 256)", checked)
 	}
 }

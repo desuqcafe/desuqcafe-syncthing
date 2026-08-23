@@ -8,10 +8,15 @@
 
         .\make-icons.ps1
 
-    Icons are written as 32bpp DIB entries rather than embedded PNGs. systray
-    on Windows writes the icon bytes to a temp file and hands the path to
-    LoadImage(), and DIB entries are the format every Windows version loads
-    without argument.
+    The tray icons are written as 32bpp DIB entries rather than embedded PNGs.
+    systray on Windows writes the icon bytes to a temp file and hands the path
+    to LoadImage(), and DIB entries are the format every Windows version loads
+    without argument. At tray sizes they cost nothing to leave uncompressed.
+
+    The Explorer folder icon is the exception, at 128 and 256 only. A DIB is
+    uncompressed, so those two entries alone were 330 KB of a 365 KB file.
+    Nothing but Explorer ever loads that one, and Explorer has understood
+    PNG-compressed entries since Vista.
 
     At 16 pixels the glyph alone is not enough to tell states apart, so each
     state differs in both colour and shape.
@@ -129,6 +134,30 @@ function New-StateBitmap {
     } finally {
         $g.Dispose()
         $big.Dispose()
+    }
+}
+
+# Returns the PNG payload for one icon directory entry.
+#
+# An .ico entry may hold either a DIB or a whole PNG file, and Windows has
+# understood the PNG form since Vista. It matters at the large sizes because a
+# DIB is uncompressed: one 256 pixel entry is 256*256*4 bytes of pixels plus
+# its mask, about 264 KB, and 128 costs another 66 KB. Those two entries alone
+# were 90% of a 365 KB folder.ico. As PNGs the same file is a tenth of that.
+#
+# Used only for the *folder* icon, and only at 128 and up. The tray icons stay
+# DIB at every size on purpose: systray writes the bytes to a temp file and
+# hands the path to LoadImage(), which is fussier than Explorer, and they are
+# small enough that the compression would buy nothing. See the note at the top.
+function ConvertTo-IconPng {
+    param([System.Drawing.Bitmap]$Bitmap)
+
+    $ms = New-Object System.IO.MemoryStream
+    try {
+        $Bitmap.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+        return $ms.ToArray()
+    } finally {
+        $ms.Dispose()
     }
 }
 
@@ -344,11 +373,20 @@ function New-FolderBitmap {
     }
 }
 
+# 128 and 256 go in as PNG rather than DIB; see ConvertTo-IconPng for why.
+# Explorer is the only thing that loads this file, and it has handled the PNG
+# form since Vista.
+$PngAtOrAbove = 128
+
 $images = @()
 foreach ($size in $FolderSizes) {
     $bmp = New-FolderBitmap -Size $size
     try {
-        $images += , (ConvertTo-IconDib -Bitmap $bmp)
+        if ($size -ge $PngAtOrAbove) {
+            $images += , (ConvertTo-IconPng -Bitmap $bmp)
+        } else {
+            $images += , (ConvertTo-IconDib -Bitmap $bmp)
+        }
     } finally {
         $bmp.Dispose()
     }
