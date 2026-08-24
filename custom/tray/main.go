@@ -41,6 +41,7 @@ type options struct {
 	quiet    bool
 	noIcons  bool
 	clear    bool
+	stop     bool
 	interval time.Duration
 }
 
@@ -98,6 +99,8 @@ func main() {
 		"Do not give synced folders a custom icon in Explorer")
 	flag.BoolVar(&opts.clear, "clear-folder-icons", false,
 		"Remove the Explorer folder icons this has written, then exit. Works with Syncthing stopped")
+	flag.BoolVar(&opts.stop, "shutdown", false,
+		"Ask a running Syncthing to stop cleanly, wait for it to go, then exit. Used by the installer")
 	flag.Parse()
 
 	// Log to the Syncthing home directory, where the support bundle and
@@ -130,6 +133,29 @@ func main() {
 		return
 	}
 
+	// The other one-shot: stop a running Syncthing the way Quit does, over the
+	// API, so the database closes rather than being taken away mid-write. The
+	// installer calls this before replacing the binary. See installer.iss.
+	if opts.stop {
+		os.Exit(shutdownRunning(opts.home))
+	}
+
+	// Past here the process is long-lived and puts an icon on screen, so it
+	// has to be the only one for this home. Both one-shots above deliberately
+	// run before this: they are over in a moment, do not draw anything, and
+	// have to work while a tray is running.
+	if !claimInstance(opts.home) {
+		slog.Info("another tray is already running for this home; not starting a second")
+		// Clicking the Start Menu shortcut while the tray is running should
+		// still do the thing the click asked for. The running tray cannot be
+		// signalled without inventing an IPC channel for one message, and it
+		// does not need to be: opening a URL is something any process can do.
+		if opts.open {
+			openExistingGUI(opts.home)
+		}
+		return
+	}
+
 	a := &app{opts: opts, refresh: make(chan struct{}, 1)}
 	a.ctx, a.cancel = context.WithCancel(context.Background())
 
@@ -154,6 +180,67 @@ func defaultHome() string {
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".config", "desuqcafe-syncthing")
+}
+
+// shutdownStopTimeout is how long -shutdown waits for Syncthing to actually
+// exit. A folder mid-scan can take a few seconds to put the database down;
+// waiting is the entire point of the flag, and the installer's force-kill is
+// still there for anything that outlasts this.
+const shutdownStopTimeout = 30 * time.Second
+
+// shutdownRunning implements -shutdown and returns a process exit code, which
+// is the only channel this binary has: it is linked -H windowsgui and has no
+// stdout to report on.
+//
+// Nothing running is success, not failure. The installer calls this on every
+// install including the first, where there is no config.xml at all.
+func shutdownRunning(home string) int {
+	ep, err := readEndpoint(home)
+	if err != nil {
+		slog.Info("no Syncthing configuration to shut down", "home", home, "err", err)
+		return 0
+	}
+
+	cl := newClient(ep)
+	if err := cl.ping(); err != nil {
+		slog.Info("nothing is answering; no shutdown needed", "url", ep.baseURL)
+		return 0
+	}
+
+	if err := cl.shutdown(); err != nil {
+		slog.Warn("shutdown request failed", "err", err, "url", ep.baseURL)
+		return 1
+	}
+
+	// Poll rather than trust the 200: the request is answered before the
+	// database is closed, and the installer's next move is to overwrite the
+	// binary that is still holding it.
+	deadline := time.Now().Add(shutdownStopTimeout)
+	for time.Now().Before(deadline) {
+		time.Sleep(250 * time.Millisecond)
+		if err := cl.ping(); err != nil {
+			slog.Info("Syncthing stopped cleanly")
+			return 0
+		}
+	}
+	slog.Warn("Syncthing did not stop within the timeout", "waited", shutdownStopTimeout)
+	return 1
+}
+
+// openExistingGUI opens the web interface of a Syncthing this process did not
+// start, for the case where a second tray was launched and is standing down.
+//
+// It reads the address out of config.xml rather than asking the running tray,
+// because that is where the running tray got it too.
+func openExistingGUI(home string) {
+	ep, err := readEndpoint(home)
+	if err != nil {
+		slog.Warn("could not find the web interface address", "home", home, "err", err)
+		return
+	}
+	if err := openURL(ep.baseURL); err != nil {
+		slog.Error("could not open the browser", "err", err, "url", ep.baseURL)
+	}
 }
 
 func (a *app) onReady() {
@@ -183,6 +270,7 @@ func (a *app) onReady() {
 	go watchEvents(a.ctx, a.client, a.onEvent)
 	go a.alerts.watchDisk(a.ctx)
 	go a.alerts.watchVersions(a.ctx)
+	go a.alerts.watchConflicts(a.ctx)
 	if !a.opts.noIcons {
 		go a.watchFolders(a.ctx)
 	}

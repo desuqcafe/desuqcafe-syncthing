@@ -50,7 +50,36 @@ const ignoreMarkerComment = "// Added by desuqcafe Syncthing: the folder icon ma
 // IconResource supersedes the older IconFile/IconIndex pair on everything
 // since Vista, so only it is written. The trailing ",0" is the icon index
 // within the file.
+// oneLine strips anything that would end the InfoTip line and start a new key.
+//
+// A folder's label is chosen by whoever offered the share, and it arrives here
+// on its way into a file the Windows shell obeys. A label carrying CRLF plus
+// "CLSID={20D04FE0-3AEA-1069-A2D8-08002B30309D}" turns the victim's synced
+// folder into something that opens as My Computer instead of showing its
+// contents; IconResource= can be pointed at any local file. Neither shows up
+// anywhere in the GUI, which renders the label as ordinary text.
+//
+// Control characters go rather than just CR and LF: a lone CR is enough for the
+// shell's parser, and nothing below 0x20 belongs in a folder name anyway. The
+// length cap keeps a pathological label from bloating every desktop.ini.
+func oneLine(s string) string {
+	const max = 200
+	var b strings.Builder
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			continue
+		}
+		if b.Len() >= max {
+			break
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
 func desktopIniFor(iconPath, label string) string {
+	label = oneLine(label)
+	iconPath = oneLine(iconPath)
 	tip := "Synced by " + appName
 	if label != "" {
 		tip = label + " -- synced by " + appName

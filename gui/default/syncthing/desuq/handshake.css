@@ -357,6 +357,16 @@
     background: var(--v-surface-sunken, rgba(217, 148, 20, 0.09));
 }
 
+/* The honest arithmetic behind the card. Set smaller than the rest of the note
+   on purpose: it is there for whoever wants to know what four bytes buys, and
+   is not competing with the warning above it, which is the sentence that
+   actually changes what someone does. */
+.desuq-handshake-note-fine {
+    margin-top: 8px;
+    font-size: 11.5px;
+    color: var(--v-text-dim, #8d84a3);
+}
+
 .desuq-handshake-btn {
     margin-top: 9px;
     border-radius: var(--v-radius-sm, 5px);

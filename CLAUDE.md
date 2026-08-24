@@ -32,14 +32,14 @@ future `git merge upstream/main` is work you can plan rather than a surprise:
   A line in the root `go.mod`/`go.sum` is a conflict on every upstream
   dependency bump: a recurring tax for a one-off convenience.
 
-Thirteen upstream files carry fork edits today, 324 insertions against 156
+Fourteen upstream files carry fork edits today, 436 insertions against 159
 deletions. Stripping the telemetry is what changed the character of that: it
 is the first work that had to *delete* upstream behaviour rather than sit
 beside it, because there is no additive way to remove a consent nag or a
 settings control that no longer does anything. Four rows in
 `CUSTOMIZATIONS.md` are marked **Medium** for that reason.
 
-`README.md` is the thirteenth, added last and the only row marked **High**:
+`README.md` is the only row marked **High**:
 it is a full rewrite, so every upstream README change conflicts. That was
 chosen rather than accepted — the file has no behaviour and nothing reads it,
 so a conflict costs one discarded diff, and "keep ours" is always the answer.
@@ -128,6 +128,24 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
   by deleting files, so they cannot conflict on merge. That state lives in
   GitHub, not the repo.
 - `.stignore` is never synced between devices — it is per-machine by design.
+- **`/rest/db/browse?dirsonly=1` reports every directory as zero bytes.** It
+  reaches a directories-only tree by *skipping every file*
+  (`model.GlobalDirectoryTree`), and a directory's own `Size` is a filesystem
+  stub. So there is no size information in that response at all, and anything
+  downstream of it that talks about bytes is silently dead. The fork's
+  `/rest/db/dirsizes` (`lib/api/api_dirsizes.go`) is the same tree with real
+  totals, built server-side from the full tree and never serialised.
+- **The tray refuses to start twice for one home.** A named mutex,
+  `custom/tray/instance_windows.go`. Every shortcut now launches the tray, so
+  a second one is a click away; without the guard you get two icons, two
+  supervisors and two event subscriptions. A second launch with `-open` opens
+  the GUI and exits.
+- **`//go:uintptrescapes` is load-bearing in `notify_windows.go`.** Converting
+  `unsafe.Pointer` to `uintptr` only keeps the referent alive when the
+  conversion is syntactically inside a `syscall.Syscall` call. Passing one to
+  an ordinary helper — `comCall` — leaves the local on the stack, where a
+  stack growth relocates it before the syscall runs. Verified with
+  `go build -gcflags=-m`.
 - **`/rest/events` IDs are per subscription, not global.** Syncthing keeps one
   buffer per distinct `events=` mask and numbers each from 1. Bootstrapping
   "where is now" with one mask and then polling with another silently drops

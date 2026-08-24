@@ -1097,7 +1097,16 @@ angular.module('syncthing.core')
         $scope.folderClass = function (folderCfg) {
             var status = $scope.folderStatus(folderCfg);
 
-            if (status === 'idle' || status === 'localadditions') {
+            // desuqcafe fork: 'localadditions' is deliberately NOT a success
+            // state here. See custom/CUSTOMIZATIONS.md.
+            //
+            // A receive-only folder holding local additions offers one click of
+            // "Revert Local Changes", which deletes them. Painting that panel
+            // green, with a tick, is what makes the button beneath it look like
+            // a tidy-up rather than a delete -- and receive-only is exactly what
+            // DEPLOYMENT-3D-TEAM.md recommends for both modellers, so this is
+            // the panel they will see most often.
+            if (status === 'idle') {
                 return 'success';
             }
             if (status == 'paused') {
@@ -1112,7 +1121,7 @@ angular.module('syncthing.core')
             if (status === 'stopped' || status === 'outofsync' || status === 'error' || status === 'faileditems' || status === 'localunencrypted') {
                 return 'danger';
             }
-            if (status === 'unshared' || status === 'scan-waiting' || status === 'sync-waiting' || status === 'clean-waiting') {
+            if (status === 'unshared' || status === 'localadditions' || status === 'scan-waiting' || status === 'sync-waiting' || status === 'clean-waiting') {
                 return 'warning';
             }
 
@@ -1310,8 +1319,11 @@ angular.module('syncthing.core')
                 case 'outofsync':
                     return 'fa-exclamation-circle';
                 case 'idle':
-                case 'localadditions':
                     return 'fa-check';
+                // desuqcafe fork: not a tick, for the same reason the panel is
+                // no longer green. See folderClass above.
+                case 'localadditions':
+                    return 'fa-exclamation-triangle';
                 case 'paused':
                     return 'fa-pause';
                 case 'scanning':
@@ -3251,6 +3263,26 @@ angular.module('syncthing.core')
                 type: type,
                 folderID: folderID,
             };
+
+            // desuqcafe fork: everything the dialogue needs to say WHICH files
+            // it is about to delete. See custom/CUSTOMIZATIONS.md.
+            //
+            // Upstream's wording is generic -- "Files newly added here will be
+            // deleted" -- and never names the folder, never says how many
+            // files, and never says whether they are recoverable. For a
+            // modeller who has spent the afternoon in a receive-only folder
+            // without realising it, those are the only three facts that matter.
+            params.folderLabel = $scope.folderLabel(folderID);
+            var counts = $scope.model[folderID];
+            params.localItems = (counts && counts.receiveOnlyTotalItems) || 0;
+            params.localBytes = (counts && counts.receiveOnlyChangedBytes) || 0;
+            // Whether the deleted copies land in version history first. Both
+            // paths through lib/model archive before removing, but only if a
+            // versioner is configured -- so this is a real question and not a
+            // reassurance to print unconditionally.
+            var folderCfg = $scope.folders[folderID];
+            params.versioned = !!(folderCfg && folderCfg.versioning
+                && folderCfg.versioning.type);
             switch (type) {
                 case "override":
                     params.heading = $translate.instant("Override Changes");

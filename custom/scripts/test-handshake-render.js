@@ -134,6 +134,12 @@ check('warns against the channel that carried the ID', /other than.*where you se
 check('warns against comparing inside Syncthing', /never inside Syncthing/i.test(note));
 check('explains that the phrase could be swapped too', /could swap this too/i.test(note));
 check('does not prescribe voice as the only channel', !/verify by voice/i.test(note));
+// The card is a 32-bit SAS and says so. Stating the number is what keeps this
+// a security claim rather than a security ritual -- and the sentence after it
+// is the one that says where the strength actually comes from.
+check('says how much entropy the card carries', /four billion/i.test(note));
+check('says the channel is what protects you, not the card',
+    /channel they do not control/i.test(note));
 
 // Compact form is for the device panel: the card, nothing else.
 check('compact form shows a card', !!card(compactEl).querySelector('.desuq-card'));
@@ -152,6 +158,35 @@ check('no cards dealt until asked', !card(full).querySelector('.desuq-handshake-
 iso.$apply(function () { iso.startChallenge(); });
 const slots = card(full).querySelectorAll('.desuq-handshake-slot');
 check('deals exactly three cards', slots.length === 3, slots.length + ' dealt');
+
+// The hero has to go while the check is running. It carries the real card, the
+// phrase written out in words and the rank in two notations; with it on screen
+// the pick-one-of-three is a matching exercise that anybody passes without
+// having listened to the other person at all, which is the one thing the check
+// exists to require.
+check('the real card is hidden while choosing', !card(full).querySelector('.desuq-handshake-hero'));
+check('the phrase is hidden while choosing', !card(full).querySelector('.desuq-handshake-phrase'));
+check('the rank is hidden while choosing', !card(full).querySelector('.desuq-handshake-rank-line'));
+
+iso.$apply(function () { iso.cancelChallenge(); });
+check('cancelling brings the card back', !!card(full).querySelector('.desuq-handshake-hero'));
+check('cancelling clears the deal', !card(full).querySelector('.desuq-handshake-deal'));
+iso.$apply(function () { iso.startChallenge(); });
+
+// Somebody whose partner reads out a card that is on none of these three needs
+// a move that is not a claim it matched. Without one, the only route to the
+// correct outcome is guessing wrong on purpose.
+iso.$apply(function () { iso.noneOfThese(); });
+check('"none of these" does not confirm', iso.confirmed === false);
+check('"none of these" takes the cards away', !card(full).querySelector('.desuq-handshake-deal'));
+check('"none of these" says to stop',
+    /do not add this device/i.test(txt(full, '.desuq-handshake-wrong') || ''));
+check('"none of these" says to re-check the ID elsewhere',
+    /ask them for the ID again somewhere else/i.test(txt(full, '.desuq-handshake-wrong') || ''));
+check('the real card stays hidden after "none of these"',
+    !card(full).querySelector('.desuq-handshake-hero'));
+iso.$apply(function () { iso.cancelChallenge(); iso.startChallenge(); });
+check('starting over clears the mismatch', iso.noneMatch === false);
 
 const dealt = iso.challenge;
 check('one dealt card is the real one',

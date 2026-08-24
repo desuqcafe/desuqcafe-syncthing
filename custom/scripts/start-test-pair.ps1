@@ -24,9 +24,12 @@
         with PowerShell's [xml] type re-serialises `<encryptionPassword />` as
         an element containing whitespace, which Syncthing reads as a real
         password. The symptom is "Device sent cluster-config without the device
-        info for the remote" and a connection that drops one second after every
-        handshake. This cost an hour once; do not reintroduce it by round-
-        tripping config.xml through [xml] after the folder exists.
+        info for the remote", or "remote expects to exchange plain data, but
+        local data is encrypted", and a connection that drops one second after
+        every handshake. This cost an hour once. Avoiding folder and device
+        elements is NOT a sufficient guard -- <defaults> holds a device element
+        from the moment `generate` runs -- so every [xml] save in here goes
+        through Set-EmptyElementsSelfClosing first.
 
       * `--logfile` is passed. Without it a `-H windowsgui` Syncthing started
         detached logs nowhere, and `syncthing.log` in the home directory stays
@@ -150,14 +153,40 @@ foreach ($n in $Nodes) {
 # --- configure -----------------------------------------------------------
 #
 # Done on the XML before first start, because these are the settings Syncthing
-# reads at boot. Everything after this point goes through the REST API instead,
-# so the [xml] round trip never sees a folder or device element (see the
-# encryptionPassword note in the header).
+# reads at boot. Everything after this point goes through the REST API instead.
+# That alone does not avoid the encryptionPassword trap described in the header
+# -- <defaults> carries a device element of its own -- so the save below marks
+# empty elements self-closing.
 
 function Set-Single([xml]$Doc, [string]$XPath, [string]$Value) {
     $nodes = @($Doc.SelectNodes($XPath))
     for ($i = 1; $i -lt $nodes.Count; $i++) { $null = $nodes[$i].ParentNode.RemoveChild($nodes[$i]) }
     if ($nodes.Count -gt 0) { $nodes[0].InnerText = $Value }
+}
+
+# "The round trip never sees a folder or device element" was not true, and the
+# whitespace trap the header describes was live in here the whole time: a
+# freshly generated config carries <defaults><folder><device>, so .Save()
+# rewrote its <encryptionPassword></encryptionPassword> as an element holding
+# a newline and eight spaces. Nothing was wrong with the folder -WithFolder
+# creates -- that one is written over REST with an explicit empty string -- but
+# every folder added to the pair *afterwards* inherited the corrupt default and
+# could never connect. The symptom is the one the header warns about, arriving
+# a step later than expected: "remote expects to exchange plain data, but local
+# data is encrypted (folder-type receive-encrypted)", and a connection that
+# drops one second after every handshake.
+#
+# So do what seed-config.ps1 does and mark every childless element self-closing
+# before saving. XmlTextWriter only indents elements it thinks have content.
+function Set-EmptyElementsSelfClosing([System.Xml.XmlNode]$Node) {
+    foreach ($child in @($Node.ChildNodes)) {
+        if ($child.NodeType -ne [System.Xml.XmlNodeType]::Element) { continue }
+        if ($child.ChildNodes.Count -eq 0) {
+            $child.IsEmpty = $true
+        } else {
+            Set-EmptyElementsSelfClosing $child
+        }
+    }
 }
 
 $ids = @{}
@@ -182,6 +211,7 @@ foreach ($n in $Nodes) {
     if ($generated[$n.Name]) {
         foreach ($f in @($x.SelectNodes('/configuration/folder'))) { $null = $f.ParentNode.RemoveChild($f) }
     }
+    Set-EmptyElementsSelfClosing $x.DocumentElement
     $x.Save($cfg)
 
 }

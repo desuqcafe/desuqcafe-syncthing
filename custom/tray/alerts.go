@@ -9,7 +9,7 @@ package main
 // texture library unusable and train the user to dismiss everything, which is
 // worse than no notifications at all.
 //
-// So there are six things worth interrupting somebody for, and every one of
+// So there are seven things worth interrupting somebody for, and every one of
 // them is either a question only a person can answer or a state that will not
 // fix itself:
 //
@@ -18,6 +18,8 @@ package main
 //	a sync finishing                -- the "my files have arrived" signal
 //	a folder erroring               -- will not clear on its own
 //	a disk about to fill            -- will wedge the folder if ignored
+//	two people editing one file     -- see conflicts.go; the only one of these
+//	                                   that silently costs somebody a day's work
 //	a teammate on a newer build     -- see update.go; will not fix itself
 //	                                   either, because there is no auto-upgrade
 //
@@ -98,6 +100,15 @@ type alerter struct {
 	lastErrored map[string]time.Time
 	lastDisk    map[string]time.Time
 
+	// seenConflicts is the conflicting copies already accounted for, keyed by
+	// full path. Entries are dropped when the file goes, so resolving a
+	// conflict and hitting the same one again really does notify twice.
+	seenConflicts map[string]bool
+	// conflictsSince is the cutoff a conflict's modification time has to beat
+	// to count as new. Set on the first pass rather than at construction, so
+	// it cannot be skewed by however long start-up took. See conflicts.go.
+	conflictsSince time.Time
+
 	// naggedVersion is the peer version last announced, and lastNag when. The
 	// pair means a *newer* version still gets through inside the cooldown --
 	// two releases in a day is unusual but the second one is not less true --
@@ -118,6 +129,7 @@ func newAlerter(n notifier, guiURL func() string, current func() *client) *alert
 		lastSynced:       map[string]time.Time{},
 		lastErrored:      map[string]time.Time{},
 		lastDisk:         map[string]time.Time{},
+		seenConflicts:    map[string]bool{},
 	}
 }
 

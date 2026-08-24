@@ -448,7 +448,7 @@
                           <!-- no-overflow-ellipse: this row's warning is the whole point of it,
                                and table-condensed would otherwise truncate it mid-sentence. -->
                           <td class="text-right no-overflow-ellipse">
-                            <disk-free path="folder.path" need-bytes="model[folder.id].needBytes"></disk-free>
+                            <disk-free path="folder.path" need-bytes="model[folder.id].needBytes" min-disk-free="folder.minDiskFree"></disk-free>
                           </td>
                         </tr>
                         <tr ng-if="!folder.paused && (model[folder.id].invalid || model[folder.id].error)">
@@ -672,10 +672,24 @@
                            already exists. Not offered for receive-encrypted folders, where
                            upstream disables ignore patterns altogether, nor for send-only
                            ones, where excluding a path would stop us offering it rather
-                           than stop us taking it. -->
+                           than stop us taking it.
+
+                           Deliberately NOT disabled while paused. Leaving the picker on a
+                           freshly accepted share now holds the folder back and pauses it,
+                           and this button is the way back in. Refusing to open here would
+                           trade a surprise download for a folder nobody can finish setting
+                           up, which is the failure the old behaviour was avoiding.
+
+                           Also not offered on a folder shared with nobody. There is no
+                           remote index to browse, so the picker has nothing to show and
+                           sits in "waiting for the other device" until it gives up; and
+                           the question it asks -- which of these files do you want on
+                           this machine -- has no meaning about files that only exist
+                           here. Unticking one would not decline a download, it would tell
+                           Syncthing to stop looking after a file of your own. -->
                       <button type="button" class="btn btn-sm btn-default"
-                              ng-if="folder.type == 'sendreceive' || folder.type == 'receiveonly'"
-                              ng-click="desuqSelective.open(folder)" ng-disabled="folder.paused">
+                              ng-if="(folder.type == 'sendreceive' || folder.type == 'receiveonly') && folder.devices.length > 1"
+                              ng-click="desuqSelective.open(folder)">
                         <span class="far fa-check-square"></span>&nbsp;<span>Choose Files</span>
                       </button>
                       <button type="button" class="btn btn-sm btn-default" ng-click="editFolderExisting(folder)">

@@ -38,7 +38,8 @@
           </div>
           <div class="desuq-pick-wait-note" ng-if="st.phase == 'waiting'">
             The other device has to be online and finished scanning before it can
-            say what it has. Nothing is being downloaded while you wait.
+            say what it has. Nothing is being downloaded while you wait, and
+            closing this leaves the folder paused with nothing downloaded.
           </div>
         </div>
 
@@ -66,21 +67,24 @@
               <span class="fas fa-info-circle"></span>&nbsp;This folder holds {{st.globalFiles}}
               files, too many to list one by one, so the picker is showing directories only.
               Ticking a directory takes everything in it, and any files sitting outside a
-              directory are kept either way.
+              directory are kept either way &mdash; those are counted in the total on the
+              right. In this mode a directory the other device adds later is downloaded
+              without asking &mdash; come back here to untick it.
             </div>
           </div>
 
           <div class="col-md-4 desuq-pick-payload">
             <div class="desuq-pick-gauge" ng-class="{'desuq-pick-gauge-empty': st.selectedFiles == 0}">
               <div class="desuq-pick-gauge-label">Selected</div>
-              <div class="desuq-pick-gauge-value">
-                <span ng-if="!st.dirsOnly">{{st.selectedBytes | binary}}B</span>
-                <span ng-if="st.dirsOnly">{{st.selectedFiles}}</span>
-              </div>
-              <div class="desuq-pick-gauge-of">
-                <span ng-if="!st.dirsOnly">of {{st.totalBytes | binary}}B on offer</span>
-                <span ng-if="st.dirsOnly">of {{st.totalFiles}} items on offer</span>
-              </div>
+              <!--
+                Bytes in both modes now. Directories-only used to count items
+                instead, because db/browse?dirsonly=1 reports every directory
+                as zero bytes and the gauge would have read "0 B" forever; the
+                fork's /db/dirsizes carries the real totals, so the honest
+                fallback is no longer needed. See lib/api/api_dirsizes.go.
+              -->
+              <div class="desuq-pick-gauge-value">{{st.selectedBytes | binary}}B</div>
+              <div class="desuq-pick-gauge-of">of {{st.totalBytes | binary}}B on offer</div>
               <div class="desuq-pick-meter">
                 <div class="desuq-pick-meter-fill"
                      ng-style="{width: (st.totalBytes ? (100 * st.selectedBytes / st.totalBytes) : (st.totalFiles ? (100 * st.selectedFiles / st.totalFiles) : 0)) + '%'}"></div>
@@ -92,8 +96,24 @@
             </div>
 
             <div class="desuq-pick-disk">
-              <disk-free path="st.folderPath" need-bytes="st.selectedBytes"></disk-free>
+              <disk-free path="st.folderPath" need-bytes="st.selectedBytes"
+                         min-disk-free="st.minDiskFree"></disk-free>
             </div>
+
+            <p class="desuq-pick-note desuq-pick-note-warn" ng-if="st.unsafeNames.length">
+              {{st.unsafeNames.length}} item<span ng-if="st.unsafeNames.length != 1">s</span> on the
+              other device could not be listed here, because the name contains a character that
+              would break this folder's ignore patterns: {{st.unsafeNames.join(', ')}}.
+              Renaming it there fixes it.
+            </p>
+
+            <p class="desuq-pick-note" ng-if="st.unlistedLines.length">
+              {{st.unlistedLines.length}} rule<span ng-if="st.unlistedLines.length != 1">s</span>
+              from an earlier choice name individual files rather than directories, so
+              there is no row here to show <span ng-if="st.unlistedLines.length == 1">it</span><span ng-if="st.unlistedLines.length != 1">them</span>.
+              <span ng-if="st.unlistedLines.length == 1">It is</span><span ng-if="st.unlistedLines.length != 1">They are</span>
+              still in force and are kept exactly as they are.
+            </p>
 
             <p class="desuq-pick-note">
               Unticked items are written to this folder's ignore patterns. They stay
@@ -112,8 +132,16 @@
       </div>
 
       <div class="modal-footer desuq-pick-footer">
+        <!-- On a freshly accepted share, closing has to say what it does. It
+             leaves the "*" in place and pauses the folder, so nothing is
+             downloaded and the folder does not sit there claiming to be up to
+             date. "Choose Files" on the folder panel reopens this. -->
         <button type="button" class="btn btn-sm btn-default" data-dismiss="modal"
-                ng-if="st.phase == 'error' || st.phase == 'waiting'">
+                ng-if="st.fresh && (st.phase == 'error' || st.phase == 'waiting')">
+          <span class="fas fa-pause"></span>&nbsp;Leave it held back
+        </button>
+        <button type="button" class="btn btn-sm btn-default" data-dismiss="modal"
+                ng-if="!st.fresh && (st.phase == 'error' || st.phase == 'waiting')">
           <span class="fas fa-times"></span>&nbsp;Close
         </button>
         <button type="button" class="btn btn-sm btn-default" ng-click="svc.syncEverything()"

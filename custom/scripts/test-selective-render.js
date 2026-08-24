@@ -275,12 +275,24 @@ let ESC = null;
 let BRACKET_PATTERN = null;
 let inflateFileCount = false;
 
+// The managed block has three kinds of line: exclusions inside a kept
+// directory, "!" re-includes naming what survived at the root, and the "/*"
+// catch-all that holds back everything else -- including whatever the remote
+// adds tomorrow.
+//
 // The block markers are comments, and Syncthing's comment prefix is "//", so
-// "starts with a slash" alone would sweep them up with the exclusions.
+// "starts with a slash" alone would sweep them up with the exclusions. The
+// catch-all has to come out too, or every count is one too many.
+const CATCH_ALL = '/*';
+
 function exclusions(lines) {
     return (lines || [])
-        .filter(l => l.charAt(0) === '/' && l.charAt(1) !== '/')
+        .filter(l => l.charAt(0) === '/' && l.charAt(1) !== '/' && l !== CATCH_ALL)
         .sort();
+}
+
+function reincludes(lines) {
+    return (lines || []).filter(l => l.charAt(0) === '!').sort();
 }
 
 // ---------------------------------------------------------------------- main
@@ -463,12 +475,32 @@ async function main() {
     check('the picker wrote a marked block',
         lines.some(l => l.indexOf('desuqcafe selective sync') >= 0),
         JSON.stringify(lines));
-    check('the unticked paths are anchored exclusions, minimal in number',
+    check('paths unticked inside a kept directory are anchored exclusions, minimal in number',
         exclusions(lines).join(' ') ===
-        ['/Characters/Villain', BRACKET_PATTERN, '/Textures/Source',
-            '/texture1.png'].sort().join(' '),
+        ['/Characters/Villain', BRACKET_PATTERN, '/Textures/Source'].sort().join(' '),
         JSON.stringify(exclusions(lines)));
-    check('no ticked path was written',
+    check('a kept top-level entry is re-included by name',
+        reincludes(lines).indexOf('!/Textures') >= 0 &&
+        reincludes(lines).indexOf('!/Characters') >= 0 &&
+        reincludes(lines).indexOf('!/Environments') >= 0,
+        JSON.stringify(reincludes(lines)));
+    // texture1.png was unticked whole, at the root. It needs no exclusion --
+    // the catch-all already holds it -- and it must not be re-included.
+    check('a top-level entry unticked whole is simply not re-included',
+        reincludes(lines).indexOf('!/texture1.png') < 0 &&
+        exclusions(lines).indexOf('/texture1.png') < 0,
+        JSON.stringify(lines));
+    check('the block ends with the catch-all, so anything new is held back',
+        lines.filter(l => l.charAt(0) !== '/' || l.charAt(1) === '/' || l === CATCH_ALL)
+            .filter(l => l === CATCH_ALL).length === 1 &&
+        lines[lines.length - 1].indexOf('desuqcafe') >= 0 &&
+        lines[lines.length - 2] === CATCH_ALL,
+        JSON.stringify(lines.slice(-4)));
+    check('every exclusion precedes every re-include, because first match wins',
+        Math.max(...exclusions(lines).map(l => lines.indexOf(l))) <
+        Math.min(...reincludes(lines).map(l => lines.indexOf(l))),
+        JSON.stringify(lines));
+    check('no ticked path was written as a bare exclusion',
         lines.indexOf('/Textures/Baked') < 0 && lines.indexOf('/Characters/Hero') < 0);
     check('the "*" that held everything back is gone',
         lines.indexOf('*') < 0, JSON.stringify(lines));
@@ -518,6 +550,59 @@ async function main() {
         got.indexOf('Textures/Baked/asset1.png') >= 0,
         JSON.stringify(got.filter(p => p.indexOf('Textures/Baked/') === 0)));
 
+    console.log('\n-- and what the other device adds afterwards');
+
+    // The guarantee the catch-all exists for. A deny-list of the unticked
+    // paths is right about everything the tree showed and silent about
+    // everything it did not, so a whole new top-level directory used to
+    // arrive unasked -- 200 GB of "Project-Q" onto a laptop that had
+    // deliberately taken 12 GB.
+    //
+    // The other half has to keep working: a file added inside a directory
+    // that WAS ticked is what ticking a directory means, and must still come.
+    const senderFolders = await sender('GET', '/rest/config/folders');
+    const senderPath = (senderFolders.find(f => f.id === FOLDER) || {}).path;
+    check('the sending side is on this machine, so the fixture can grow', !!senderPath,
+        String(senderPath));
+
+    if (senderPath) {
+        fs.mkdirSync(path.join(senderPath, 'Project-Q'), { recursive: true });
+        fs.writeFileSync(path.join(senderPath, 'Project-Q', 'late.png'), 'late');
+        fs.writeFileSync(path.join(senderPath, 'late_at_root.txt'), 'late');
+        fs.writeFileSync(path.join(senderPath, 'Textures', 'Baked', 'late.png'), 'late');
+        await sender('POST', '/rest/db/scan?folder=' + FOLDER);
+
+        for (let i = 0; i < 30; i++) {
+            await sleep(2000);
+            s = await api('GET', '/rest/db/status?folder=' + FOLDER);
+            if (s.state === 'idle' && s.needBytes === 0 &&
+                fs.existsSync(path.join(DATA, 'Textures', 'Baked', 'late.png'))) { break; }
+        }
+
+        check('a new top-level directory is held back, having never been offered',
+            !fs.existsSync(path.join(DATA, 'Project-Q')),
+            'Project-Q');
+        check('so is a new top-level file',
+            !fs.existsSync(path.join(DATA, 'late_at_root.txt')),
+            'late_at_root.txt');
+        check('but a file added inside a ticked directory still arrives',
+            fs.existsSync(path.join(DATA, 'Textures', 'Baked', 'late.png')),
+            'Textures/Baked/late.png');
+
+        // Put the fixture back. Later checks count what the tree holds, and a
+        // test that quietly grows the shared fixture breaks the one after it
+        // rather than itself -- which is a much worse afternoon.
+        fs.rmSync(path.join(senderPath, 'Project-Q'), { recursive: true, force: true });
+        fs.rmSync(path.join(senderPath, 'late_at_root.txt'), { force: true });
+        fs.rmSync(path.join(senderPath, 'Textures', 'Baked', 'late.png'), { force: true });
+        await sender('POST', '/rest/db/scan?folder=' + FOLDER);
+        for (let i = 0; i < 20; i++) {
+            await sleep(1000);
+            const t = await sender('GET', '/rest/db/browse?folder=' + FOLDER + '&levels=0');
+            if (!(t || []).some(e => e.name === 'Project-Q')) { break; }
+        }
+    }
+
     console.log('\n-- re-opening the picker on the folder it just wrote');
 
     const folders = await api('GET', '/rest/config/folders');
@@ -550,8 +635,12 @@ async function main() {
     const ign2 = await api('GET', '/rest/db/ignores?folder=' + FOLDER);
     check('re-ticking removes just that exclusion',
         exclusions(ign2.ignore).join(' ') ===
-        [BRACKET_PATTERN, '/Textures/Source', '/texture1.png'].sort().join(' '),
+        [BRACKET_PATTERN, '/Textures/Source'].sort().join(' '),
         JSON.stringify(exclusions(ign2.ignore)));
+    check('and the selection read back off the saved block, not off a fresh tree',
+        reincludes(ign2.ignore).indexOf('!/Characters') >= 0 &&
+        reincludes(ign2.ignore).indexOf('!/texture1.png') < 0,
+        JSON.stringify(reincludes(ign2.ignore)));
     check('and the seeded rules are still there after a second rewrite',
         SEEDED.every(l => (ign2.ignore || []).indexOf(l) >= 0),
         JSON.stringify(ign2.ignore));
@@ -564,10 +653,16 @@ async function main() {
     check('and the newly ticked directory arrives',
         fs.existsSync(path.join(DATA, 'Characters', 'Villain', 'asset1.png')));
 
-    console.log('\n-- backing out of a fresh accept must not strand the folder');
+    console.log('\n-- backing out of a fresh accept holds it back rather than taking the lot');
 
-    // The dangerous state this guards: "*" left in the ignores, folder
-    // reporting itself perfectly up to date, syncing nothing, forever.
+    // This used to clear the "*" and let the whole folder download, on the
+    // reasoning that the alternative was a folder claiming to be up to date
+    // while syncing nothing. Measured against a live pair, the cost of that
+    // was seven files held back becoming twenty-six -- the entire share --
+    // from pressing Escape on a screen that said nothing was downloading.
+    //
+    // Pausing is the third option: nothing downloads, and a paused folder is
+    // visibly not up to date, so it cannot be mistaken for one that is.
     await api('DELETE', '/rest/config/folders/' + FOLDER);
     await sleep(2000);
     fs.rmSync(DATA, { recursive: true, force: true });
@@ -590,15 +685,42 @@ async function main() {
     await settle(1500);
 
     const ign3 = await api('GET', '/rest/db/ignores?folder=' + FOLDER);
-    check('dismissing clears the "*" rather than leaving it in place',
-        (ign3.ignore || []).indexOf('*') < 0, JSON.stringify(ign3.ignore));
+    check('dismissing leaves the "*" in place',
+        (ign3.ignore || []).indexOf('*') >= 0, JSON.stringify(ign3.ignore));
+
+    const cfg3 = await api('GET', '/rest/config/folders/' + FOLDER);
+    check('and pauses the folder, so it cannot read as up to date',
+        cfg3.paused === true, JSON.stringify(cfg3.paused));
+
+    // The whole point: nothing arrives while it waits for someone to come back
+    // and choose. Ten seconds is far longer than this fixture takes to pull.
+    await sleep(10000);
+    s = await api('GET', '/rest/db/status?folder=' + FOLDER);
+    check('and not one file is downloaded',
+        s && s.localFiles === 0,
+        s ? s.localFiles + ' local files' : 'no status');
+
+    // And the way back in has to work, or the fix has traded a surprise
+    // download for a folder nobody can finish setting up.
+    const folders3 = await api('GET', '/rest/config/folders');
+    svc.open(folders3.find(f => f.id === FOLDER));
+    if (!await waitFor('the picker reopens on the paused folder',
+        () => svc.state.phase === 'ready', 40000)) {
+        finish();
+        return;
+    }
+    await svc.syncEverything();
+    await settle(500);
+    const cfg4 = await api('GET', '/rest/config/folders/' + FOLDER);
+    check('and choosing from there un-pauses it',
+        cfg4.paused === false, JSON.stringify(cfg4.paused));
 
     for (let i = 0; i < 40; i++) {
         await sleep(2000);
         s = await api('GET', '/rest/db/status?folder=' + FOLDER);
         if (s.state === 'idle' && s.needBytes === 0 && s.localFiles > 0) { break; }
     }
-    check('so the folder syncs the lot, which is upstream\'s behaviour',
+    check('so the folder then syncs the lot',
         s && s.localFiles === s.globalFiles,
         s ? s.localFiles + ' of ' + s.globalFiles : 'no status');
 
@@ -616,16 +738,43 @@ async function main() {
     check('and lists directories only',
         !!t3.getNodeByKey('Textures/Baked') && !t3.getNodeByKey('README.txt'),
         JSON.stringify(t3.getRootNode().children.map(n => n.title)));
-    check('a directory counts as one pickable item rather than zero',
-        svc.state.totalFiles === 8 && svc.state.selectedFiles === 8,
-        svc.state.selectedFiles + ' of ' + svc.state.totalFiles);
+    // This mode used to read its tree from /db/browse?dirsonly=1, which
+    // reaches a directories-only answer by skipping every file -- so every
+    // directory in it reports zero bytes, the gauge was stuck at 0 B, and the
+    // disk guard beside it had nothing to compare against. It was inert on
+    // precisely the folders large enough to fill a disk. The fork's
+    // /db/dirsizes carries the totals instead; these four checks are that
+    // regression.
+    const dirStatus = await api('GET', '/rest/db/status?folder=' + FOLDER);
+    check('the size gauge is no longer stuck at zero',
+        svc.state.totalBytes === dirStatus.globalBytes && svc.state.totalBytes > 0,
+        svc.state.totalBytes + ' vs ' + dirStatus.globalBytes);
+    // api() is the raw helper, not the stubbed $http, so this is the folder's
+    // real file count rather than the inflated one the picker was shown.
+    check('and every file is accounted for, not every directory',
+        svc.state.totalFiles === dirStatus.globalFiles,
+        svc.state.totalFiles + ' vs ' + dirStatus.globalFiles);
+    check('everything ticked costs exactly the whole folder',
+        svc.state.selectedBytes === dirStatus.globalBytes,
+        svc.state.selectedBytes + ' vs ' + dirStatus.globalBytes);
+    check('loose files at the root are counted, since they cannot be unticked',
+        svc.state.rootBytes > 0, String(svc.state.rootBytes));
 
     // Ticking a directory here has to mean the whole directory, files and all.
     svc.selectAll(false);
+    await settle(400);
+    check('un-ticking every directory still costs the root files',
+        svc.state.selectedBytes === svc.state.rootBytes && svc.state.rootBytes > 0,
+        svc.state.selectedBytes + ' vs ' + svc.state.rootBytes);
+
     t3.getNodeByKey('Characters/Hero').setSelected(true);
     await settle(400);
     check('the Sync Selection button is not wrongly disabled in this mode',
         svc.state.selectedFiles > 0, String(svc.state.selectedFiles));
+    check('ticking one directory costs more than nothing and less than everything',
+        svc.state.selectedBytes > svc.state.rootBytes &&
+        svc.state.selectedBytes < dirStatus.globalBytes,
+        svc.state.selectedBytes + ' of ' + dirStatus.globalBytes);
     await svc.apply();
     await settle(300);
     const ign4 = await api('GET', '/rest/db/ignores?folder=' + FOLDER);
@@ -640,7 +789,130 @@ async function main() {
         exclusions(ign4.ignore).indexOf('/README.txt') < 0 &&
         exclusions(ign4.ignore).indexOf('/texture2.png') < 0,
         JSON.stringify(exclusions(ign4.ignore)));
+    console.log('\n-- a rule for a file, read back on a tree that shows no files');
+
+    // The gap this closes: a folder picked file by file, which then grows past
+    // twenty thousand files. Re-opened, the picker is in directories-only mode,
+    // so every file-level exclusion it wrote last time matches no node in the
+    // tree. Those used to be filed as stale -- "matches nothing in the folder
+    // as it stands now" -- which is simply untrue: the file is there and the
+    // rule is holding it back. Worse, a stale rule is one the picker has
+    // stopped believing in, and the honest end of that story is a rule which
+    // was holding back 200 GB quietly ceasing to.
+    //
+    // The test is the directory the pattern sits in. Present means the rule is
+    // live and this mode just cannot draw it; absent means it really is stale.
+    await api('POST', '/rest/db/ignores?folder=' + FOLDER, {
+        ignore: [
+            '//// desuqcafe selective sync -- rewritten by the file picker, do not hand edit',
+            BRACKET_PATTERN,
+            '/Gone/removed-long-ago.png',
+            '/Environments',
+            '//// desuqcafe selective sync -- end'
+        ]
+    });
+
+    svc.open(folders2.find(f => f.id === FOLDER));
+    if (await waitFor('it re-opens on the big-folder tree', () => svc.state.phase === 'ready', 30000)) {
+        check('a rule for a file inside a directory that is there is kept as live',
+            (svc.state.unlistedLines || []).indexOf(BRACKET_PATTERN) >= 0,
+            JSON.stringify(svc.state.unlistedLines));
+        check('and is not called stale, because it is not',
+            (svc.state.staleLines || []).indexOf(BRACKET_PATTERN) < 0,
+            JSON.stringify(svc.state.staleLines));
+        check('a rule for a directory that is gone still is stale',
+            (svc.state.staleLines || []).indexOf('/Gone/removed-long-ago.png') >= 0,
+            JSON.stringify(svc.state.staleLines));
+        check('and a rule the tree can draw is shown as a tick, not a line',
+            tree().getNodeByKey('Environments').selected === false);
+
+        await svc.apply();
+        await settle(400);
+        const kept = await api('GET', '/rest/db/ignores?folder=' + FOLDER);
+        check('the live rule survives the rewrite',
+            (kept.ignore || []).indexOf(BRACKET_PATTERN) >= 0,
+            JSON.stringify(kept.ignore));
+        // And it goes back as a rule, not under the stale comment -- which is
+        // where the file records the difference between "still holding this
+        // back" and "kept in case it means something to you".
+        const staleAt = (kept.ignore || []).findIndex(
+            l => String(l).indexOf('kept from a previous pick') >= 0);
+        check('above the stale comment, not below it',
+            staleAt > (kept.ignore || []).indexOf(BRACKET_PATTERN),
+            'stale comment at ' + staleAt);
+    }
+
     inflateFileCount = false;
+
+    console.log('\n' + '-- a managed block the picker cannot account for is refused, not rewritten');
+
+    // The block markers are the only thing separating the picker's lines from
+    // somebody's own, and the ignore file is plain text that the Advanced
+    // editor, a merge or a half-finished paste can all get at. With the END
+    // marker gone, every line after BEGIN reads as the picker's -- so the next
+    // Apply would rewrite the seeded Blender rules and the team include as if
+    // it had written them. Refusing to open is the only safe answer: nothing
+    // here can tell whose lines those were.
+    const beforeBroken = await api('GET', '/rest/db/ignores?folder=' + FOLDER);
+    const mangled = (beforeBroken.ignore || [])
+        .filter(l => String(l).trim() !== '//// desuqcafe selective sync -- end');
+    check('the fixture really is missing its end marker',
+        mangled.length === (beforeBroken.ignore || []).length - 1);
+    await api('POST', '/rest/db/ignores?folder=' + FOLDER, { ignore: mangled });
+
+    svc.open(folders2.find(f => f.id === FOLDER));
+    if (await waitFor('an unpaired block is refused', () => svc.state.phase === 'error', 15000)) {
+        check('and says which two lines are wrong',
+            /does not pair/i.test(svc.state.error || ''), svc.state.error);
+        check('and says where to fix them',
+            /Ignore Patterns/i.test(svc.state.error || ''), svc.state.error);
+    }
+    const afterBroken = await api('GET', '/rest/db/ignores?folder=' + FOLDER);
+    check('and not one line of the file was touched',
+        JSON.stringify(afterBroken.ignore) === JSON.stringify(mangled),
+        JSON.stringify(afterBroken.ignore));
+
+    console.log('\n-- which escape character a folder uses is that folder\'s business');
+
+    // lib/ignore swaps the escape character to "|" on Windows, because a
+    // backslash is the path separator -- and a folder may override it with its
+    // own "#escape=" line. The picker resolves that per folder.
+    //
+    // It used to resolve it once per session into a single variable, so a
+    // folder that declared one left it set for every folder opened afterwards.
+    // The next folder, which had declared nothing, wrote its patterns escaped
+    // for a rule it did not have. Those patterns match nothing at all, and
+    // nothing reports an error: the folder simply carries on syncing the files
+    // somebody unticked. Both halves are checked here, in this order, because
+    // it is the second one that used to fail.
+    async function pickTheBracketFile() {
+        svc.open(folders2.find(f => f.id === FOLDER));
+        if (!await waitFor('the picker opens', () => svc.state.phase === 'ready', 30000)) {
+            return null;
+        }
+        const t = tree();
+        svc.selectAll(true);
+        t.getNodeByKey(BRACKET_NAME).setSelected(false);
+        await settle(400);
+        await svc.apply();
+        await settle(400);
+        const ign = await api('GET', '/rest/db/ignores?folder=' + FOLDER);
+        return exclusions(ign.ignore);
+    }
+
+    await api('POST', '/rest/db/ignores?folder=' + FOLDER, { ignore: ['#escape=/'] });
+    const declaredEsc = await pickTheBracketFile();
+    check("a folder's own #escape= is honoured",
+        (declaredEsc || []).indexOf('/Textures/Baked/asset/[1/].png') >= 0,
+        JSON.stringify(declaredEsc));
+
+    // Same picker, same session, a folder that declares nothing. It must go
+    // back to what lib/ignore actually uses on this platform.
+    await api('POST', '/rest/db/ignores?folder=' + FOLDER, { ignore: [] });
+    const defaultEsc = await pickTheBracketFile();
+    check('and does not leak into the next folder opened',
+        (defaultEsc || []).indexOf(BRACKET_PATTERN) >= 0,
+        JSON.stringify(defaultEsc) + '  want ' + BRACKET_PATTERN);
 
     console.log('\n-- ignore patterns Syncthing cannot parse are reported, not swallowed');
 

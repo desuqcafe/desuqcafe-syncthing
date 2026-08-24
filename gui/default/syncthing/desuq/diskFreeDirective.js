@@ -34,10 +34,12 @@ angular.module('syncthing.core')
                 // fa-hdd only exists in the regular (far) set in fork-awesome.
                 '<span class="far fa-hdd"></span>&nbsp;' +
                 '<span ng-if="shortfall > 0">' +
-                'Not enough space: needs {{shortfall | binary}}B more than the {{usage.free | binary}}B free here' +
+                'Not enough space: needs {{shortfall | binary}}B more than the {{usable | binary}}B usable here' +
                 '</span>' +
                 '<span ng-if="shortfall <= 0">' +
-                '{{usage.free | binary}}B free of {{usage.total | binary}}B' +
+                '<span ng-if="reserve > 0">{{usable | binary}}B usable of {{usage.free | binary}}B free' +
+                ' &mdash; {{reserve | binary}}B is held in reserve</span>' +
+                '<span ng-if="!(reserve > 0)">{{usage.free | binary}}B free of {{usage.total | binary}}B</span>' +
                 '</span>' +
                 '</span>',
             link: function (scope) {
@@ -46,18 +48,47 @@ angular.module('syncthing.core')
                 scope.usage = null;
                 scope.shortfall = -1;
                 scope.tight = false;
+                scope.reserve = 0;
+                scope.usable = 0;
+
+                // The fork seeds every folder with a 20 GB reserve, and
+                // Syncthing enforces it: below that it refuses every file with
+                // "insufficient space in folder". Measuring against raw free
+                // space therefore said "18 GiB free of 500 GiB" in plain black
+                // while nothing could be written at all -- the one row built to
+                // explain a wedged folder, reporting that everything was fine.
+                //
+                // A percent unit is a fraction of the whole drive rather than
+                // of what is free, matching CheckFreeSpace in lib/config/size.go.
+                function reserveBytes(total) {
+                    var m = scope.minDiskFree;
+                    if (!m || !(Number(m.value) > 0)) {
+                        return 0;
+                    }
+                    var v = Number(m.value);
+                    switch (m.unit) {
+                        case '%': return total * v / 100;
+                        case 'kB': return v * 1000;
+                        case 'MB': return v * 1000 * 1000;
+                        case 'GB': return v * 1000 * 1000 * 1000;
+                        case 'TB': return v * 1000 * 1000 * 1000 * 1000;
+                        default: return v;
+                    }
+                }
 
                 function evaluate() {
                     if (!scope.usage) {
                         return;
                     }
-                    var free = scope.usage.free;
+                    scope.reserve = reserveBytes(scope.usage.total);
+                    var usable = Math.max(0, scope.usage.free - scope.reserve);
+                    scope.usable = usable;
                     var need = Number(scope.needBytes) || 0;
 
-                    scope.shortfall = need > free ? need - free : -1;
-                    // Within 10% of filling the drive is worth a nudge even
-                    // when it technically fits.
-                    scope.tight = need > 0 && need > free * 0.9;
+                    scope.shortfall = need > usable ? need - usable : -1;
+                    // Within 10% of filling what is usable is worth a nudge
+                    // even when it technically fits.
+                    scope.tight = need > 0 && need > usable * 0.9;
                 }
 
                 function refresh(path) {
@@ -88,6 +119,9 @@ angular.module('syncthing.core')
                 });
 
                 scope.$watch('needBytes', evaluate);
+                // The reserve follows the folder being edited, and in the
+                // folder editor it can be retyped while the row is on screen.
+                scope.$watch('minDiskFree', evaluate, true);
 
                 scope.$on('$destroy', function () {
                     if (pending) {

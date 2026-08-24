@@ -90,7 +90,7 @@
               </span>
               <!-- desuqcafe fork: show the space on the drive being pointed at, before
                    committing to a folder that will not fit. -->
-              <span ng-if="!editingFolderDefaults()"></br><disk-free path="currentFolder.path" need-bytes="model[currentFolder.id].needBytes"></disk-free></span>
+              <span ng-if="!editingFolderDefaults()"></br><disk-free path="currentFolder.path" need-bytes="model[currentFolder.id].needBytes" min-disk-free="currentFolder.minDiskFree"></disk-free></span>
             </p>
           </div>
         </div>

@@ -435,7 +435,16 @@ angular.module('syncthing.core')
                     '     ng-class="{\'desuq-handshake-confirmed\': confirmed, \'desuq-handshake-compact\': compact}">',
 
                     // --- hero ---
-                    '  <div class="desuq-handshake-hero">',
+                    //
+                    // Hidden while the check is running, and that is the whole
+                    // point of the check. The hero carries the real card, the
+                    // phrase spelled out in words, and the rank in two
+                    // notations; with it on screen, picking the right card out
+                    // of three is a matching exercise anyone can pass without
+                    // having listened to a single word the other person said.
+                    // The check is meant to cost the attention it claims to
+                    // prove.
+                    '  <div class="desuq-handshake-hero" ng-if="!challenge">',
                     '    <desuq-card card="sas" size="{{compact ? \'sm\' : \'md\'}}"></desuq-card>',
                     '    <div class="desuq-handshake-side" ng-if="!compact">',
                     '      <div class="desuq-handshake-status" ng-if="confirmed">',
@@ -465,6 +474,20 @@ angular.module('syncthing.core')
                     '          chat could swap this too. A call where you recognise each other is the',
                     '          strongest version.',
                     '        </p>',
+                    // Says what the card is worth, in the place where somebody
+                    // is deciding how much to trust it. The number is not
+                    // decoration: 2^32 is small enough that stating it honestly
+                    // is the difference between a security claim and a
+                    // security theatre, and the thing that actually makes it
+                    // work is in the sentence after it.
+                    '        <p class="desuq-handshake-note-fine">',
+                    '          The card is four bytes of a hash of both device IDs &mdash; one of about',
+                    '          four billion. Somebody forging it would have to generate identities by the',
+                    '          billion aimed at you and this person in particular, and finish before the',
+                    '          two of you compare. What actually protects you is comparing on a channel',
+                    '          they do not control; the card only gives you something short enough to',
+                    '          read out.',
+                    '        </p>',
                     '      </div>',
                     '      <button type="button" class="btn btn-sm desuq-handshake-btn"',
                     '              ng-if="!challenge && !confirmed" ng-click="startChallenge()">',
@@ -479,26 +502,46 @@ angular.module('syncthing.core')
 
                     // --- the pick-one-of-three check ---
                     '  <div class="desuq-handshake-challenge" ng-if="challenge">',
-                    '    <div class="desuq-handshake-ask">',
-                    '      Which card are they looking at?',
-                    '      <span class="desuq-handshake-dim">Pick the one they described.</span>',
-                    '    </div>',
-                    '    <div class="desuq-handshake-deal">',
-                    '      <div class="desuq-handshake-slot" ng-repeat="c in challenge"',
-                    '           ng-class="{\'is-wrong\': wrongPick === c.rank}"',
-                    '           ng-style="{\'animation-delay\': ($index * 90) + \'ms\'}"',
-                    '           ng-click="choose(c)" role="button" tabindex="0">',
-                    '        <desuq-card card="c" size="sm"></desuq-card>',
+                    '    <div ng-if="!noneMatch">',
+                    '      <div class="desuq-handshake-ask">',
+                    '        Which card are they looking at?',
+                    '        <span class="desuq-handshake-dim">Pick the one they described. Your own card is hidden until you have.</span>',
                     '      </div>',
+                    '      <div class="desuq-handshake-deal">',
+                    '        <div class="desuq-handshake-slot" ng-repeat="c in challenge"',
+                    '             ng-class="{\'is-wrong\': wrongPick === c.rank}"',
+                    '             ng-style="{\'animation-delay\': ($index * 90) + \'ms\'}"',
+                    '             ng-click="choose(c)" role="button" tabindex="0">',
+                    '          <desuq-card card="c" size="sm"></desuq-card>',
+                    '        </div>',
+                    '      </div>',
+                    '      <div class="desuq-handshake-wrong" ng-if="wrongPick">',
+                    '        <span class="fa fa-times-circle"></span>',
+                    '        <strong>That is not the card on this screen.</strong>',
+                    '        If they really did read that out, stop &mdash; do not add this device,',
+                    '        and check the device ID with them again somewhere you trust.',
+                    '      </div>',
+                    // Without this, somebody whose partner reads out a card
+                    // that is on none of these three has no honest move: the
+                    // dialogue offers three answers and every one of them is a
+                    // claim that it matched. The correct outcome of a real
+                    // mismatch was reachable only by picking a card at random
+                    // and getting told off for it.
+                    '      <button type="button" class="btn btn-sm desuq-handshake-btn desuq-handshake-btn-undo"',
+                    '              ng-click="noneOfThese()">',
+                    '        None of these &mdash; they read out something else',
+                    '      </button>',
                     '    </div>',
-                    '    <div class="desuq-handshake-wrong" ng-if="wrongPick">',
+                    '    <div class="desuq-handshake-wrong" ng-if="noneMatch">',
                     '      <span class="fa fa-times-circle"></span>',
-                    '      <strong>That is not the card on this screen.</strong>',
-                    '      If they really did read that out, stop &mdash; do not add this device,',
-                    '      and check the device ID with them again somewhere you trust.',
+                    '      <strong>Then stop, and do not add this device.</strong>',
+                    '      Two cards that disagree means the device ID you were given is not the one',
+                    '      they sent. Either it was altered on the way to you, or one of you pasted',
+                    '      the wrong thing. Ask them for the ID again somewhere else &mdash; a call,',
+                    '      in person &mdash; and compare the cards again before going any further.',
                     '    </div>',
                     '    <button type="button" class="btn btn-sm desuq-handshake-btn desuq-handshake-btn-undo" ng-click="cancelChallenge()">',
-                    '      Cancel',
+                    '      <span ng-if="!noneMatch">Cancel</span><span ng-if="noneMatch">Back to the card</span>',
                     '    </button>',
                     '  </div>',
                     '</div>'
@@ -512,6 +555,7 @@ angular.module('syncthing.core')
                         scope.sas = handshake.of(scope.localId, scope.remoteId);
                         scope.challenge = null;
                         scope.wrongPick = null;
+                        scope.noneMatch = false;
                         if (!scope.sas) {
                             scope.confirmed = false;
                             return;
@@ -538,11 +582,23 @@ angular.module('syncthing.core')
                         var shift = (scope.sas.digest ? scope.sas.digest[12] : 0) % deck.length;
                         scope.challenge = deck.slice(shift).concat(deck.slice(0, shift));
                         scope.wrongPick = null;
+                        scope.noneMatch = false;
                     };
 
                     scope.cancelChallenge = function () {
                         scope.challenge = null;
                         scope.wrongPick = null;
+                        scope.noneMatch = false;
+                    };
+
+                    // Nothing is recorded and nothing is undone: a device that
+                    // was never confirmed stays unconfirmed, and one that was
+                    // keeps its tick until somebody explicitly removes it. The
+                    // job here is to say what to do, not to act on a claim
+                    // this screen cannot check.
+                    scope.noneOfThese = function () {
+                        scope.wrongPick = null;
+                        scope.noneMatch = true;
                     };
 
                     scope.choose = function (card) {
@@ -562,6 +618,7 @@ angular.module('syncthing.core')
                         save(map);
                         scope.challenge = null;
                         scope.wrongPick = null;
+                        scope.noneMatch = false;
                         refresh();
                         // Let the confirmed styling land after the digest, so
                         // the flourish plays rather than appearing instantly.

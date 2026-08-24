@@ -70,7 +70,13 @@ function Initialize-GoVersionInfo {
     if ($env:PATH -notlike "*$gobin*") { $env:PATH = "$gobin;$env:PATH" }
     if (Get-Command goversioninfo.exe -ErrorAction SilentlyContinue) { return }
     Write-Host "Installing goversioninfo..." -ForegroundColor DarkGray
-    & $GoExe install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
+    # Pinned, not @latest. This tool emits a COFF object that is linked into
+    # the shipped binary, and @latest opts out of the only protection that
+    # matters here: GOSUMDB verifies a *given* version, so never fixing one
+    # means every build machine -- including the CI runner that produces the
+    # installer people are told to download -- links whatever was newest that
+    # minute. Matches the version build-syncthing.yaml already pins.
+    & $GoExe install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.4.0
     if ($LASTEXITCODE -ne 0) { throw "failed to install goversioninfo" }
 }
 

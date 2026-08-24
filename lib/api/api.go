@@ -260,6 +260,7 @@ func (s *service) Serve(ctx context.Context) error {
 	restMux.HandlerFunc(http.MethodGet, "/rest/db/localchanged", s.getDBLocalChanged)         // folder [perpage] [page]
 	restMux.HandlerFunc(http.MethodGet, "/rest/db/status", s.getDBStatus)                     // folder
 	restMux.HandlerFunc(http.MethodGet, "/rest/db/browse", s.getDBBrowse)                     // folder [prefix] [dirsonly] [levels]
+	restMux.HandlerFunc(http.MethodGet, "/rest/db/dirsizes", s.getDBDirSizes)                 // folder  (desuqcafe fork, see api_dirsizes.go)
 	restMux.HandlerFunc(http.MethodGet, "/rest/folder/versions", s.getFolderVersions)         // folder
 	restMux.HandlerFunc(http.MethodGet, "/rest/folder/errors", s.getFolderErrors)             // folder [perpage] [page]
 	restMux.HandlerFunc(http.MethodGet, "/rest/folder/pullerrors", s.getFolderErrors)         // folder (deprecated)
@@ -1332,6 +1333,24 @@ func (s *service) postDBIgnores(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// desuqcafe fork: one element of this array is one line of .stignore, and
+	// the array is written out joined by newlines -- so an element that
+	// contains a newline silently becomes two rules. That matters because the
+	// fork's selective-sync picker builds these lines out of file names chosen
+	// by whoever offered the folder. A peer creating a file called
+	// "a\n!Textures" re-includes a directory the user deliberately unticked;
+	// one called "a\n#include nope" stops the ignore file parsing, and a folder
+	// whose ignores will not parse refuses to scan or pull at all.
+	//
+	// Rejected here rather than only in the picker so it holds for every
+	// caller, including upstream's own ignore textarea.
+	for _, line := range data["ignore"] {
+		if strings.ContainsAny(line, "\r\n") {
+			http.Error(w, "ignore patterns must not contain line breaks", http.StatusBadRequest)
+			return
+		}
 	}
 
 	err = s.model.SetIgnores(qs.Get("folder"), data["ignore"])

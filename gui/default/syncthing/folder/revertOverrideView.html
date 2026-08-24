@@ -22,9 +22,49 @@
         </p>
       </div>
       <div ng-switch-default>
+        <!--
+          desuqcafe fork: upstream's two paragraphs stay exactly as they were,
+          and everything below is added beside them. See CUSTOMIZATIONS.md.
+
+          The reason is that this is one click from a panel a modeller sees
+          every day, and upstream's wording never names the folder, never says
+          how many files, and never says whether anything can be got back. All
+          three are knowable at the moment the dialogue opens.
+        -->
         <p translate>
           The folder content on this device will be overwritten to become identical with other devices. Files newly added here will be deleted.
         </p>
+
+        <!--
+          Bootstrap's own well/text-danger rather than a fork stylesheet: the
+          dark themes already style these, and a fork stylesheet would have to
+          learn every palette to avoid rendering a white box on a black modal.
+        -->
+        <div class="well well-sm">
+          <p>
+            <span class="fas fa-folder"></span>&nbsp;
+            <strong>{{revertOverrideParams.folderLabel}}</strong>
+          </p>
+          <p ng-if="revertOverrideParams.localItems > 0">
+            <strong>{{revertOverrideParams.localItems | alwaysNumber | localeNumber}}</strong>
+            <span ng-if="revertOverrideParams.localItems === 1">file or folder</span><span ng-if="revertOverrideParams.localItems !== 1">files and folders</span>
+            <span ng-if="revertOverrideParams.localBytes > 0">(~{{revertOverrideParams.localBytes | binary}}B)</span>
+            were added or changed on this computer and nowhere else.
+            <span ng-if="revertOverrideParams.localItems === 1">It will be removed.</span><span ng-if="revertOverrideParams.localItems !== 1">They will all be removed.</span>
+          </p>
+          <p ng-if="revertOverrideParams.versioned">
+            <span class="fas fa-history"></span>&nbsp;
+            A copy of each one is put in this folder's version history first, so
+            they can be recovered from <em>Actions &rarr; Restore Versions</em>.
+          </p>
+          <p ng-if="!revertOverrideParams.versioned" class="text-danger">
+            <span class="fas fa-exclamation-triangle"></span>&nbsp;
+            <strong>This folder keeps no version history</strong>, so these files
+            are not recoverable afterwards. Copy anything you want to keep out of
+            the folder before continuing.
+          </p>
+        </div>
+
         <p translate>
           Are you sure you want to revert all local changes?
         </p>

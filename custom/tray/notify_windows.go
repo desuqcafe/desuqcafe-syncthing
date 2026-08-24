@@ -32,6 +32,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -53,6 +54,11 @@ var (
 // it wants the multi-threaded apartment rather than an STA it would have to
 // service.
 const roInitMultithreaded = 1
+
+// toastDrainTimeout is how long Close waits for queued toasts to be shown.
+// Two seconds is roughly one toast's worth of WinRT round trip; anything
+// slower than that is a WinRT call that has hung, and the tray is quitting.
+const toastDrainTimeout = 2 * time.Second
 
 // Interface IDs, from the Windows SDK headers.
 var (
@@ -142,6 +148,24 @@ type comObject unsafe.Pointer
 
 // comCall invokes the slot'th entry of obj's vtable with obj as the implicit
 // first argument, which is the calling convention every COM method uses.
+//
+// The pragma is load-bearing and the bug it prevents is a nasty one. Callers
+// hand COM the addresses of locals to write their out-parameters into --
+// `&toast` and `&shower` in show(), for two. The compiler only treats
+// `uintptr(unsafe.Pointer(&x))` as keeping x alive when the conversion appears
+// syntactically in a call to syscall.Syscall; in a call to an ordinary
+// function like this one it is just an integer, so escape analysis leaves x on
+// the stack. A stack growth anywhere between the conversion and the syscall
+// then moves it, and the COM method writes its result into the address the
+// variable used to be at -- silently, and only under a deep enough call.
+//
+// //go:uintptrescapes tells the compiler to treat these arguments as the
+// pointers they are: the referents are heap-allocated and kept alive until the
+// call returns. Verified with `go build -gcflags=-m`: without it, neither
+// `toast` nor `shower` moves to the heap. It costs an allocation per call on a
+// path that raises at most a handful of toasts an hour.
+//
+//go:uintptrescapes
 func comCall(obj comObject, slot uintptr, args ...uintptr) uintptr {
 	vtbl := *(*unsafe.Pointer)(obj)
 	fn := *(*uintptr)(unsafe.Add(vtbl, slot*unsafe.Sizeof(uintptr(0))))
@@ -206,9 +230,21 @@ func roGetActivationFactory(class string, iid *windows.GUID) (comObject, error) 
 type winToaster struct {
 	appID string
 
-	reqs      chan Notification
-	closeOnce sync.Once
-	done      chan struct{}
+	reqs chan Notification
+	// done is closed when the toast thread has finished, whether it finished
+	// by draining the queue or by giving up on WinRT at start-up.
+	done chan struct{}
+
+	// mu guards closed AND the send on reqs. Holding a mutex across a channel
+	// send would normally be a smell, but the send here is non-blocking, and
+	// the alternative is the race this exists to prevent: Quit closes the
+	// notifier while the event goroutine is midway through Notify, and the
+	// send lands on a closed channel, which is a panic rather than an error.
+	// Nothing in the tray recovers, so it takes the icon with it -- during
+	// shutdown, where it looks like a crash on exit and is very hard to
+	// reproduce deliberately.
+	mu     sync.Mutex
+	closed bool
 }
 
 // newNotifier returns a notifier that raises Windows toasts attributed to
@@ -236,6 +272,9 @@ func (t *winToaster) run() {
 	// The apartment belongs to the thread, so the thread must not be reused.
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
+	// Deferred rather than closed at the bottom, so the give-up path below
+	// releases Close() too rather than making it wait out the full timeout.
+	defer close(t.done)
 
 	r, _, _ := procRoInitialize.Call(roInitMultithreaded)
 	// RPC_E_CHANGED_MODE means somebody already initialised this thread with
@@ -254,7 +293,6 @@ func (t *winToaster) run() {
 			slog.Error("could not show a notification", "err", err, "title", n.Title)
 		}
 	}
-	close(t.done)
 }
 
 func (t *winToaster) show(n Notification) error {
@@ -326,6 +364,13 @@ func (t *winToaster) show(n Notification) error {
 }
 
 func (t *winToaster) Notify(n Notification) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed {
+		// Not worth a log line: this is the normal state of affairs between
+		// Quit and the process actually going.
+		return
+	}
 	select {
 	case t.reqs <- n:
 	default:
@@ -333,8 +378,28 @@ func (t *winToaster) Notify(n Notification) {
 	}
 }
 
+// Close stops the toast thread and gives whatever is already queued a moment
+// to reach the screen.
+//
+// The wait is short and bounded because the caller is on its way out: an
+// unbounded one would hang Quit behind a WinRT call that is not coming back,
+// which is a worse outcome than losing a notification nobody was going to read
+// on a machine that is shutting down anyway.
 func (t *winToaster) Close() {
-	t.closeOnce.Do(func() { close(t.reqs) })
+	t.mu.Lock()
+	if t.closed {
+		t.mu.Unlock()
+		return
+	}
+	t.closed = true
+	close(t.reqs)
+	t.mu.Unlock()
+
+	select {
+	case <-t.done:
+	case <-time.After(toastDrainTimeout):
+		slog.Warn("gave up waiting for queued notifications", "waited", toastDrainTimeout)
+	}
 }
 
 // toastXML builds the ToastGeneric payload.

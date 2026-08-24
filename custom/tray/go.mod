@@ -11,11 +11,11 @@
 // imports -- but it matches the fork's repository so it reads correctly.
 module github.com/desuqcafe/desuqcafe-syncthing/custom/tray
 
-go 1.24
+go 1.25.0
 
 require (
 	fyne.io/systray v1.12.2
-	golang.org/x/sys v0.31.0
+	golang.org/x/sys v0.47.0
 )
 
 require github.com/godbus/dbus/v5 v5.1.0 // indirect

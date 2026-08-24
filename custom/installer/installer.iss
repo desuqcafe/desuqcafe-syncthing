@@ -87,22 +87,39 @@ Source: "..\dist\{#MyAppBinary}-tray.exe"; DestDir: "{app}"; Flags: ignoreversio
 Source: "..\scripts\seed-config.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-; Double-clicking starts the daemon and opens the web GUI. If it is already
-; running, Syncthing detects the existing instance and just opens the GUI.
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppBinary}.exe"; \
-    Parameters: "serve --home=""{localappdata}\{#MyDataDir}"""; \
+; EVERY way in starts the tray, never the daemon directly.
+;
+; These two used to run `{#MyAppBinary}.exe serve`, which starts Syncthing with
+; no notification-area icon at all -- so searching Windows for the app and
+; pressing Enter gave you a browser tab and nothing else, while the sign-in
+; shortcut gave you an icon. Same product, two different behaviours depending
+; on how you happened to launch it, and the one most people find by searching
+; was the one with no way to see whether it was still running.
+;
+; It was also silently unrepeatable: `serve` notices an existing instance and
+; exits 0, so the second click did nothing whatsoever, not even open the GUI.
+;
+; -open shows the web interface once Syncthing is up, matching the post-install
+; button below. The sign-in shortcut deliberately does not. The tray refuses to
+; start a second copy of itself for the same home and just opens the GUI
+; instead (see instance_windows.go), so clicking these while it is already
+; running does the obvious thing rather than putting two icons in the tray.
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppBinary}-tray.exe"; \
+    Parameters: "-home=""{localappdata}\{#MyDataDir}"" -binary=""{app}\{#MyAppBinary}.exe"" -open"; \
     WorkingDir: "{app}"; Comment: "Start {#MyAppName} and open the web interface"
 
 Name: "{group}\{#MyAppName} data folder"; Filename: "{localappdata}\{#MyDataDir}"
 
-Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppBinary}.exe"; \
-    Parameters: "serve --home=""{localappdata}\{#MyDataDir}"""; \
-    WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppBinary}-tray.exe"; \
+    Parameters: "-home=""{localappdata}\{#MyDataDir}"" -binary=""{app}\{#MyAppBinary}.exe"" -open"; \
+    WorkingDir: "{app}"; Tasks: desktopicon; \
+    Comment: "Start {#MyAppName} and open the web interface"
 
-; Autostart runs the tray rather than the daemon directly. The tray starts
-; Syncthing, keeps it running, and is the only thing on screen that says whether
-; it is working -- Syncthing itself has no tray icon and no service mode, so
-; started bare at sign-in it is completely invisible.
+; The same tray as the shortcuts above, minus -open: signing in should not
+; throw a browser tab at you. The tray starts Syncthing, keeps it running, and
+; is the only thing on screen that says whether it is working -- Syncthing
+; itself has no tray icon and no service mode, so started bare at sign-in it is
+; completely invisible.
 Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppBinary}-tray.exe"; \
     Parameters: "-home=""{localappdata}\{#MyDataDir}"" -binary=""{app}\{#MyAppBinary}.exe"""; \
     WorkingDir: "{app}"; Tasks: startupicon; \
@@ -135,17 +152,47 @@ Filename: "{app}\{#MyAppBinary}-tray.exe"; \
 // executable is not locked and the database is closed cleanly.
 procedure StopRunningInstance();
 var
+  Tray: String;
   ResultCode: Integer;
 begin
   // The tray first: it supervises Syncthing and would restart it underneath us.
+  // Killing it outright is fine -- it holds no state of its own.
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM {#MyAppBinary}-tray.exe',
        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(500);
 
-  // Then the daemon: ask politely first, then insist.
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM {#MyAppBinary}.exe',
-       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Sleep(1500);
+  // Then the daemon, which does hold state: an open database.
+  //
+  // The obvious "ask politely, then insist" -- taskkill without /F, then with
+  // -- does not work here at all. Without /F taskkill delivers WM_CLOSE to the
+  // process's top-level windows, and this binary is linked -H windowsgui with
+  // no window to deliver to, so the polite call is a guaranteed no-op and
+  // every upgrade in fact ended in the hard kill. Syncthing survives that, but
+  // it is the path that leaves the database needing recovery on next start,
+  // which on a texture library is minutes of rescanning the user did not ask
+  // for.
+  //
+  // So ask over the REST API instead, which is what the tray's own Quit does.
+  // Reusing the tray binary as a one-shot rather than reimplementing it here
+  // keeps the API key and the GUI address being read out of config.xml in one
+  // place -- and in Pascal, over a self-signed https GUI, it would be a good
+  // deal more than one place.
+  //
+  // {app} still holds the OLD tray at this point, so on an upgrade from a
+  // build that predates -shutdown the flag is rejected and the exit code is
+  // non-zero. That is not worth branching on: the force-kill below is the same
+  // backstop it has always been, and a fresh install has nothing running.
+  Tray := ExpandConstant('{app}\{#MyAppBinary}-tray.exe');
+  if FileExists(Tray) then
+  begin
+    Exec(Tray,
+         ExpandConstant('-home="{localappdata}\{#MyDataDir}" -shutdown'),
+         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end
+  else
+    Sleep(1500);
+
+  // Whatever happened above, make sure nothing is left holding the exe.
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM {#MyAppBinary}.exe',
        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(500);
