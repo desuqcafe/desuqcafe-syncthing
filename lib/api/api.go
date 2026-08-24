@@ -298,6 +298,7 @@ func (s *service) Serve(ctx context.Context) error {
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/error/clear", s.postSystemErrorClear)     // -
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/ping", s.restPing)                        // -
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/reset", s.postSystemReset)                // [folder]
+	restMux.HandlerFunc(http.MethodPost, "/rest/system/reveal", s.postSystemReveal)              // folder [sub]  (desuqcafe fork, see api_reveal.go)
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/restart", s.postSystemRestart)            // -
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/shutdown", s.postSystemShutdown)          // -
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/upgrade", s.postSystemUpgrade)            // -

@@ -108,7 +108,17 @@
 
       <div class="desuq-home-card-path" title="{{ f.path }}">{{ f.path }}</div>
 
+      <!-- The path above is a fact, not an affordance. A button is what a
+           person looking for their files will find; the path stays because
+           it is also the answer to "which of my drives is this on". -->
+      <div class="desuq-home-card-reveal-error" ng-if="revealError[f.id]">
+        {{ revealError[f.id] }}
+      </div>
+
       <div class="desuq-home-card-actions">
+        <button type="button" class="btn btn-sm btn-default" ng-click="reveal(f.id)">
+          <span class="far fa-folder-open"></span>&nbsp;<span>Open folder</span>
+        </button>
         <button type="button" class="btn btn-sm btn-default"
                 ng-if="(folders[f.id].type == 'sendreceive' || folders[f.id].type == 'receiveonly') && folders[f.id].devices.length > 1"
                 ng-click="desuqSelective.open(folders[f.id])">

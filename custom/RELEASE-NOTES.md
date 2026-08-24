@@ -3,83 +3,116 @@
      install section to it, so this file is only ever "what changed".
      Old releases keep their own notes on GitHub; git history keeps these. -->
 
-# desuqcafe Syncthing v2.1.4-desuq.2
+# desuqcafe Syncthing v2.1.4-desuq.3
 
-The first release with any of the fork's own features in it. `desuq.1` was the
-packaging — a per-user installer and a branded binary — and nothing else. This
-one is everything built since.
+The screen you land on is new. `desuq.2` added the features; this one is about
+what you actually see, what the words mean, and a handful of things that could
+previously go wrong quietly.
 
-If you are already running `desuq.1`, this is worth updating for. If you are
-installing for the first time, this is the one to install.
+Update by running the installer over the top.
 
-## You can see it running, and it tells you things
+## A main screen that answers the questions you have
 
-- **A notification-area icon** with five states. It starts Syncthing, keeps it
-  running, and is the only thing on screen that says whether syncing is
-  working — upstream has no tray icon and no service mode, so started at
-  sign-in it was completely invisible. Right-click for **Open**, **Pause
-  Syncing** and **Quit**.
-- **Windows notifications** for the six things that actually need a person: a
-  device asking to connect, a folder being offered, a sync finishing, a folder
-  in trouble, a disk about to fill, and a teammate on a newer version. Every
-  one is rate-limited and clicks through to the page that can act on it.
-- **Synced folders look synced in Explorer** — a violet folder icon on every
-  one, written per user with no shell extension, no COM registration and no
-  administrator.
+Stock Syncthing opens on a table of folders and devices with thirty-one
+controls on it, several of them destructive. It is a good screen for somebody
+who administers a sync network, and the wrong screen for somebody who wants to
+know whether their work is safe.
 
-## Setting it up for the first time
+- **One sentence at the top**, and it is the answer: *"Everything is here"*,
+  or what is wrong, or what is still coming.
+- **Folders and people as cards** — how many files, how big, who has them, how
+  far each person has got, and whether you have verified them.
+- **It says what is true of the other machine**, not what is true of yours.
+  A folder can be perfectly idle on your disk because a teammate never accepted
+  the share; that used to read as "up to date". So does a folder where you have
+  only chosen some of the files. Both now say so, by name.
+- **Upstream's full view is still there**, one click down, under *Technical
+  details* — every folder and device setting exactly as Syncthing shows them.
 
-- **A first-run guide.** A fresh install used to be an empty screen with no
-  next action on it, and the one thing you needed — your device code — was
-  behind *Actions → Show ID*. There is now a four-step guide that names the
-  machine, shows the code with a Copy button and a QR, walks the device
-  verification, and explains what a folder offer will look like. It closes at
-  any point and comes back where it left off from **Actions → Setup guide**.
-- **A verified device handshake.** Both machines show the same collectible
-  card — `《 CRIMSON TALISMAN NOCTURNE 》Rank CLXXVI` — derived from the two
-  device IDs. Read it to each other on a call. Confirming means picking the
-  real card out of three, because a checkbox saying "it matched" gets ticked
-  by reflex.
+## Open folder
 
-## Choosing what lands on your disk
+The path to a synced folder used to be text you selected and pasted into an
+Explorer window. There is now a button on every folder card that opens it.
 
-- **A real file picker.** Accepting a share now holds everything back, waits
-  for the file list to arrive, and shows you the whole tree to tick from.
-  Nothing downloads until you have chosen. Upstream's answer was a textarea
-  full of glob patterns.
-- **Free space you can see** — under the folder path, in the folder detail, and
-  as a warning when a folder will not fit. Upstream checks capacity per file
-  and never up front, so a 400 GB share could be accepted onto a 250 GB drive.
-- **Rate limits that admit the truth.** Upstream ignores rate limits on the
-  local network by default and says so nowhere. The limit fields now say
-  whether the limit applies — and in the device editor, whether it is applying
-  right now.
+## Nothing that deletes your work by accident
 
-## It sends nothing
+- **Closing the file picker no longer downloads everything.** It used to clear
+  the "hold everything back" rule on the way out — measured at seven files held
+  back becoming twenty-six files and 18 MB — while the text beside the button
+  said nothing was being downloaded. Closing now holds the folder back and
+  pauses it, and *Choose files* is the way back in.
+- **New top-level files and folders a teammate adds are held back** rather than
+  arriving unasked. Files added inside a folder you kept still arrive, which is
+  the point of keeping it.
+- **"Revert Local Changes" is no longer one click under a green tick.** A
+  receive-only folder holding your own edits was painted success-green with a
+  checkmark, directly above a button that deletes them. The panel is now amber,
+  and the dialogue names the folder, how many files, how big, and whether
+  copies go to version history first or are gone for good.
+- **A teammate cannot write a rule into your ignore file** by naming a file
+  carefully.
 
-Upstream has three telemetry reporters gated by two options, and the third —
-the panic-log upload — is **on by default and never asks**: a stock build that
-crashes uploads goroutine stacks and the tail of its log, which for this team
-means folder names and paths.
+## The notification-area icon
 
-All three now consult a compile-time constant. The consent modal and the
-settings dropdown are gone with them, and three tests assert the wire stays
-silent with every telemetry option forced *on*. It is not a setting you can
-turn back on by accident.
+- **Every shortcut starts the tray**, not the daemon. Searching Windows for the
+  app used to open a browser tab and leave nothing on screen.
+- **One icon per configuration.** A second launch opens the window and exits,
+  instead of leaving you with two icons and two copies of everything behind
+  them.
+- **Sync conflicts raise a notification**, naming the file you know —
+  `scene.blend`, not the generated conflict name beside it.
+- **Upgrading no longer ends in a hard kill.** The installer now asks the tray
+  to shut Syncthing down properly and waits for it.
 
-## Smaller things
+## Words that mean the same thing everywhere
 
-- **You will be told when an update exists.** Syncthing already reports what
-  version every device you connect to is running, so the tray compares itself
-  to your team and raises a notification when one of them is ahead. Nothing is
-  polled and nothing external is contacted — the check is entirely between you
-  and the machines you already sync with.
-- The uninstaller takes the folder icons back off before it goes.
-- A re-seed never renames a device whose name somebody chose.
-- Nine test suites, run on every push and again before a release is built.
+The one thing two people have to say out loud to each other had four names in
+the interface: *Device ID*, *Identification*, *Show ID*, and *device code*.
+It is **device code** now, in all of them.
 
-## Upgrading from desuq.1
+- **The shutdown dialogue** was a green box saying "Syncthing has been shut
+  down", with no button, no Escape, no backdrop and no mention of how to start
+  it again. It now says your files are where you left them, that closing the
+  window is safe, and that the tray icon starts it back up.
+- **The green "GUI Authentication" panel** is off the front page. It was the
+  largest thing on a fresh install, coloured the same as "your files are safe",
+  for something that is neither a success nor a fact about syncing. The
+  information now sits in Settings, directly above the two fields that resolve
+  it. Upstream's much stronger red warning, for a GUI reachable from off your
+  machine, is untouched.
+- **"Automatic upgrades"** is gone from Settings. This build is compiled
+  without self-update, so the field could only ever read "Disabled by
+  administrator or maintainer", which was not true of anybody. It says plainly
+  that the build does not update itself.
+- **Help** points at this fork's own changelog, issues and source, and no
+  longer at a statistics page built entirely out of usage reports this build
+  does not send.
+
+## Fixes worth naming
+
+- **Free-space warnings fire when they should.** The 20 GB reserve was
+  declared and then ignored, so "not enough space" arrived about 20 GB late in
+  all three places it appears.
+- **Folder sizes in the picker are real.** Syncthing's directories-only listing
+  reaches its answer by skipping every file, so every directory in it reports
+  as zero bytes — which made the picker's disk check inert on exactly the
+  folders large enough to matter.
+- **The verification card opens for people you have already added.** It was
+  reachable only while adding somebody, which is the one moment you do not need
+  it; re-reading the phrase to each other later was impossible.
+- **Dark and Black themes** no longer draw this fork's dialogues in light text
+  on a light background. The first-run guide was effectively invisible under
+  both.
+- **A re-seed never renames a device** whose name somebody chose.
+
+## Under the hood
+
+Eleven test suites now run on every push and again as a gate before any release
+is built — including, new this release, the fork's own server-side handlers,
+which had no automated coverage at all.
+
+## Upgrading
 
 Run the installer over the top. Your device identity, folders, settings and
-"start at sign-in" choice are all kept — the seeded defaults are only ever
+"start at sign-in" choice are all kept: the seeded defaults are only ever
 written once, so nothing you have changed since is touched.

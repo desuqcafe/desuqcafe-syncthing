@@ -629,9 +629,33 @@ angular.module('syncthing.core')
             });
         }
 
+        // Ask the server to open a folder in Explorer. The browser cannot: a
+        // file:// link from an http:// page is blocked, so the path on the card
+        // is otherwise something to copy out by hand. See lib/api/api_reveal.go.
+        //
+        // Resolves to '' when the window has been opened and to a sentence when
+        // it has not -- a folder on a drive that is not plugged in is the case
+        // that actually happens, and it is worth saying out loud rather than
+        // leaving a button that does nothing when pressed.
+        function reveal(folderID) {
+            return $http.post(urlbase + '/system/reveal?folder=' +
+                encodeURIComponent(folderID)).then(function () {
+                return '';
+            }, function (r) {
+                if (r && r.status === 404) {
+                    return 'That folder is not on this computer right now — check the drive it lives on.';
+                }
+                if (r && r.status === 501) {
+                    return 'Opening a folder only works on Windows.';
+                }
+                return 'Could not open the folder.';
+            });
+        }
+
         return {
             state: st,
             refresh: refresh,
+            reveal: reveal,
             pollMs: POLL_MS,
             // Exported for custom/scripts/test-home-render.js, which asserts
             // the headline rules directly without standing up Angular.
@@ -661,6 +685,17 @@ angular.module('syncthing.core')
                 // The card facts are sentences, so they use the same formatter
                 // as the headline rather than upstream's binary/decimal toggle.
                 scope.bytes = desuqHome._size;
+
+                // Keyed by folder ID rather than held on the folder object,
+                // because refresh() rebuilds that array every 2.5 seconds and
+                // would take the message with it.
+                scope.revealError = {};
+
+                scope.reveal = function (folderID) {
+                    desuqHome.reveal(folderID).then(function (msg) {
+                        scope.revealError[folderID] = msg;
+                    });
+                };
 
                 var poller = null;
                 var dead = false;

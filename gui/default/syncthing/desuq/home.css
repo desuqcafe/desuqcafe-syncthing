@@ -237,6 +237,14 @@ be filled with something. One column lets the page be as short as its content.
     white-space: nowrap;
 }
 
+/* Only ever shown after somebody has pressed "Open folder" and nothing
+   happened -- almost always a drive that is not plugged in. */
+.desuq-home-card-reveal-error {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--v-warning);
+}
+
 .desuq-home-card-actions {
     margin-top: 13px;
     display: flex;

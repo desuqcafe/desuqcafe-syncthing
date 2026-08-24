@@ -64,7 +64,7 @@ Everything else still resolves by keeping both sides.
 | `custom/scripts/seed-config.ps1` | Writes first-run `config.xml` defaults |
 | `custom/scripts/sync-upstream.ps1` | Merge upstream and verify the build |
 | `custom/scripts/start-test-pair.ps1` | Two throwaway instances sharing a folder, for two-device testing |
-| `custom/scripts/run-tests.ps1` | **Runs all ten suites.** `-Quick` skips the two needing a binary or a live pair. What the build and CI both call |
+| `custom/scripts/run-tests.ps1` | **Runs all eleven suites.** `-Quick` skips the two needing a binary or a live pair. What the build and CI both call |
 | `custom/scripts/check-handshake-words.ps1` | Asserts the verification wordlists stay distinct. Run by the build even with `-SkipTests` |
 | `custom/scripts/test-selective-render.js` | Drives the selective-sync picker through real Angular and a live instance. Needs jsdom and a running test pair |
 | `custom/scripts/test-lanlimit-render.js` | Renders the LAN rate-limit note through real Angular. Needs jsdom; no instance required |
@@ -83,7 +83,7 @@ Everything else is upstream Syncthing, unmodified.
 ## Common commands
 
 ```powershell
-.\custom\scripts\run-tests.ps1                 # all ten suites; -Quick for the fast eight
+.\custom\scripts\run-tests.ps1                 # all eleven suites; -Quick for the fast nine
 .\custom\build-windows.ps1 -Installer          # build binary + installer (runs -Quick first)
 .\custom\scripts\sync-upstream.ps1 -DryRun     # preview upstream changes
 git tag v2.1.4-desuq.2; git push origin v2.1.4-desuq.2   # cut a release
@@ -171,10 +171,28 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
   an ordinary helper — `comCall` — leaves the local on the stack, where a
   stack growth relocates it before the syscall runs. Verified with
   `go build -gcflags=-m`.
+- **`/rest/events/disk` is a *fixed-mask* endpoint and does not have the
+  problem below.** One server-side buffer, `LocalChangeDetected |
+  RemoteChangeDetected`, subscribed at daemon start
+  (`lib/syncthing/syncthing.go:143`) and 1000 events deep, so `since=` works
+  and there is no mask to mismatch. What it does have is a **restart**: the
+  buffer is memory only, and IDs begin again at 1, so a stored `since` must be
+  dropped the moment an ID goes backwards. Two more things it will not tell
+  you: **the first scan emits one event per existing file** (verified — six
+  files, six events, one timestamp), which overruns 1000 on a real asset
+  folder; and **`action` is only ever `modified` or `deleted`**
+  (`lib/model/folder.go:1379`), so a file that has just been *created* reports
+  as modified and nothing in the feed can say "added".
 - **`/rest/events` IDs are per subscription, not global.** Syncthing keeps one
   buffer per distinct `events=` mask and numbers each from 1. Bootstrapping
   "where is now" with one mask and then polling with another silently drops
   events. Ask with the same mask you intend to poll with.
+- **`explorer.exe` exits 1 on success.** `lib/api/api_reveal_windows.go` starts
+  it and never waits: it is a launcher that hands the request to the running
+  desktop shell and leaves, and there is nothing useful in its status either
+  way. Anything that checks the exit code reports every successful open as a
+  failure. It is also why the route only ever passes a **directory** —
+  `explorer.exe` given an executable runs it.
 - Windows suppresses toasts while anything is full screen (automatic Do Not
   Disturb). They land in the Action Centre instead, so a notifier that looks
   broken during testing may be working perfectly.
