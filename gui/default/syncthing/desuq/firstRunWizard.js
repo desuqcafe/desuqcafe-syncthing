@@ -10,7 +10,7 @@
 // this machine. There is no next action anywhere on it, and the one thing the
 // person actually needs -- their device ID, to send to whoever is sharing
 // files with them -- is behind a menu called "Actions", under an entry called
-// "Show ID", in a modal that also offers to share it by SMS.
+// "Show device code", in a modal that also offers to share it by SMS.
 //
 // For the two non-technical modellers this fork is built for, that screen is
 // where the install ends and the phone call starts.

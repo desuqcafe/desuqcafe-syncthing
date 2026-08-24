@@ -1,7 +1,33 @@
-<modal id="shutdown" status="success" icon="fas fa-power-off" heading="{{'Shutdown Complete' | translate}}" large="no" closeable="no">
+<!-- desuqcafe fork: reworked from upstream's version, which was
+     status="success" closeable="no" with the single line "Syncthing has been
+     shut down."
+
+     Three things were wrong with that. It was green, which this fork reserves
+     for "your files are safe" -- and having just stopped syncing them is not
+     that. It was `closeable="no"`, so with the server gone there was no
+     backdrop click, no Escape, no button and no link: the page was a dead end
+     you could only leave through the browser's own chrome. And it never said
+     the one thing the person needs next, which is how to start Syncthing
+     again -- on this fork that is the tray icon, which upstream has no reason
+     to know about.
+
+     status="default" rather than "info": a neutral header is right for an
+     outcome the person asked for. closeable="yes" restores Escape and the
+     backdrop; there is deliberately no action button, because every action
+     this dialog could offer needs the server that just stopped. -->
+<modal id="shutdown" status="default" icon="fas fa-power-off" heading="Syncthing has stopped" large="no" closeable="yes">
   <div class="modal-body">
-    <p translate>
-      Syncthing has been shut down.
+    <p>
+      Your files are where you left them. Nothing is being sent or received
+      until Syncthing is started again.
+    </p>
+    <p>
+      It is safe to close this window.
+    </p>
+    <p class="help-block">
+      <span class="fas fa-fw fa-info-circle"></span>
+      To start it again, open <b>desuq Syncthing</b> from the Start menu, or
+      click the tray icon if it is still there.
     </p>
   </div>
 </modal>

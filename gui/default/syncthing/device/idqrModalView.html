@@ -1,4 +1,4 @@
-<modal id="idqr" status="info" icon="fas fa-qrcode" heading="{{'Device Identification' | translate}} - {{deviceName(currentDevice)}}" large="yes" closeable="yes">
+<modal id="idqr" status="info" icon="fas fa-qrcode" heading="Device code &mdash; {{deviceName(currentDevice)}}" large="yes" closeable="yes">
   <div class="modal-body text-center">
     <div class="well well-sm text-monospace select-on-click"><strong>{{currentDevice.deviceID}}</strong></div>
     <div ng-if="currentDevice.deviceID">

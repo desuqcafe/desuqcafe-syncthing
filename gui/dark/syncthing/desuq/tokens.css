@@ -1,0 +1,66 @@
+/**
+
+The --v-* palette for Syncthing's "dark" theme.
+
+Served in preference to gui/default/syncthing/desuq/tokens.css whenever the dark
+theme is selected, because lib/api's static server overlays gui/<theme>/ on
+gui/default/ for every path. See the header of the default copy for the whole
+mechanism.
+
+The neutrals below are Syncthing's own dark values -- #272727 ground, #333 and
+#3B3B3B panels, #424242 borders, #aaa muted text -- so a fork component sits in
+this theme looking like it belongs to it rather than like a violet panel someone
+pasted in.
+
+The accent stays violet. Someone who picks "Dark" is asking for Syncthing's
+dark chrome, not for the fork to stop being the fork, and the accent is the only
+place the two claims meet. Violet on #272727 clears contrast comfortably at the
+--v-accent and --v-accent-bright weights, which are the two used for text.
+
+**/
+
+:root {
+    --v-bg: #272727;
+    --v-surface: #333333;
+    --v-surface-raised: #3b3b3b;
+    --v-surface-hover: #484848;
+    --v-surface-sunken: #222222;
+
+    --v-border: #424242;
+    --v-border-strong: #545454;
+
+    --v-text: #ffffff;
+    --v-text-muted: #aaaaaa;
+    --v-text-dim: #8a8a8a;
+    --v-text-inverse: #1b1b1b;
+
+    --v-accent-deep: #6d34d6;
+    --v-accent-strong: #8b5cf6;
+    --v-accent: #a78bfa;
+    --v-accent-bright: #c4b5fd;
+    --v-accent-wash: rgba(139, 92, 246, 0.16);
+    --v-accent-wash-strong: rgba(139, 92, 246, 0.30);
+
+    --v-success: #10b981;
+    --v-success-bright: #34d399;
+    --v-success-wash: rgba(16, 185, 129, 0.16);
+    --v-warning: #c29d0b;
+    --v-warning-bright: #fbbf24;
+    --v-danger: #d62c1a;
+    --v-danger-bright: #f87171;
+    --v-info: #3498db;
+    --v-info-bright: #a5b4fc;
+
+    --v-radius-sm: 5px;
+    --v-radius: 8px;
+    --v-radius-lg: 12px;
+
+    --v-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --v-shadow: 0 2px 10px -2px rgba(0, 0, 0, 0.45);
+    --v-shadow-pop: 0 16px 44px -12px rgba(0, 0, 0, 0.7);
+
+    --v-ring: 0 0 0 2px var(--v-bg), 0 0 0 4px var(--v-accent);
+    --v-ring-inset: 0 0 0 3px var(--v-accent-wash-strong);
+
+    --v-transition: 120ms ease;
+}

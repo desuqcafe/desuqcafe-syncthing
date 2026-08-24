@@ -540,3 +540,24 @@
         justify-content: center;
     }
 }
+
+/* The dismiss button.
+
+   Bootstrap's .close is black at 20% opacity, which on this header is
+   invisible. The violet theme restyles .close globally so it never showed
+   there, but gui/dark and gui/black do not, and that is where the wizard is
+   hardest to read. Scoped to our own header rather than fixed globally: the
+   same gap exists on upstream's modals under those themes and is upstream's
+   to make a decision about, not ours to change underneath them. */
+.desuq-wiz-header .close {
+    color: var(--v-text);
+    text-shadow: none;
+    opacity: 0.55;
+    transition: opacity var(--v-transition);
+}
+
+.desuq-wiz-header .close:hover,
+.desuq-wiz-header .close:focus {
+    color: var(--v-text);
+    opacity: 1;
+}

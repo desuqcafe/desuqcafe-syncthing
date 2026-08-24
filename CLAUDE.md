@@ -32,12 +32,20 @@ future `git merge upstream/main` is work you can plan rather than a surprise:
   A line in the root `go.mod`/`go.sum` is a conflict on every upstream
   dependency bump: a recurring tax for a one-off convenience.
 
-Fourteen upstream files carry fork edits today, 436 insertions against 159
+Seventeen upstream files carry fork edits today, 608 insertions against 207
 deletions. Stripping the telemetry is what changed the character of that: it
 is the first work that had to *delete* upstream behaviour rather than sit
 beside it, because there is no additive way to remove a consent nag or a
-settings control that no longer does anything. Four rows in
+settings control that no longer does anything. Several rows in
 `CUSTOMIZATIONS.md` are marked **Medium** for that reason.
+
+The main screen is the largest divergence so far and deliberately did *not*
+follow that pattern. `<desuq-home>` is placed above upstream's first row and
+that row is wrapped in a collapsed `<details>`, rather than being replaced —
+so the biggest visual change the fork has made costs nine deleted lines in
+`index.html`. Upstream's markup carries thirty-one actions, several of them
+destructive, and the replacement should earn their deletion by covering the
+cases first. Deleting it is a later, separate pass.
 
 `README.md` is the only row marked **High**:
 it is a full rewrite, so every upstream README change conflicts. That was
@@ -56,11 +64,12 @@ Everything else still resolves by keeping both sides.
 | `custom/scripts/seed-config.ps1` | Writes first-run `config.xml` defaults |
 | `custom/scripts/sync-upstream.ps1` | Merge upstream and verify the build |
 | `custom/scripts/start-test-pair.ps1` | Two throwaway instances sharing a folder, for two-device testing |
-| `custom/scripts/run-tests.ps1` | **Runs all nine suites.** `-Quick` skips the two needing a binary or a live pair. What the build and CI both call |
+| `custom/scripts/run-tests.ps1` | **Runs all ten suites.** `-Quick` skips the two needing a binary or a live pair. What the build and CI both call |
 | `custom/scripts/check-handshake-words.ps1` | Asserts the verification wordlists stay distinct. Run by the build even with `-SkipTests` |
 | `custom/scripts/test-selective-render.js` | Drives the selective-sync picker through real Angular and a live instance. Needs jsdom and a running test pair |
 | `custom/scripts/test-lanlimit-render.js` | Renders the LAN rate-limit note through real Angular. Needs jsdom; no instance required |
 | `custom/scripts/test-wizard-render.js` | Drives the first-run setup guide through real Angular against canned REST. Needs jsdom; no instance required |
+| `custom/scripts/test-home-render.js` | Drives the main screen the same way, and asserts the headline rules directly as a pure function. Needs jsdom; no instance required |
 | `custom/scripts/test-seed-naming.ps1` | Asserts a re-seed never takes a device name somebody chose |
 | `custom/scripts/disable-inherited-ci.ps1` | Turn off upstream's workflows |
 | `custom/RELEASE-NOTES.md` | The body of the **next** release, rewritten each time. The release workflow reads it and appends the install section |
@@ -74,7 +83,7 @@ Everything else is upstream Syncthing, unmodified.
 ## Common commands
 
 ```powershell
-.\custom\scripts\run-tests.ps1                 # all eight suites; -Quick for the fast six
+.\custom\scripts\run-tests.ps1                 # all ten suites; -Quick for the fast eight
 .\custom\build-windows.ps1 -Installer          # build binary + installer (runs -Quick first)
 .\custom\scripts\sync-upstream.ps1 -DryRun     # preview upstream changes
 git tag v2.1.4-desuq.2; git push origin v2.1.4-desuq.2   # cut a release
@@ -116,6 +125,22 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
 - Fork-added GUI strings should use plain `{{ }}` interpolation.
   angular-translate renders `{%placeholders%}` literally for any string missing
   from `assets/lang`, which ours always are.
+- **The per-theme asset overlay applies to every path, not just `assets/`.**
+  `lib/api` serves `gui/<theme>/` over `gui/default/` and falls back per file,
+  so a theme can own any single file. That is how the fork's `--v-*` palette
+  works: `syncthing/desuq/tokens.css` exists once per theme and costs no
+  upstream edit at all. **Its `<link>` must stay above `assets/css/theme.css`**
+  in `index.html` — the violet theme defines the real palette there and relies
+  on loading second. Move it and the violet UI turns light.
+- **The test pair's binary and its GUI drift independently.** The pair defaults
+  to the *installed* binary while `STGUIASSETS` serves `gui/` from the working
+  tree, so it is easy to spend a session with a server older than the interface
+  it is serving. The symptom is a fork REST endpoint 404ing while the GUI
+  behaves as though it exists — `/rest/db/dirsizes` did exactly that. Build
+  first and pass `-Binary custom\dist\desuq-syncthing.exe`.
+- **Fork Awesome's family name is `ForkAwesome`, one word.** `"Fork Awesome"`
+  with a space silently falls back and renders a tofu box, which is easy to
+  miss in a `::before` on a disclosure triangle.
 
 - **This build sends no telemetry, and that is a constant, not a setting.**
   `lib/build/desuq_telemetry.go`. Upstream has three reporters gated by two

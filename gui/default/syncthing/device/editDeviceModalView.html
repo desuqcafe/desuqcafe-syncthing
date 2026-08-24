@@ -9,7 +9,8 @@
       <div class="tab-content">
         <div id="device-general" class="tab-pane in active">
           <div ng-if="!editingDeviceDefaults()" class="form-group" ng-class="{'has-error': deviceEditor.deviceID.$invalid && deviceEditor.deviceID.$dirty}" ng-init="loadFormIntoScope(deviceEditor)">
-            <label translate for="deviceID">Device ID</label>
+            <!-- desuqcafe fork: one name for one thing. See the Actions menu. -->
+            <label for="deviceID">Device code</label>
             <div class="input-group">
               <input ng-if="editingDeviceNew()" name="deviceID" id="deviceID" class="form-control text-monospace" type="text" ng-model="currentDevice.deviceID" required="" valid-deviceid list="discovery-list" aria-required="true" />
               <div ng-if="!editingDeviceNew()" class="well well-sm form-control text-monospace select-on-click" style="height: auto;">{{currentDevice.deviceID}}</div>
@@ -42,19 +43,33 @@
                   </li>
                 </ul>
               </div>
-            <!-- desuqcafe fork: short authentication string for the pair.
-                 Adding a device is mutual but not authenticated -- this is
-                 what lets the two people check the ID was not swapped in
-                 transit. See gui/default/syncthing/desuq/. -->
-            <device-handshake local-id="myID" remote-id="currentDevice.deviceID"></device-handshake>
               <p class="help-block">
-                <span translate ng-if="deviceEditor.deviceID.$valid || deviceEditor.deviceID.$pristine">The device ID to enter here can be found in the "Actions &gt; Show ID" dialog on the other device. Spaces and dashes are optional (ignored).</span>
+                <!-- desuqcafe fork: renamed to match "Show device code" in the
+                     Actions menu, which is what this sentence is telling them
+                     to go and click. -->
+                <span ng-if="deviceEditor.deviceID.$valid || deviceEditor.deviceID.$pristine">The device code to enter here is on the other computer, under &ldquo;Actions &gt; Show device code&rdquo;. Spaces and dashes are optional (ignored).</span>
                 <span translate ng-show="deviceEditor.deviceID.$valid || deviceEditor.deviceID.$pristine">When adding a new device, keep in mind that this device must be added on the other side too.</span>
                 <span translate ng-if="deviceEditor.deviceID.$error.required && deviceEditor.deviceID.$dirty">The device ID cannot be blank.</span>
                 <span translate ng-if="deviceEditor.deviceID.$error.validDeviceid && deviceEditor.deviceID.$dirty">The entered device ID does not look valid. It should be a 52 or 56 character string consisting of letters and numbers, with spaces and dashes being optional.</span>
                 <span translate ng-if="deviceEditor.deviceID.$error.unique && deviceEditor.deviceID.$dirty">A device with that ID is already added.</span>
               </p>
             </div>
+            <!-- desuqcafe fork: short authentication string for the pair.
+                 Adding a device is mutual but not authenticated -- this is
+                 what lets the two people check the ID was not swapped in
+                 transit. See gui/default/syncthing/desuq/.
+
+                 Deliberately OUTSIDE the ng-if="editingDeviceNew()" block
+                 above. It sat inside it until the main-screen wave, which
+                 meant the card only ever rendered while *adding* somebody and
+                 never when opening an existing person's settings -- so the one
+                 thing it exists for, re-reading the phrase to each other on a
+                 call some time after the device was added, could not be done
+                 here at all. That went unnoticed because the device detail
+                 table on the main screen carried a second copy; when that copy
+                 was reduced to a link, the card became unreachable and the
+                 nesting bug finally showed. -->
+            <device-handshake local-id="myID" remote-id="currentDevice.deviceID"></device-handshake>
           </div>
           <div class="form-group">
             <label translate for="name">Device Name</label>

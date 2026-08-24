@@ -80,18 +80,26 @@
               </div>
             </div>
             <div class="col-md-6">
+              <!-- desuqcafe fork: upstream's "Automatic upgrades" control was
+                   here.
+
+                   This build is compiled -no-upgrade, so `upgradeInfo` is
+                   never populated and the only branch that could ever render
+                   was the help-block reading "Unavailable/Disabled by
+                   administrator or maintainer" -- a setting-shaped thing that
+                   has never been able to do anything, sitting on the first tab
+                   of the first dialog. Worse, it is not even accurate: nobody
+                   disabled this, it cannot work. Syncthing verifies upgrades
+                   against upstream's signing key, which cannot validate our
+                   builds. Replaced with a plain statement of that, in the same
+                   shape as the telemetry note below it. -->
               <div class="form-group">
-                <label translate>Automatic upgrades</label>&emsp;<a href="{{docsURL('users/releases')}}" target="_blank"><span class="fas fa-question-circle"></span>&nbsp;<span translate>Help</span></a>
-                <select class="form-control" ng-model="tmpOptions.upgrades" ng-if="upgradeInfo">
-                  <option ng-if="!version.isCandidate" value="none" translate>No upgrades</option>
-                  <option value="stable" translate>Stable releases only</option>
-                  <option value="candidate" translate>Stable releases and release candidates</option>
-                </select>
-                <p class="help-block" ng-if="!upgradeInfo">
-                  <span translate>Unavailable/Disabled by administrator or maintainer</span>
-                </p>
-                <p class="help-block" ng-if="version.isCandidate && upgradeInfo">
-                  <span translate>Automatic upgrades are always enabled for candidate releases.</span>
+                <label>Updates</label>
+                <p class="help-block">
+                  <span class="fas fa-fw fa-info-circle"></span>
+                  This build does not update itself. New versions are installed
+                  by running the installer again; your folders and settings are
+                  left alone.
                 </p>
               </div>
             </div>
@@ -120,6 +128,22 @@
             <p class="help-block" ng-show="settingsEditor.Address.$invalid" translate>
               Enter a non-privileged port number (1024 - 65535).
             </p>
+          </div>
+          <!-- desuqcafe fork: what upstream showed as a bright green panel on
+               the main screen of every fresh install. It is not a success and
+               it is not a sync fact, so it has no business on that screen; it
+               belongs directly above the two fields that resolve it. See
+               syncthing/core/notifications.html. -->
+          <div class="row" ng-if="!tmpGUI.user">
+            <div class="col-md-12">
+              <p class="help-block">
+                <span class="fas fa-fw fa-info-circle"></span>
+                No user name or password is set. Anyone who can already sign in
+                to this computer can open Syncthing and reach your files
+                through it. On a machine only you use that is usually fine; set
+                a user name and password below if it is not.
+              </p>
+            </div>
           </div>
           <div class="row">
             <div class="col-md-6">

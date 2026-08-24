@@ -23,6 +23,12 @@
   <link href="vendor/fork-awesome/css/v5-compat.css" rel="stylesheet"/>
   <link href="assets/css/tree.css" rel="stylesheet"/>
   <link href="assets/css/overrides.css" rel="stylesheet"/>
+  <!-- desuqcafe fork: the --v-* palette every syncthing/desuq/ stylesheet is
+       drawn with. Each GUI theme serves its own copy of this one path, so the
+       fork's components follow the theme instead of falling back to a light
+       palette on a dark page. MUST stay above assets/css/theme.css: the violet
+       theme defines the real violet values there and relies on winning. -->
+  <link href="syncthing/desuq/tokens.css" rel="stylesheet"/>
   <link href="assets/css/theme.css" rel="stylesheet"/>
   <!-- desuqcafe fork: device verification card -->
   <link href="syncthing/desuq/handshake.css" rel="stylesheet"/>
@@ -32,6 +38,8 @@
   <link href="syncthing/desuq/lanlimit.css" rel="stylesheet"/>
   <!-- desuqcafe fork: the first-run wizard -->
   <link href="syncthing/desuq/wizard.css" rel="stylesheet"/>
+  <!-- desuqcafe fork: the main screen -->
+  <link href="syncthing/desuq/home.css" rel="stylesheet"/>
 </head>
 
 <body>
@@ -107,11 +115,25 @@
               <li><a class="navbar-link" href="{{docsURL()}}" target="_blank"><span class="fa fa-fw fa-book"></span>&nbsp;<span translate>Documentation</span></a></li>
               <li><a class="navbar-link" href="https://forum.syncthing.net" target="_blank"><span class="fa fa-fw fa-users"></span>&nbsp;<span translate>Support</span></a></li>
               <li class="divider" aria-hidden="true"></li>
-              <li><a class="navbar-link" href="https://github.com/syncthing/syncthing/releases" target="_blank"><span class="fa fa-fw fa-file-text"></span>&nbsp;<span translate>Changelog</span></a></li>
-              <li><a class="navbar-link" href="https://data.syncthing.net/" target="_blank"><span class="fa fa-fw fa-bar-chart"></span>&nbsp;<span translate>Statistics</span></a></li>
+              <!-- desuqcafe fork: repointed. Upstream's releases page does not
+                   list the build this menu is running in, and the version
+                   string in About will not be found there either. -->
+              <li><a class="navbar-link" href="https://github.com/desuqcafe/desuqcafe-syncthing/releases" target="_blank"><span class="fa fa-fw fa-file-text"></span>&nbsp;<span>What's new</span></a></li>
+              <!-- desuqcafe fork: upstream's "Statistics" link to
+                   https://data.syncthing.net/ was here. That page is built
+                   entirely from the anonymous usage reports this build does
+                   not send (lib/build/desuq_telemetry.go), so it can only ever
+                   show somebody else's installations. A menu entry that
+                   promises "your statistics" and cannot contain a single fact
+                   about you is worse than no entry. -->
               <li class="divider" aria-hidden="true"></li>
-              <li><a class="navbar-link" href="https://github.com/syncthing/syncthing/issues" target="_blank"><span class="fa fa-fw fa-bug"></span>&nbsp;<span translate>Bugs</span></a></li>
-              <li><a class="navbar-link" href="https://github.com/syncthing/syncthing" target="_blank"><span class="fa fa-fw fa-file-code-o"></span>&nbsp;<span translate>Source Code</span></a></li>
+              <!-- desuqcafe fork: repointed at this fork. A bug found in this
+                   build is very often a bug in something this build added, and
+                   sending it to upstream's tracker wastes the reporter's time
+                   and a maintainer's. Upstream's own issues and source stay
+                   one click further on, from the fork's README. -->
+              <li><a class="navbar-link" href="https://github.com/desuqcafe/desuqcafe-syncthing/issues" target="_blank"><span class="fa fa-fw fa-bug"></span>&nbsp;<span>Report a problem</span></a></li>
+              <li><a class="navbar-link" href="https://github.com/desuqcafe/desuqcafe-syncthing" target="_blank"><span class="fa fa-fw fa-file-code-o"></span>&nbsp;<span>Source Code</span></a></li>
               <li class="divider" aria-hidden="true"></li>
               <li><a href="" ng-click="about.show()"><span class="fa fa-fw fa-heart"></span>&nbsp;<span translate>About</span></a></li>
             </ul>
@@ -126,7 +148,13 @@
               <li><a href="" ng-click="showSettings()"><span class="fa fa-fw fa-cog"></span>&nbsp;<span translate>Settings</span></a></li>
               <li><a href="" ng-click="advanced()"><span class="fa fa-fw fa-cogs"></span>&nbsp;<span translate>Advanced</span></a></li>
               <li class="divider" aria-hidden="true"></li>
-              <li><a href="" ng-click="showDeviceIdentification(thisDevice())"><span class="fa fa-fw fa-qrcode"></span>&nbsp;<span translate>Show ID</span></a></li>
+              <!-- desuqcafe fork: "Show ID" -> "Show device code". One thing,
+                   one name. This concept was called four different things
+                   across the interface -- Identification, Show ID, Your code,
+                   Send your code -- and the two people this fork is for have
+                   to say it out loud to each other over a phone. See the
+                   Verification row and the setup guide, which now agree. -->
+              <li><a href="" ng-click="showDeviceIdentification(thisDevice())"><span class="fa fa-fw fa-qrcode"></span>&nbsp;<span>Show device code</span></a></li>
               <!-- desuqcafe fork: reopen the first-run wizard. It closes on
                    Escape, on the backdrop and on "Finish this later", and step 2
                    waits on somebody else adding you, so there has to be a way
@@ -386,6 +414,30 @@
           </div>
         </form>
       </div>
+
+      <!-- desuqcafe fork: the main screen.
+
+           Answers the three questions a modeller actually has -- is everything
+           here, who am I sharing with, is anything wrong -- and nothing else.
+           See syncthing/desuq/home.js. -->
+      <desuq-home ng-if="authenticated"></desuq-home>
+
+      <!-- desuqcafe fork: upstream's main screen, kept and collapsed.
+
+           Deliberately not deleted. It carries thirty-one distinct actions,
+           several of them destructive (revertOverrideConfirmationModal,
+           restoreVersions) and several diagnostic (showFailed, showNeed,
+           showLocalChanged, showListenerStatus, showDiscoveryStatus), and
+           removing them in the same change that introduces their replacement
+           is the wrong order: the new screen should earn the deletion by
+           covering the cases first.
+
+           Keeping it also means this whole feature is additive here, which is
+           the difference between a Low and a Medium row in CUSTOMIZATIONS.md.
+           The two lines below and the two at the end of the row are the entire
+           edit; upstream's markup between them is untouched. -->
+      <details class="desuq-technical" ng-if="authenticated">
+        <summary>Technical details<span class="desuq-technical-hint">&mdash; every folder and device setting, exactly as Syncthing shows them</span></summary>
 
       <!-- First regular row -->
       <div ng-if="authenticated" class="row">
@@ -810,7 +862,7 @@
                       <td class="text-right">{{system.uptime | duration:"m"}}</td>
                     </tr>
                     <tr>
-                      <th><span class="fas fa-fw fa-qrcode"></span>&nbsp;<span translate>Identification</span></th>
+                      <th><span class="fas fa-fw fa-qrcode"></span>&nbsp;<span>Device code</span></th>
                       <td class="text-right">
                         <span tooltip data-original-title="{{'Click to see full identification string and QR code.' | translate}}">
                           <a href="" ng-click="showDeviceIdentification(thisDevice())">{{deviceShortID(deviceCfg.deviceID)}}</a>
@@ -983,19 +1035,29 @@
                             <td translate class="text-right">Yes</td>
                           </tr>
                           <tr>
-                            <th><span class="fas fa-fw fa-qrcode"></span>&nbsp;<span translate>Identification</span></th>
+                            <th><span class="fas fa-fw fa-qrcode"></span>&nbsp;<span>Device code</span></th>
                             <td class="text-right">
                               <span tooltip data-original-title="{{'Click to see full identification string and QR code.' | translate}}">
                                 <a href="" ng-click="showDeviceIdentification(deviceCfg)">{{deviceShortID(deviceCfg.deviceID)}}</a>
                               </span>
                             </td>
                           </tr>
-                          <!-- desuqcafe fork: the pair's verification phrase, so it can
-                               be re-checked on a call after the device was added. -->
+                          <!-- desuqcafe fork: the verification card was a row here.
+
+                               It rendered 194px tall in a table whose every
+                               other row is 28px -- a 7x outlier, the only row
+                               with no icon, and a large blank gutter beside
+                               it. It is now two things instead: a one-line
+                               badge on the main screen, which is where the
+                               question "have I checked this person" actually
+                               gets asked, and the full card in this device's
+                               own settings, which is where there is room to
+                               read it out over a phone. Removing it here is
+                               removing a fork addition, not upstream markup. -->
                           <tr>
                             <th><span class="fas fa-fw fa-user-shield"></span>&nbsp;<span>Verification</span></th>
-                            <td class="text-center">
-                              <device-handshake local-id="myID" remote-id="deviceCfg.deviceID" compact="true"></device-handshake>
+                            <td class="text-right">
+                              <a href="" ng-click="editDeviceExisting(deviceCfg)">Open the verification card</a>
                             </td>
                           </tr>
                           <tr ng-if="deviceCfg.untrusted">
@@ -1070,6 +1132,7 @@
           </div>
         </div>
       </div> <!-- /row -->
+      </details> <!-- desuqcafe fork: /Technical details -->
 
     </div> <!-- /container -->
   </div> <!-- /ng-cloak -->
@@ -1163,6 +1226,7 @@
   <script type="text/javascript" src="syncthing/desuq/selectiveSync.js"></script>
   <script type="text/javascript" src="syncthing/desuq/lanLimitDirective.js"></script>
   <script type="text/javascript" src="syncthing/desuq/firstRunWizard.js"></script>
+  <script type="text/javascript" src="syncthing/desuq/home.js"></script>
   <script type="text/javascript" src="assets/lang/valid-langs.js"></script>
   <script type="text/javascript" src="assets/lang/prettyprint.js"></script>
   <script type="text/javascript" src="meta.js"></script>

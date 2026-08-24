@@ -51,6 +51,12 @@ leaves it off where it would not.
 
     --v-success: #10b981;
     --v-success-bright: #34d399;
+    /* Referenced by selective.css since it was written, and defined nowhere
+       until now, so it had always fallen back. This file has to define it as
+       well as the rest of the set: syncthing/desuq/tokens.css loads first and
+       supplies a light value, and an override that misses one token leaves that
+       one token light. */
+    --v-success-wash: rgba(16, 185, 129, 0.14);
     --v-warning: #d99414;
     --v-warning-bright: #fbbf24;
     --v-danger: #dc4b41;

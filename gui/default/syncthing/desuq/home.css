@@ -1,0 +1,487 @@
+/**
+
+The main screen.
+
+Unlike the fork's four older stylesheets this one writes var(--v-x) with no
+fallback. Those four were written before syncthing/desuq/tokens.css existed and
+had to carry a light default in every var() call, which is exactly the bug that
+made the wizard unreadable under Dark. tokens.css now guarantees the whole
+palette under every theme, so a fallback here would only be a second, silently
+wrong answer waiting for someone to add a fifth theme and forget it.
+
+TWO RULES
+
+Violet is the resting colour, and there is no green on this screen. The good
+and busy states are what anybody sees almost all of the time, so those get the
+fork's own colour; amber and red mean something precisely because nothing else
+competes with them. Using green for "safe" quietly outranked the brand in the
+one place the brand is most visible.
+
+Calm is quiet. Weight is proportional to how much the line wants from you:
+is-good and is-busy are a single unboxed row, is-attention and is-problem get a
+border and a tint. A banner announcing that nothing is wrong is still noise,
+and it teaches the eye to skip the place a real problem will appear.
+
+Layout is one column. Upstream's main screen is two, which is what forces the
+diagnostics panel to be as visually loud as the folder list -- a column has to
+be filled with something. One column lets the page be as short as its content.
+
+**/
+
+.desuq-home {
+    margin-bottom: 24px;
+}
+
+
+/* ----------------------------------------------------------- the headline */
+
+.desuq-home-headline {
+    display: flex;
+    align-items: flex-start;
+    gap: 13px;
+    padding: 2px 2px 0;
+    margin-bottom: 26px;
+    border-left: 0 solid transparent;
+    border-radius: var(--v-radius-lg);
+    transition: padding var(--v-transition);
+}
+
+.desuq-home-headline-mark {
+    flex: 0 0 auto;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    background: var(--v-accent-wash-strong);
+    color: var(--v-accent-bright);
+    margin-top: 2px;
+}
+
+.desuq-home-headline-text {
+    min-width: 0;
+}
+
+.desuq-home-headline-main {
+    font-size: 18px;
+    line-height: 1.3;
+    font-weight: 600;
+    color: var(--v-text);
+}
+
+.desuq-home-headline-sub {
+    margin-top: 2px;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--v-text-muted);
+}
+
+
+/* Settled and working: quiet. No box, no tint, no raised surface -- the
+   information is the sentence, and the sentence is enough. */
+.desuq-home-headline.is-good .desuq-home-headline-mark {
+    background: var(--v-accent-deep);
+    color: #fff;
+}
+
+.desuq-home-headline.is-busy .desuq-home-headline-mark {
+    background: var(--v-accent-wash-strong);
+    color: var(--v-accent-bright);
+}
+
+/* Needs a decision, or is broken: now it is allowed to take up room. */
+.desuq-home-headline.is-attention,
+.desuq-home-headline.is-problem {
+    padding: 17px 19px;
+    border: 1px solid var(--v-border);
+    border-left-width: 4px;
+    background: var(--v-surface-raised);
+    box-shadow: var(--v-shadow-sm);
+}
+
+.desuq-home-headline.is-attention {
+    border-left-color: var(--v-warning-bright);
+}
+
+.desuq-home-headline.is-attention .desuq-home-headline-mark {
+    background: var(--v-warning);
+    color: var(--v-text-inverse);
+}
+
+.desuq-home-headline.is-problem {
+    border-left-color: var(--v-danger-bright);
+}
+
+.desuq-home-headline.is-problem .desuq-home-headline-mark {
+    background: var(--v-danger);
+    color: #fff;
+}
+
+.desuq-home-headline.is-attention .desuq-home-headline-main,
+.desuq-home-headline.is-problem .desuq-home-headline-main {
+    font-size: 19px;
+}
+
+/* The spinner is the only motion on the screen, and it is load-bearing --
+   "Getting 12 MiB" with a still icon reads as stuck. */
+@media (prefers-reduced-motion: no-preference) {
+    .desuq-home-headline.is-busy .desuq-home-headline-mark .fas {
+        animation: desuq-home-spin 1.6s linear infinite;
+    }
+}
+
+@keyframes desuq-home-spin {
+    to { transform: rotate(360deg); }
+}
+
+
+/* -------------------------------------------------------------- the blocks */
+
+.desuq-home-block {
+    margin-bottom: 28px;
+}
+
+.desuq-home-h {
+    margin: 0 0 11px;
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--v-text-dim);
+}
+
+.desuq-home-empty {
+    padding: 18px 20px;
+    border: 1px dashed var(--v-border-strong);
+    border-radius: var(--v-radius);
+    color: var(--v-text-muted);
+    font-size: 14px;
+}
+
+.desuq-home-block-actions {
+    margin-top: 11px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+
+/* --------------------------------------------------------------- the cards */
+
+.desuq-home-card {
+    border: 1px solid var(--v-border);
+    border-radius: var(--v-radius);
+    background: var(--v-surface);
+    padding: 15px 18px;
+    margin-bottom: 10px;
+    transition: border-color var(--v-transition);
+}
+
+.desuq-home-card:hover {
+    border-color: var(--v-border-strong);
+}
+
+.desuq-home-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.desuq-home-card-name {
+    font-size: 16.5px;
+    font-weight: 600;
+    color: var(--v-text);
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+}
+
+.desuq-home-card-icon {
+    color: var(--v-accent);
+    font-size: 14px;
+}
+
+.desuq-home-card-facts,
+.desuq-home-card-verify {
+    margin-top: 6px;
+    font-size: 13.5px;
+    color: var(--v-text-muted);
+}
+
+.desuq-home-dot {
+    margin: 0 7px;
+    color: var(--v-text-dim);
+}
+
+.desuq-home-pending {
+    color: var(--v-accent-bright);
+}
+
+.desuq-home-warn {
+    color: var(--v-warning-bright);
+}
+
+/* The path is reference material, not something anyone reads every time. */
+.desuq-home-card-path {
+    margin-top: 7px;
+    font-size: 12px;
+    color: var(--v-text-dim);
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.desuq-home-card-actions {
+    margin-top: 13px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+
+/* ------------------------------------------------------- who has what */
+
+/* A row of initials, one per person the folder is shared with, each carrying
+   its own state. Deliberately small: on a folder nobody is behind on it should
+   read as texture, and only pull the eye when one of them is not solid. */
+.desuq-home-people {
+    margin-top: 11px;
+    padding-top: 11px;
+    border-top: 1px solid var(--v-border);
+}
+
+.desuq-home-who-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+}
+
+.desuq-home-who {
+    position: relative;
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--v-surface-hover);
+    /* The part-filled ring for 'behind' is a conic-gradient set inline from
+       the template, because the angle is data. Everything else is here. */
+    background-repeat: no-repeat;
+}
+
+.desuq-home-who-i {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    background: var(--v-surface);
+    color: var(--v-text-muted);
+}
+
+/* Has everything: solid violet. The only filled disc on the card, so a folder
+   where everybody is in step reads as a row of small solid marks. */
+.desuq-home-who.who-complete {
+    background-color: var(--v-accent-deep);
+}
+
+.desuq-home-who.who-complete .desuq-home-who-i {
+    background: var(--v-accent-deep);
+    color: #fff;
+}
+
+/* Catching up: the ring shows how far. */
+.desuq-home-who.who-behind .desuq-home-who-i {
+    background: var(--v-surface);
+    color: var(--v-accent-bright);
+}
+
+/* Has never accepted the share. Dashed, because this one does not resolve on
+   its own and should not be mistaken for "0% and moving". */
+.desuq-home-who.who-notaccepted {
+    background-color: transparent;
+    border: 1px dashed var(--v-warning);
+}
+
+.desuq-home-who.who-notaccepted .desuq-home-who-i {
+    background: transparent;
+    color: var(--v-warning-bright);
+}
+
+.desuq-home-who.who-paused {
+    background-color: transparent;
+    border: 1px solid var(--v-border-strong);
+}
+
+.desuq-home-who.who-paused .desuq-home-who-i {
+    background: transparent;
+    color: var(--v-text-dim);
+}
+
+.desuq-home-who.who-unknown .desuq-home-who-i {
+    color: var(--v-text-dim);
+}
+
+/* Online right now. Small enough to be ignorable, present enough to answer
+   "can they even receive this at the moment". */
+.desuq-home-who-badge {
+    position: absolute;
+    right: -1px;
+    bottom: -1px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--v-accent-bright);
+    box-shadow: 0 0 0 2px var(--v-surface);
+}
+
+.desuq-home-people-note {
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--v-text-muted);
+}
+
+
+/* ---------------------------------------------------------------- the chips */
+
+.desuq-home-chip {
+    flex: 0 0 auto;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+}
+
+/* Up to date is violet, not green -- see the header. */
+.chip-idle,
+.chip-online        { color: var(--v-accent-bright); }
+.chip-syncing,
+.chip-scanning,
+.chip-scan-waiting,
+.chip-sync-waiting,
+.chip-clean-waiting,
+.chip-outofsync     { color: var(--v-accent); }
+.chip-localadditions,
+.chip-localunencrypted,
+.chip-unshared,
+.chip-paused        { color: var(--v-warning-bright); }
+.chip-faileditems,
+.chip-stopped       { color: var(--v-danger-bright); }
+.chip-offline       { color: var(--v-text-dim); }
+
+
+/* --------------------------------------------------------- people specifics */
+
+.desuq-home-dotlight {
+    flex: 0 0 auto;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--v-text-dim);
+}
+
+.desuq-home-dotlight.is-on     { background: var(--v-accent-bright); }
+.desuq-home-dotlight.is-off    { background: var(--v-text-dim); }
+.desuq-home-dotlight.is-paused { background: var(--v-warning-bright); }
+
+.desuq-home-verified {
+    color: var(--v-accent-bright);
+}
+
+.desuq-home-unverified {
+    color: var(--v-text-dim);
+}
+
+
+/* --------------------------------------------- upstream's markup, collapsed */
+
+/* index.html wraps upstream's whole first row in this, so everything it offers
+   is still one click away without competing with the screen above it. */
+.desuq-technical {
+    margin-top: 10px;
+    border-top: 1px solid var(--v-border);
+    padding-top: 14px;
+}
+
+.desuq-technical > summary {
+    cursor: pointer;
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--v-text-dim);
+    padding: 6px 2px;
+    list-style: none;
+    transition: color var(--v-transition);
+}
+
+.desuq-technical > summary:hover,
+.desuq-technical > summary:focus-visible {
+    color: var(--v-text-muted);
+}
+
+.desuq-technical > summary:focus-visible {
+    outline: none;
+    box-shadow: var(--v-ring-inset);
+    border-radius: var(--v-radius-sm);
+}
+
+/* Safari and Chrome each have their own disclosure marker; both are replaced
+   so the triangle matches the rest of the icon set. */
+.desuq-technical > summary::-webkit-details-marker {
+    display: none;
+}
+
+.desuq-technical > summary::before {
+    content: "\f0da"; /* fa-caret-right */
+    /* 'ForkAwesome', one word: that is the family name declared in
+       vendor/fork-awesome/css/fork-awesome.css. "Fork Awesome" with a space
+       silently falls back and renders a tofu box. */
+    font-family: "ForkAwesome";
+    font-weight: normal;
+    display: inline-block;
+    width: 14px;
+    color: var(--v-accent);
+    transition: transform var(--v-transition);
+}
+
+.desuq-technical[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+.desuq-technical-hint {
+    font-size: 12.5px;
+    color: var(--v-text-dim);
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 400;
+    margin-left: 6px;
+}
+
+
+@media (max-width: 600px) {
+    .desuq-home-headline.is-attention,
+    .desuq-home-headline.is-problem {
+        padding: 15px 15px;
+    }
+
+    .desuq-home-headline-main {
+        font-size: 17px;
+    }
+}

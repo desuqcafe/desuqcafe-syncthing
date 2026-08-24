@@ -413,3 +413,17 @@
 .desuq-pick-offer-body {
     margin: 0;
 }
+
+/* The dismiss button. Same reasoning as the wizard's -- see wizard.css. */
+.desuq-pick-header .close {
+    color: var(--v-text);
+    text-shadow: none;
+    opacity: 0.55;
+    transition: opacity var(--v-transition);
+}
+
+.desuq-pick-header .close:hover,
+.desuq-pick-header .close:focus {
+    color: var(--v-text);
+    opacity: 1;
+}

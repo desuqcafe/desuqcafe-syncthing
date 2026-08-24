@@ -1,0 +1,93 @@
+/**
+
+The --v-* palette the fork's components are drawn with.
+
+Every stylesheet under syncthing/desuq/ paints with these custom properties and
+nothing else. Until this file existed only gui/violet defined them, so under any
+other GUI theme all four fell through to the hardcoded fallbacks in their own
+var() calls -- which were light values. The visible result was a first-run
+wizard whose heading and close button were invisible under Dark and Black, and
+which nobody had seen, because the fork's tests are jsdom and jsdom does not
+paint.
+
+HOW THE RIGHT SET GETS SERVED
+
+lib/api's static server overlays gui/<theme>/ on top of gui/default/ and falls
+back per file, and it does that for every path, not just assets/. So a theme
+gets its own palette purely by owning a copy of this file:
+
+    gui/default/syncthing/desuq/tokens.css   this file -- light
+    gui/dark/syncthing/desuq/tokens.css      Syncthing's dark
+    gui/black/syncthing/desuq/tokens.css     Syncthing's black
+    (violet has none -- see below)
+
+`light` has no copy, so it gets this one, which is what it wants. That means
+the whole fix is new files plus a single <link> in index.html; not one upstream
+stylesheet is touched.
+
+WHY VIOLET DOES NOT OVERRIDE THIS FILE
+
+gui/violet/assets/css/theme.css already defines the complete violet set, and it
+needs to: it paints the whole of Bootstrap, not just our components. Giving
+violet a second copy here would put the violet palette in two files that can
+drift. Instead index.html links this file BEFORE assets/css/theme.css, so under
+the violet theme these values load and are then wholly overridden by the real
+ones. **That ordering is load-bearing.** Move this <link> after theme.css and
+the violet UI turns light.
+
+The one token violet does not define is --v-success-wash, which is referenced by
+selective.css and has therefore been falling back since it was written; it is
+defined in violet's theme.css as of this change so the override stays complete.
+
+**/
+
+:root {
+    /* Surfaces. A neutral ramp pulled slightly towards violet, so the accent
+       never looks bolted onto a grey UI -- the same reasoning as the violet
+       theme, resolved for a light ground. */
+    --v-bg: #faf8fd;
+    --v-surface: #ffffff;
+    --v-surface-raised: #f6f2fd;
+    --v-surface-hover: #efe8fa;
+    --v-surface-sunken: #f7f4ff;
+
+    --v-border: #e0d7f0;
+    --v-border-strong: #cfc3e6;
+
+    --v-text: #241d33;
+    --v-text-muted: #584a72;
+    --v-text-dim: #7b6f95;
+    --v-text-inverse: #ffffff;
+
+    /* Accent. Darker than the violet theme's: these sit on white, where the
+       theme's #a78bfa would not clear contrast for text or icons. */
+    --v-accent-deep: #5a26b8;
+    --v-accent-strong: #6d34d6;
+    --v-accent: #7c4ddb;
+    --v-accent-bright: #8b5cf6;
+    --v-accent-wash: rgba(109, 52, 214, 0.09);
+    --v-accent-wash-strong: rgba(109, 52, 214, 0.18);
+
+    --v-success: #0b7a5a;
+    --v-success-bright: #0a6e51;
+    --v-success-wash: rgba(11, 122, 90, 0.10);
+    --v-warning: #9a6708;
+    --v-warning-bright: #8a5c06;
+    --v-danger: #c0392f;
+    --v-danger-bright: #b2352b;
+    --v-info: #5b4fc4;
+    --v-info-bright: #4f44b0;
+
+    --v-radius-sm: 5px;
+    --v-radius: 8px;
+    --v-radius-lg: 12px;
+
+    --v-shadow-sm: 0 1px 2px rgba(60, 40, 100, 0.10);
+    --v-shadow: 0 1px 3px rgba(60, 40, 100, 0.12);
+    --v-shadow-pop: 0 14px 40px -14px rgba(60, 40, 100, 0.28);
+
+    --v-ring: 0 0 0 2px var(--v-bg), 0 0 0 4px var(--v-accent);
+    --v-ring-inset: 0 0 0 3px var(--v-accent-wash-strong);
+
+    --v-transition: 120ms ease;
+}

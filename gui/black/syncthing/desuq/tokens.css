@@ -1,0 +1,60 @@
+/**
+
+The --v-* palette for Syncthing's "black" theme.
+
+Same mechanism as the dark copy -- see the header of
+gui/default/syncthing/desuq/tokens.css.
+
+Black is the OLED theme: a true black ground with #222 panels and #333 borders.
+The shadows are heavier than dark's because a drop shadow on a black ground has
+almost nothing to darken, so separation has to come from the border instead;
+--v-border-strong is correspondingly lighter here than the ratio in the other
+themes would suggest.
+
+**/
+
+:root {
+    --v-bg: #000000;
+    --v-surface: #111111;
+    --v-surface-raised: #222222;
+    --v-surface-hover: #2c2c2c;
+    --v-surface-sunken: #0a0a0a;
+
+    --v-border: #333333;
+    --v-border-strong: #4a4a4a;
+
+    --v-text: #ffffff;
+    --v-text-muted: #aaaaaa;
+    --v-text-dim: #858585;
+    --v-text-inverse: #000000;
+
+    --v-accent-deep: #6d34d6;
+    --v-accent-strong: #8b5cf6;
+    --v-accent: #a78bfa;
+    --v-accent-bright: #c4b5fd;
+    --v-accent-wash: rgba(139, 92, 246, 0.18);
+    --v-accent-wash-strong: rgba(139, 92, 246, 0.32);
+
+    --v-success: #10b981;
+    --v-success-bright: #34d399;
+    --v-success-wash: rgba(16, 185, 129, 0.18);
+    --v-warning: #c29d0b;
+    --v-warning-bright: #fbbf24;
+    --v-danger: #d62c1a;
+    --v-danger-bright: #f87171;
+    --v-info: #3498db;
+    --v-info-bright: #a5b4fc;
+
+    --v-radius-sm: 5px;
+    --v-radius: 8px;
+    --v-radius-lg: 12px;
+
+    --v-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.6);
+    --v-shadow: 0 2px 12px -2px rgba(0, 0, 0, 0.8);
+    --v-shadow-pop: 0 18px 48px -12px rgba(0, 0, 0, 0.95);
+
+    --v-ring: 0 0 0 2px var(--v-bg), 0 0 0 4px var(--v-accent);
+    --v-ring-inset: 0 0 0 3px var(--v-accent-wash-strong);
+
+    --v-transition: 120ms ease;
+}

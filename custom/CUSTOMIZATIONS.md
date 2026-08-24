@@ -51,6 +51,12 @@ Keep this table current. It is the only place the merge cost is written down.
 | `cmd/syncthing/monitor.go` | **One guard**, 7 lines, at the top of `maybeReportPanics`. This is the reporter upstream leaves *on*. | **Low.** Additive, first statement of the function. |
 | `lib/syncthing/syncthing.go` | **One condition**, `if build.IsCandidate` becomes `if build.IsCandidate && build.TelemetryEnabled`, plus four comment lines. | **Low.** One token on one line. If it conflicts, re-add the conjunct. |
 | `gui/default/syncthing/settings/settingsModalView.html` (2) | Upstream's "Anonymous Usage Reporting" `<select>` replaced by a static note saying the build sends none. | **Low–medium.** This one *replaces* rather than inserts. A conflict resolves by deleting upstream's control again. |
+| `gui/default/index.html` (2) | **The main screen.** Four additive hunks and four label edits. The hunks: a `<link>` for `syncthing/desuq/tokens.css` — which **must stay above `assets/css/theme.css`**, because the violet theme defines the real palette there and relies on winning — a `<link>` for `home.css`, a `<script>` for `home.js`, and `<desuq-home>` immediately above upstream's first row, which is now wrapped in a `<details class="desuq-technical">`. Upstream's markup between those two wrapper lines is **untouched**: it carries thirty-one actions, several destructive (`revertOverrideConfirmationModal`, `restoreVersions`) and several diagnostic (`showFailed`, `showNeed`, `showLocalChanged`), and the new screen should earn their deletion by covering the cases first rather than removing them in the same change that introduces their replacement. The label edits: `Show ID` → `Show device code`, `Identification` → `Device code` (twice), and the fork's own 194px `Verification` row reduced to a one-line link. Help menu: upstream's `Statistics` link to `data.syncthing.net` removed (a page built entirely from usage reports this build does not send, so it can only ever show somebody else's installations), and `Changelog`/`Bugs`/`Source Code` repointed at this fork, whose releases are the ones this binary is cut from. | **Low.** Everything structural is additive and the four label edits are one line each. The `<details>` wrapper is two lines at the top of upstream's row and one at the bottom; a conflict resolves by re-wrapping whatever the row has become. The one thing to preserve on merge is the `tokens.css` link's **position**, not just its presence. |
+| `gui/default/syncthing/core/notifications.html` | **One removal**, replaced by a comment: upstream's `authenticationUserAndPassword` notification. It was the largest element on the screen of every fresh install and it was painted `panel-success` — bright green, the colour this fork reserves for "your files are safe" — for something that is neither a success nor a sync fact. The information now sits in Settings → GUI directly above the two fields that resolve it. Upstream's far stronger red "Danger!" panel, shown when the GUI is reachable from off this machine, is deliberately **untouched**: that is the case that actually warrants shouting. | **Low–medium.** A removal inside a file of independent `<notification>` blocks, so it conflicts only if upstream edits this one. The resolution is to delete their side again. |
+| `gui/default/syncthing/core/shutdownDialogView.html` | **Rewritten** (8 lines). Upstream's was `status="success" closeable="no"` with the single line "Syncthing has been shut down." Green for having just stopped syncing your files; `closeable="no"` meant no backdrop, no Escape, no button and no link, with the server gone — a dead end you could only leave through the browser's chrome; and it never said how to start Syncthing again, which on this fork is the tray icon. Now `status="default" closeable="yes"`, and it says the files are where you left them, that closing the window is safe, and where to start it again. No action button, deliberately: every action it could offer needs the server that just stopped. | **Low–medium.** A whole-file rewrite, but of a file upstream touches very rarely, and "keep ours" is always the answer. |
+| `gui/default/syncthing/settings/settingsModalView.html` (3) | **One removal and one addition.** Upstream's "Automatic upgrades" control is gone: this build is compiled `-no-upgrade`, so `upgradeInfo` is never populated and the only branch that could ever render read "Unavailable/Disabled by administrator or maintainer" — which is not even accurate, since nobody disabled it and it cannot work. Replaced by a plain statement that the build does not update itself, in the same shape as the telemetry note beside it. The addition is the GUI-authentication note evicted from the main screen, gated on `ng-if="!tmpGUI.user"`. | **Medium.** Same class as the telemetry row above; this file now carries two fork removals. |
+| `gui/default/syncthing/device/editDeviceModalView.html` (2) | **Two label edits and one move.** `Device ID` → `Device code`, and the help sentence beneath the field rewritten to point at "Actions > Show device code". The move is the fix for a real bug: `<device-handshake>` had been placed *inside* upstream's `<div ng-if="editingDeviceNew()">`, so the verification card only ever rendered while **adding** somebody and never when opening an existing person's settings — the one thing it exists for, re-reading the phrase to each other on a call some time later, could not be done there at all. It is now a sibling of that block, directly under the Device code field, for both cases. | **Low.** The move is within a fork-added element; the anchor is upstream's closing `</div>` for the new-device block. |
+| `gui/default/syncthing/device/idqrModalView.html` | **One attribute.** The modal heading `Device Identification - {{name}}` becomes `Device code — {{name}}`. Part of the same rename: the concept had four names across the interface, and the two people this fork is for have to say it out loud to each other over a phone. | **Low.** |
 | `README.md` | **Rewritten, not appended to.** Upstream's landing page replaced by the fork's: what this is, an install a non-technical reader can follow, a table of what the fork adds linking into `DEPLOYMENT-3D-TEAM.md`, what it deliberately does not do, and where to take a bug. Upstream's goals, documentation, forum and security address are linked rather than inlined. | **High, and knowingly so** — see below. Every upstream README edit conflicts. The resolution is always "keep ours": nothing reads this file, so a stale merge costs one discarded diff. Read their side only for a link worth carrying over. |
 
 ## Why the README is a rewrite
@@ -96,6 +102,10 @@ cannot conflict at all:
 | `gui/default/syncthing/desuq/` | The fork's Angular directives, its wordlists and its CSS |
 | `custom/tray/update.go` | The peer-version comparison behind the "an update is available" toast |
 | `custom/scripts/test-wizard-render.js` | Drives the first-run wizard through real Angular |
+| `custom/scripts/test-home-render.js` | Drives the main screen through real Angular, and asserts the headline rules directly |
+| `gui/default/syncthing/desuq/tokens.css` | The `--v-*` palette, light. Every `syncthing/desuq/` stylesheet paints with these and nothing else |
+| `gui/dark/syncthing/desuq/tokens.css` | The same palette for Syncthing's dark theme |
+| `gui/black/syncthing/desuq/tokens.css` | The same palette for Syncthing's black theme |
 | `gui/violet/` | The violet theme |
 | `custom/` | Everything else |
 | `lib/build/desuq_telemetry.go` | The `TelemetryEnabled` constant all three reporters consult |
@@ -103,9 +113,36 @@ cannot conflict at all:
 | `cmd/syncthing/desuq_telemetry_test.go` | Asserts no panic log is uploaded |
 | `.github/workflows/desuq-test.yaml` | Runs every suite; reusable, so the release gates on it |
 
-Where the fork stands today: **352 inserted lines against 160 deleted**, across
-those thirteen files. Nearly half of that is the README, which replaced 105
-lines with 148 of its own.
+Three of those are the same path under three theme directories, which is worth
+explaining because it turns what looked like an unavoidable upstream edit into
+no edit at all. `lib/api`'s static server overlays `gui/<theme>/` on top of
+`gui/default/` and falls back **per file**, and it does that for every path,
+not just `assets/`. So a theme gets its own copy of the fork's palette purely
+by owning a copy of `syncthing/desuq/tokens.css`; `light` has none, so it gets
+the default light one, which is what it wants.
+
+Before this, only `gui/violet` defined the `--v-*` custom properties — `dark`,
+`black`, `light` and `default` defined none — so under any theme but violet all
+four of the fork's stylesheets fell through to the hardcoded light values in
+their own `var()` calls. Nobody had seen it, because every test this fork has
+is jsdom and jsdom does not paint. The visible result was a first-run wizard
+whose heading and close button were invisible on a dark page.
+
+Verified empirically against a running instance rather than assumed: a probe
+file placed at `gui/dark/syncthing/desuq/` was served under the dark theme and
+fell back to the `gui/default` copy under violet and light.
+
+Where the fork stands today: **608 inserted lines against 207 deleted**, across
+seventeen files. The README is 152 of those insertions and 105 of the
+deletions; take it out and the rest of the fork is 456 against 102.
+
+The main-screen wave added the three newest files — `notifications.html`,
+`shutdownDialogView.html` and `idqrModalView.html` — and is the largest single
+change to `index.html` so far at 149 insertions. Only **nine** of that file's
+deletions are fork work in total, which is the point: the new screen is a
+`<desuq-home>` element and a `<details>` wrapper placed around upstream's
+markup rather than in place of it, so almost none of what it replaces on screen
+is actually gone from the file.
 
 The audit pass added 28 of those insertions and 4 of the deletions, and no
 fourteenth file: the ignore-line guard went into `lib/api/api.go`, which

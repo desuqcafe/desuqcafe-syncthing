@@ -1,0 +1,200 @@
+<!--
+  desuqcafe fork: the main screen. See home.js for why this exists and why it
+  sits above upstream's markup rather than replacing it.
+
+  No `translate` attributes anywhere below: angular-translate renders
+  {%placeholders%} literally for any string missing from assets/lang, and every
+  string here is fork-added, so none of them are in there. Plain {{ }} it is.
+
+  ng-click calls the controller's own functions -- this template runs on a
+  child scope of syncthingController, so addFolder(), editFolderExisting(),
+  setFolderPause() and the rest resolve by name. `folders` and `devices` are
+  the controller's maps keyed by id, which is how a card hands a real config
+  object to an action that expects one.
+-->
+<div class="desuq-home" ng-if="home.ready">
+
+  <!-- ------------------------------------------------ is everything here? -->
+  <!-- and: is anything wrong? One line answers both, because to a person they
+       are the same question asked in two moods.
+
+       is-good and is-busy render unboxed and quiet. A banner announcing that
+       nothing is wrong is still noise, and it teaches the eye to skip the one
+       place a real problem will appear. Only is-attention and is-problem get
+       the border, the tint and the weight. -->
+  <div class="desuq-home-headline" ng-class="'is-' + home.headline.tone">
+    <div class="desuq-home-headline-mark" aria-hidden="true">
+      <span class="fas" ng-class="{
+        'fa-check':                home.headline.tone == 'good',
+        'fa-sync-alt':             home.headline.tone == 'busy',
+        'fa-exclamation':          home.headline.tone == 'attention',
+        'fa-exclamation-triangle': home.headline.tone == 'problem'
+      }"></span>
+    </div>
+    <div class="desuq-home-headline-text">
+      <div class="desuq-home-headline-main">{{ home.headline.text }}</div>
+      <div class="desuq-home-headline-sub" ng-if="home.headline.detail">{{ home.headline.detail }}</div>
+    </div>
+  </div>
+
+  <!-- ------------------------------------------------------- your folders -->
+  <section class="desuq-home-block" aria-label="Folders">
+    <h3 class="desuq-home-h">Your folders</h3>
+
+    <div class="desuq-home-empty" ng-if="!home.folders.length">
+      Nothing is being synced on this computer yet.
+    </div>
+
+    <div class="desuq-home-card" ng-repeat="f in home.folders" ng-class="'state-' + f.state">
+      <div class="desuq-home-card-top">
+        <div class="desuq-home-card-name">
+          <span class="fas fa-folder desuq-home-card-icon" aria-hidden="true"></span>{{ f.label }}
+        </div>
+        <div class="desuq-home-chip" ng-class="'chip-' + f.state">
+          <span ng-switch="f.state">
+            <span ng-switch-when="idle">Up to date</span>
+            <span ng-switch-when="syncing">Getting files</span>
+            <span ng-switch-when="scanning">Checking</span>
+            <span ng-switch-when="scan-waiting">Checking soon</span>
+            <span ng-switch-when="sync-waiting">Waiting to sync</span>
+            <span ng-switch-when="clean-waiting">Tidying up</span>
+            <span ng-switch-when="outofsync">Files still to come</span>
+            <span ng-switch-when="faileditems">Some files failed</span>
+            <span ng-switch-when="localadditions">Changes only here</span>
+            <span ng-switch-when="localunencrypted">Changes only here</span>
+            <span ng-switch-when="unshared">Not shared</span>
+            <span ng-switch-when="stopped">Stopped</span>
+            <span ng-switch-when="paused">Paused</span>
+            <span ng-switch-default>{{ f.state }}</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- With selective sync on, localFiles alone is a half-truth: it is what
+           you took, not what is there. Saying "1 of 23" is the difference
+           between a folder that is finished and a folder somebody still has to
+           pick from. -->
+      <div class="desuq-home-card-facts">
+        <span ng-if="!f.heldBack">{{ f.localFiles }} {{ f.localFiles == 1 ? 'file' : 'files' }}</span>
+        <span ng-if="f.heldBack">{{ f.localFiles }} of {{ f.globalFiles }} files chosen</span>
+        <span class="desuq-home-dot" aria-hidden="true">·</span>
+        <span>{{ bytes(f.localBytes) }}</span>
+        <span class="desuq-home-dot" ng-if="f.needBytes > 0" aria-hidden="true">·</span>
+        <span class="desuq-home-pending" ng-if="f.needBytes > 0">{{ bytes(f.needBytes) }} still to come</span>
+        <span class="desuq-home-dot" ng-if="f.heldBack" aria-hidden="true">·</span>
+        <span class="desuq-home-pending" ng-if="f.heldBack">{{ bytes(f.heldBackBytes) }} not taken</span>
+      </div>
+
+      <!-- Who has this, and how far each of them has got.
+
+           The strip is the answer to "who am I sharing with" at the only place
+           the question is really asked -- next to the thing being shared. A
+           ring that is part-filled is somebody still catching up; a dashed
+           outline is somebody who has not accepted the share at all, which
+           looks identical to 0% if you only read the number and is the one of
+           the two that never fixes itself. -->
+      <div class="desuq-home-people" ng-if="f.people.length">
+        <div class="desuq-home-who-row">
+          <span class="desuq-home-who" ng-repeat="s in f.people"
+                ng-class="'who-' + s.kind"
+                ng-style="s.kind == 'behind' && { 'background-image': 'conic-gradient(var(--v-accent-strong) ' + (s.pct * 3.6) + 'deg, transparent 0)' }"
+                title="{{ s.title }}">
+            <span class="desuq-home-who-i">{{ s.initials }}</span>
+            <span class="desuq-home-who-badge" ng-if="s.connected" aria-hidden="true"></span>
+          </span>
+        </div>
+        <div class="desuq-home-people-note">{{ f.peopleNote }}</div>
+      </div>
+
+      <div class="desuq-home-card-path" title="{{ f.path }}">{{ f.path }}</div>
+
+      <div class="desuq-home-card-actions">
+        <button type="button" class="btn btn-sm btn-default"
+                ng-if="(folders[f.id].type == 'sendreceive' || folders[f.id].type == 'receiveonly') && folders[f.id].devices.length > 1"
+                ng-click="desuqSelective.open(folders[f.id])">
+          <span class="far fa-check-square"></span>&nbsp;<span>Choose files</span>
+        </button>
+        <button type="button" class="btn btn-sm btn-default" ng-if="f.paused"
+                ng-click="setFolderPause(f.id, false)">
+          <span class="fas fa-play"></span>&nbsp;<span>Resume</span>
+        </button>
+        <button type="button" class="btn btn-sm btn-default" ng-if="!f.paused"
+                ng-click="setFolderPause(f.id, true)">
+          <span class="fas fa-pause"></span>&nbsp;<span>Pause</span>
+        </button>
+        <button type="button" class="btn btn-sm btn-default" ng-click="editFolderExisting(folders[f.id])">
+          <span class="fas fa-pencil-alt"></span>&nbsp;<span>Settings</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="desuq-home-block-actions">
+      <button type="button" class="btn btn-sm btn-default" ng-click="addFolder()">
+        <span class="fas fa-plus"></span>&nbsp;<span>Add a folder</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- ---------------------------------------------- who am I sharing with? -->
+  <section class="desuq-home-block" aria-label="People">
+    <h3 class="desuq-home-h">Sharing with</h3>
+
+    <div class="desuq-home-empty" ng-if="!home.peers.length">
+      Nobody yet. Use <b>Setup guide</b> under Actions to send somebody your device code.
+    </div>
+
+    <div class="desuq-home-card" ng-repeat="p in home.peers">
+      <div class="desuq-home-card-top">
+        <div class="desuq-home-card-name">
+          <span class="desuq-home-dotlight"
+                ng-class="{ 'is-on': p.connected, 'is-off': !p.connected && !p.paused, 'is-paused': p.paused }"
+                aria-hidden="true"></span>{{ p.name }}
+        </div>
+        <div class="desuq-home-chip" ng-class="p.connected ? 'chip-online' : 'chip-offline'">
+          <span ng-if="p.paused">Paused</span>
+          <span ng-if="!p.paused && p.connected">Online now</span>
+          <span ng-if="!p.paused && !p.connected">Offline</span>
+        </div>
+      </div>
+
+      <!-- What is actually true of this person, not what the folder's device
+           list says. See peerNote() in home.js: "You share Project Assets with
+           them" could sit directly under a banner saying they had never
+           accepted it. -->
+      <div class="desuq-home-card-facts">
+        <span ng-class="{ 'desuq-home-warn': !p.shares.length }">{{ p.note }}</span>
+      </div>
+
+      <!-- The verification badge. The card itself lives in this person's
+           settings, where there is room to read it out over a phone; here it
+           is one line like every other, which is the whole point of moving
+           it out of a 194px table row. -->
+      <div class="desuq-home-card-verify">
+        <span class="desuq-home-verified" ng-if="p.verified">
+          <span class="fas fa-shield-alt" aria-hidden="true"></span>&nbsp;Verified on this computer
+        </span>
+        <span class="desuq-home-unverified" ng-if="!p.verified">
+          <span class="fas fa-shield-alt" aria-hidden="true"></span>&nbsp;Not verified yet
+        </span>
+      </div>
+
+      <div class="desuq-home-card-actions">
+        <button type="button" class="btn btn-sm btn-default" ng-click="editDeviceExisting(devices[p.deviceID])">
+          <span class="fas fa-shield-alt" ng-if="!p.verified"></span>
+          <span class="fas fa-pencil-alt" ng-if="p.verified"></span>&nbsp;<span
+            >{{ p.verified ? 'Settings' : 'Verify' }}</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="desuq-home-block-actions">
+      <button type="button" class="btn btn-sm btn-default" ng-click="addDevice()">
+        <span class="fas fa-plus"></span>&nbsp;<span>Add somebody</span>
+      </button>
+      <button type="button" class="btn btn-sm btn-default" ng-click="showDeviceIdentification(thisDevice())">
+        <span class="fas fa-qrcode"></span>&nbsp;<span>Show my device code</span>
+      </button>
+    </div>
+  </section>
+
+</div>
