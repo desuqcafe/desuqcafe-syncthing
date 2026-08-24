@@ -32,7 +32,7 @@ future `git merge upstream/main` is work you can plan rather than a surprise:
   A line in the root `go.mod`/`go.sum` is a conflict on every upstream
   dependency bump: a recurring tax for a one-off convenience.
 
-Seventeen upstream files carry fork edits today, 608 insertions against 207
+Seventeen upstream files carry fork edits today, 609 insertions against 207
 deletions. Stripping the telemetry is what changed the character of that: it
 is the first work that had to *delete* upstream behaviour rather than sit
 beside it, because there is no additive way to remove a consent nag or a
@@ -46,6 +46,17 @@ so the biggest visual change the fork has made costs nine deleted lines in
 `index.html`. Upstream's markup carries thirty-one actions, several of them
 destructive, and the replacement should earn their deletion by covering the
 cases first. Deleting it is a later, separate pass.
+
+That pass has been costed and **the answer is "not yet"** — see
+`DEPLOYMENT-3D-TEAM.md` §18. Of the thirty-one, seven are covered by the new
+screen, four are one click deeper, two are dead, and eighteen would have no
+entry point anywhere. Three of the eighteen are capabilities rather than
+shortcuts: `restoreVersions.show` (versioning is *seeded on*, so the history
+would be written and unreadable), `revertOverrideConfirmationModal('revert')`
+(the only way out of a wedged receive-only folder, the mode both modellers are
+told to use), and `showFailed`. Each is one button, because every modal is
+`<ng-include>`d **outside** the region — deleting it removes entry points, not
+implementations.
 
 `README.md` is the only row marked **High**:
 it is a full rewrite, so every upstream README change conflicts. That was

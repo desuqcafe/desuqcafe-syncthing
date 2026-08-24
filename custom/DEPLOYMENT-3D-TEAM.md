@@ -693,6 +693,15 @@ folder**, not just single-device:
   left the folder syncing all 18 files rather than stranded on `*`; and that an
   unreadable ignore file was reported instead of passing for success.
 
+- **The main screen was finally looked at in a browser** (2026-08-24), which
+  until then nothing in this fork had been: every GUI test here is jsdom, and
+  jsdom does not paint. Both instances of the pair were opened side by side
+  under the violet theme and render correctly, and *Open folder* was clicked
+  for real — Explorer opened at the folder. Its refusals were checked directly
+  rather than inferred: no folder 400, unknown folder 404, a `../../../Windows`
+  sub-path 400, a NUL byte 400. The first-run wizard has **still** never been
+  painted anywhere, and remains the largest unverified surface.
+
 - The Explorer folder icons were verified through the shell itself rather than
   by checking our own output: `SHGetFileInfo`, the API Explorer uses, resolves
   a marked folder to the fork's `folder.ico` and gives it its own system
@@ -1045,6 +1054,64 @@ The real alternative, if this ever stops being enough, is the one previously
 ruled out of scope: our own signing key, signing each release, and replacing
 `SigningKey` in `lib/upgrade`. That is a feature with a private key to guard,
 not a config change.
+
+## 18. The screen you land on was built for somebody else
+
+Upstream's main screen is a table of every folder and every device, with
+thirty-one distinct actions on it — override, revert, delete encrypted items,
+restore versions, rescan, pause all, four separate "which files" listings, and
+the connection diagnostics. It is a good screen for somebody administering a
+sync network. It is the wrong screen for somebody who wants to know whether
+their afternoon's work is safe.
+
+The three questions this team actually has are: **is everything here, who am I
+sharing with, and is anything wrong.** The default view now answers those and
+nothing else.
+
+- **One sentence at the top**, and it is the answer rather than a status code:
+  *"Everything is here"*, or what is wrong, or what is still arriving.
+- **Folders as cards** — how many files, how big, what is still coming, who has
+  it, and how far each of them has got. A part-filled ring is somebody catching
+  up; a dashed one is somebody who never accepted the share, which looks
+  identical to 0 % if you only read the number and is the one of the two that
+  never fixes itself.
+- **People as cards** — online or not, what they actually hold, and whether you
+  have verified them (§9).
+- **Open folder** on every folder card. The path used to be text you selected
+  and pasted into an Explorer window: a browser cannot open a file manager,
+  because a `file://` link from an `http://` page is blocked outright. It takes
+  a folder *ID* rather than a path, and what reaches `explorer.exe` is always a
+  directory — Explorer handed an executable runs it.
+
+### The bug class this kept producing
+
+Four separate bugs during the build had one cause: **a sentence derived from
+local state alone, presented as the shared reality.** In each case the local
+figures were correct and the sentence was false.
+
+| The screen said | What was true |
+| --- | --- |
+| "Everything is here, in step with Yuki" | Yuki had never accepted the folder |
+| "Up to date" | The peer was behind; only `/rest/db/completion` knows |
+| "1 file · has the same files as you" | 22 files were held back by the picker, so nothing was "needed" and the folder read as idle |
+
+The rule that came out of it, worth applying to any copy added here: **ask what
+the sentence claims about the other machine, and whether you actually asked
+that machine.** Per-device truth lives in
+`/rest/db/completion?folder=&device=`, and `remoteState` is the only field that
+separates "behind" from "never accepted".
+
+### Upstream's screen is still there
+
+It is collapsed under **Technical details**, not deleted, and that is
+deliberate rather than unfinished. Of its thirty-one actions, seven are covered
+by the new screen, four are one click deeper, two are dead — and eighteen would
+have no entry point anywhere. Three of those eighteen are capabilities rather
+than shortcuts: restoring an earlier version of a file (which matters
+especially here, because §4's staggered versioning is seeded **on** for every
+folder), reverting a wedged receive-only folder (the mode recommended for both
+modellers, in the table below), and seeing *which* files failed. Those get a
+home on the new screen before the old markup goes.
 
 ## Recommended configuration
 
