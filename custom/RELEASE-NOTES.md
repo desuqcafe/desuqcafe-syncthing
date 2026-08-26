@@ -3,116 +3,88 @@
      install section to it, so this file is only ever "what changed".
      Old releases keep their own notes on GitHub; git history keeps these. -->
 
-# desuqcafe Syncthing v2.1.4-desuq.3
+# desuqcafe Syncthing v2.1.4-desuq.4
 
-The screen you land on is new. `desuq.2` added the features; this one is about
-what you actually see, what the words mean, and a handful of things that could
-previously go wrong quietly.
+Two things the interface was only half telling you, and a first look at three
+screens nobody had ever seen in a browser.
 
-Update by running the installer over the top.
+Update by running the installer over the top. Your folders, devices and
+settings are untouched.
 
-## A main screen that answers the questions you have
+## "Choose files" was never about disk space
 
-Stock Syncthing opens on a table of folders and devices with thirty-one
-controls on it, several of them destructive. It is a good screen for somebody
-who administers a sync network, and the wrong screen for somebody who wants to
-know whether their work is safe.
+Unticking something in the picker stops Syncthing keeping it up to date. It
+does **not** delete what is already on your disk — and until now nothing said
+so plainly, so unticking three gigabytes of reference scans to make room left
+your free space exactly where it was.
 
-- **One sentence at the top**, and it is the answer: *"Everything is here"*,
-  or what is wrong, or what is still coming.
-- **Folders and people as cards** — how many files, how big, who has them, how
-  far each person has got, and whether you have verified them.
-- **It says what is true of the other machine**, not what is true of yours.
-  A folder can be perfectly idle on your disk because a teammate never accepted
-  the share; that used to read as "up to date". So does a folder where you have
-  only chosen some of the files. Both now say so, by name.
-- **Upstream's full view is still there**, one click down, under *Technical
-  details* — every folder and device setting exactly as Syncthing shows them.
+Those are two separate actions and both are now offered. Unticking stops
+updates. **Free it up**, on the folder's card, deletes the local copies — and
+it appears whenever there is something to reclaim, not only in the moment
+after a pick, because the bytes outlive the moment.
 
-## Open folder
+This is the only thing this build does that deletes your files, so what it
+*refuses* to delete is the important part. Before anything is removed, every
+file is checked again on the spot:
 
-The path to a synced folder used to be text you selected and pasted into an
-Explorer window. There is now a button on every folder card that opens it.
+- it must match the ignore rules **currently** in force,
+- somebody you are **connected to right now** must still have it,
+- and your copy must match theirs in size and timestamp.
 
-## Nothing that deletes your work by accident
+So a file you edited after unticking it is kept, and a file nobody else has is
+kept. Everything it declines to touch is listed by name with the reason:
 
-- **Closing the file picker no longer downloads everything.** It used to clear
-  the "hold everything back" rule on the way out — measured at seven files held
-  back becoming twenty-six files and 18 MB — while the text beside the button
-  said nothing was being downloaded. Closing now holds the folder back and
-  pauses it, and *Choose files* is the way back in.
-- **New top-level files and folders a teammate adds are held back** rather than
-  arriving unasked. Files added inside a folder you kept still arrive, which is
-  the point of keeping it.
-- **"Revert Local Changes" is no longer one click under a green tick.** A
-  receive-only folder holding your own edits was painted success-green with a
-  checkmark, directly above a button that deletes them. The panel is now amber,
-  and the dialogue names the folder, how many files, how big, and whether
-  copies go to version history first or are gone for good.
-- **A teammate cannot write a rule into your ignore file** by naming a file
-  carefully.
+> Deleted 3,178 files, 3.0 GB freed. 2 files were kept:
+> RefPhotos/notes.txt — nobody else connected has this copy
 
-## The notification-area icon
+Because the guarantee is "somebody else still has it", ticking the item again
+brings the files back.
 
-- **Every shortcut starts the tray**, not the daemon. Searching Windows for the
-  app used to open a browser tab and leave nothing on screen.
-- **One icon per configuration.** A second launch opens the window and exits,
-  instead of leaving you with two icons and two copies of everything behind
-  them.
-- **Sync conflicts raise a notification**, naming the file you know —
-  `scene.blend`, not the generated conflict name beside it.
-- **Upgrading no longer ends in a hard kill.** The installer now asks the tray
-  to shut Syncthing down properly and waits for it.
+## Thirty days of history you could not read
 
-## Words that mean the same thing everywhere
+Every folder this build creates keeps old copies of files for thirty days.
+That has been true for several releases. What was missing was any way to look
+at them — so the copies were being written, taking up space, and were
+unreachable.
 
-The one thing two people have to say out loud to each other had four names in
-the interface: *Device ID*, *Identification*, *Show ID*, and *device code*.
-It is **device code** now, in all of them.
+**History**, on every folder card, has two tabs.
 
-- **The shutdown dialogue** was a green box saying "Syncthing has been shut
-  down", with no button, no Escape, no backdrop and no mention of how to start
-  it again. It now says your files are where you left them, that closing the
-  window is safe, and that the tray icon starts it back up.
-- **The green "GUI Authentication" panel** is off the front page. It was the
-  largest thing on a fresh install, coloured the same as "your files are safe",
-  for something that is neither a success nor a fact about syncing. The
-  information now sits in Settings, directly above the two fields that resolve
-  it. Upstream's much stronger red warning, for a GUI reachable from off your
-  machine, is untouched.
-- **"Automatic upgrades"** is gone from Settings. This build is compiled
-  without self-update, so the field could only ever read "Disabled by
-  administrator or maintainer", which was not true of anybody. It says plainly
-  that the build does not update itself.
-- **Help** points at this fork's own changelog, issues and source, and no
-  longer at a statistics page built entirely out of usage reports this build
-  does not send.
+**Recent changes** — who touched what, lately, collapsed so that one save or
+one scan is one line rather than four hundred. It is honest about its limits:
+the list lives in memory and starts again whenever Syncthing restarts, and the
+screen says so rather than showing you an empty list you might read as "nobody
+has done anything".
 
-## Fixes worth naming
+**Older versions** — the archive, which survives restarts. Files are listed
+newest first with how many copies are kept and what they cost; open one and
+every copy has a **Restore** beside it. A file somebody deleted is tagged, and
+its button says **Put it back**.
 
-- **Free-space warnings fire when they should.** The 20 GB reserve was
-  declared and then ignored, so "not enough space" arrived about 20 GB late in
-  all three places it appears.
-- **Folder sizes in the picker are real.** Syncthing's directories-only listing
-  reaches its answer by skipping every file, so every directory in it reports
-  as zero bytes — which made the picker's disk check inert on exactly the
-  folders large enough to matter.
-- **The verification card opens for people you have already added.** It was
-  reachable only while adding somebody, which is the one moment you do not need
-  it; re-reading the phrase to each other later was impossible.
-- **Dark and Black themes** no longer draw this fork's dialogues in light text
-  on a light background. The first-run guide was effectively invisible under
-  both.
-- **A re-seed never renames a device** whose name somebody chose.
+Restoring is safer than it sounds, and the screen says so: your current file is
+archived *before* it is replaced, so it becomes the newest entry in the same
+list. An accidental restore is undone by restoring again.
 
-## Under the hood
+If a folder has versioning switched off, the tab now says exactly that, and
+warns that deleting a file there is permanent. It used to show an error.
 
-Eleven test suites now run on every push and again as a gate before any release
-is built — including, new this release, the fork's own server-side handlers,
-which had no automated coverage at all.
+## Three things that had nowhere to live
 
-## Upgrading
+Reaching them meant opening **Technical details** and knowing what to look
+for. All three are now on the folder's card:
 
-Run the installer over the top. Your device identity, folders, settings and
-"start at sign-in" choice are all kept: the seeded defaults are only ever
-written once, so nothing you have changed since is touched.
+- **History** — described above.
+- **N that would not sync** — *which* files failed, not just how many.
+- **Undo my changes here** — on a receive-only folder, the only way to unstick
+  it after something changed locally. This is the folder type recommended for
+  people who only receive work, so until now that configuration had no exit.
+
+## Smaller
+
+- The folder card said *"879 KiB not taken"* about files that were sitting on
+  the disk in full. It now says "not kept up to date", which is true either way.
+- The first-run **Setup guide** used green ticks for finished steps — the one
+  fork screen that did. It is violet throughout now, like everything else.
+- Empty folders left behind by reclaiming are tidied up.
+- A twelfth test suite, and the first-run guide, the main screen and the new
+  history screen have all now been looked at in a real browser rather than
+  only in tests.

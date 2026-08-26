@@ -102,7 +102,7 @@
 }
 
 .desuq-wiz-rail > li.desuq-wiz-ok {
-    color: var(--v-success, #10b981);
+    color: var(--v-accent, #7c4ddb);
 }
 
 .desuq-wiz-rail > li.desuq-wiz-ok.desuq-wiz-at {
@@ -134,8 +134,8 @@
 }
 
 .desuq-wiz-ok .desuq-wiz-pip {
-    border-color: var(--v-success, #10b981);
-    background: var(--v-success, #10b981);
+    border-color: var(--v-accent-strong, #6d34d6);
+    background: var(--v-accent-strong, #6d34d6);
     color: var(--v-text-inverse, #fff);
 }
 
@@ -308,12 +308,12 @@
 }
 
 .desuq-wiz-hit-ok {
-    border-color: var(--v-success, #10b981);
-    background: var(--v-success-wash, rgba(16, 185, 129, 0.1));
+    border-color: var(--v-accent, #7c4ddb);
+    background: var(--v-accent-wash, rgba(124, 77, 219, 0.12));
 }
 
 .desuq-wiz-hit-ok > .fas {
-    color: var(--v-success, #10b981);
+    color: var(--v-accent, #7c4ddb);
 }
 
 .desuq-wiz-pulse {
@@ -398,7 +398,7 @@
     font-weight: 700;
     letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: var(--v-success, #10b981);
+    color: var(--v-accent, #7c4ddb);
 }
 
 .desuq-wiz-peer-state.desuq-wiz-peer-off {

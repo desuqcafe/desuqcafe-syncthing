@@ -356,6 +356,18 @@ console.log('');
 // the jsdom window and will hold node open forever. Closing it is also the
 // assertion that closing stops the polling.
 svc.close();
+
+// No green. This screen used --v-success for a completed step, a reached
+// checkpoint and an online peer -- the only fork screen that did, because it
+// was written before the rule the main and history screens follow. The green
+// ticks were the loudest thing in a violet dialogue the first time anybody
+// looked at it in a browser, which was 2026-08-26.
+console.log('\n-- no green anywhere');
+{
+    const css = fs.readFileSync(path.join(desuq, 'wizard.css'), 'utf8');
+    check('wizard.css references no success token', css.indexOf('--v-success') === -1);
+}
+
 window.close();
 
 if (failures > 0) {
