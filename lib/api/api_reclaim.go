@@ -446,13 +446,27 @@ func capEntries(in []reclaimEntry) []reclaimEntry {
 	return in[:reclaimListCap]
 }
 
-// parentDir is the directory part of a slash-separated index name, or "" for
-// something at the folder root.
+// parentDir is the directory part of an index name, or "" for something at the
+// folder root.
+//
+// **Index names carry the OS separator, not always a slash.** On Windows
+// AllGlobalFiles hands back `refs\scan1.png`, which a slash-only split reads
+// as a root-level file with a strange name -- so the empty directory it was
+// the last member of never gets tidied away. Verified against a live pair:
+// three files deleted, `refs` left behind. Both separators, therefore, and
+// the original spelling is preserved in the result because it is handed
+// straight back to the filesystem.
 func parentDir(name string) string {
-	if i := strings.LastIndex(name, "/"); i > 0 {
+	i := strings.LastIndexAny(name, `/\`)
+	if i > 0 {
 		return name[:i]
 	}
 	return ""
+}
+
+// dirDepth counts path segments, either separator. Used only for ordering.
+func dirDepth(name string) int {
+	return strings.Count(name, "/") + strings.Count(name, `\`)
 }
 
 // deepestFirst orders directories so children are removed before parents,
@@ -472,8 +486,7 @@ func deepestFirst(dirs map[string]struct{}) []string {
 		out = append(out, d)
 	}
 	sort.Slice(out, func(i, j int) bool {
-		di := strings.Count(out[i], "/")
-		dj := strings.Count(out[j], "/")
+		di, dj := dirDepth(out[i]), dirDepth(out[j])
 		if di != dj {
 			return di > dj
 		}

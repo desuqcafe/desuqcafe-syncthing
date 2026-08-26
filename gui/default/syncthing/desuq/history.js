@@ -47,7 +47,7 @@
 
 angular.module('syncthing.core')
 
-    .factory('desuqHistory', function ($http, $q, $window) {
+    .factory('desuqHistory', function ($http, $q, $window, $rootScope) {
         'use strict';
 
         // Only polled while the screen is open and on the changes tab.
@@ -80,6 +80,11 @@ angular.module('syncthing.core')
 
             // Versions tab.
             archive: { files: 0, versions: 0, bytes: 0, total: 0, rows: [] },
+            // True when at least one folder in view keeps old copies at all.
+            // A folder with versioning off has an empty archive for a reason
+            // that is a setting rather than a lack of activity, and the two
+            // read very differently to somebody hunting for a lost file.
+            anyVersioning: false,
             expanded: {},
             versionsReady: false,
             versionsError: '',
@@ -281,6 +286,7 @@ angular.module('syncthing.core')
             var folders = st.folder ? [st.folder] : st.folders.map(function (f) { return f.id; });
             if (!folders.length) {
                 st.archive = { files: 0, versions: 0, bytes: 0, total: 0, rows: [] };
+                st.anyVersioning = false;
                 st.versionsReady = true;
                 return $q.when();
             }
@@ -296,10 +302,14 @@ angular.module('syncthing.core')
             })).then(function (parts) {
                 var merged = { files: 0, versions: 0, bytes: 0, total: 0, rows: [] };
                 var failed = 0;
+                var anyVersioning = false;
                 parts.forEach(function (p, i) {
                     if (!p) {
                         failed++;
                         return;
+                    }
+                    if (p.versioning) {
+                        anyVersioning = true;
                     }
                     merged.files += p.files;
                     merged.versions += p.versions;
@@ -320,6 +330,7 @@ angular.module('syncthing.core')
                 });
 
                 st.truncated = merged.rows.length < merged.total;
+                st.anyVersioning = anyVersioning;
                 st.archive = merged;
                 st.versionsReady = true;
                 st.versionsError = failed
@@ -469,6 +480,13 @@ angular.module('syncthing.core')
                 timer = null;
             }
         }
+
+        // Upstream's collapsed "Technical details" block lives in index.html at
+        // controller scope, outside both directives, so it cannot see the child
+        // scope this state is normally read through -- and it stayed on screen
+        // underneath the history view. One property on $rootScope is cheaper
+        // than a second service or an event.
+        $rootScope.desuqHistoryState = st;
 
         return {
             state: st,

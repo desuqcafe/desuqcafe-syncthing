@@ -75,6 +75,11 @@ type historyFile struct {
 // historyResponse is the summary shape.
 type historyResponse struct {
 	Folder string `json:"folder"`
+	// Versioning is false when the folder keeps no old copies at all. That is
+	// a setting, not a failure, and it is a different thing to report from an
+	// archive that exists and happens to be empty -- one says "nothing has
+	// been overwritten yet", the other says "nothing will be kept if it is".
+	Versioning bool `json:"versioning"`
 	// Files, Versions and Bytes are the whole archive, exact, regardless of
 	// how much of it is in Rows.
 	Files    int   `json:"files"`
@@ -112,6 +117,19 @@ func (s *service) getFolderHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A folder with versioning switched off is not an error, it is an answer,
+	// and it is a different answer from "the archive is empty". This build
+	// seeds versioning on for the folders it creates, but a folder added any
+	// other way -- or one somebody deliberately turned it off for -- reaches
+	// here, and the model reports that as a plain error. Rendered through the
+	// generic path it becomes "could not read the archive", which describes a
+	// fault rather than a setting and sends the reader looking for a problem
+	// that does not exist.
+	if !s.folderHasVersioning(folder) {
+		sendJSON(w, historyResponse{Folder: folder, Rows: []historyFile{}})
+		return
+	}
+
 	versions, err := s.model.GetFolderVersions(folder)
 	if err != nil {
 		forkHTTPError(w, err)
@@ -137,6 +155,7 @@ func (s *service) getFolderHistory(w http.ResponseWriter, r *http.Request) {
 		return s.historyFileIsGone(folder, name)
 	})
 	res.Folder = folder
+	res.Versioning = true
 
 	res.Total = len(rows)
 	page, perpage := historyPaging(qs.Get("page"), qs.Get("perpage"))
@@ -204,6 +223,20 @@ func historySummarise(versions map[string][]versioner.FileVersion, prefix string
 		return rows[i].Name < rows[j].Name
 	})
 	return res, rows
+}
+
+// folderHasVersioning reports whether the folder keeps old copies at all.
+//
+// Read from the configuration rather than inferred from GetFolderVersions
+// failing: the model returns a plain error for this, and matching on an error
+// string is the kind of thing that stops working silently when upstream
+// rewords it.
+func (s *service) folderHasVersioning(folder string) bool {
+	cfg, ok := s.cfg.Folders()[folder]
+	if !ok {
+		return false
+	}
+	return cfg.Versioning.Type != ""
 }
 
 // historyFileIsGone reports whether the live folder still has this file, which

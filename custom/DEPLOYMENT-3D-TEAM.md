@@ -1104,14 +1104,130 @@ separates "behind" from "never accepted".
 ### Upstream's screen is still there
 
 It is collapsed under **Technical details**, not deleted, and that is
-deliberate rather than unfinished. Of its thirty-one actions, seven are covered
-by the new screen, four are one click deeper, two are dead — and eighteen would
-have no entry point anywhere. Three of those eighteen are capabilities rather
-than shortcuts: restoring an earlier version of a file (which matters
-especially here, because §4's staggered versioning is seeded **on** for every
-folder), reverting a wedged receive-only folder (the mode recommended for both
-modellers, in the table below), and seeing *which* files failed. Those get a
-home on the new screen before the old markup goes.
+deliberate rather than unfinished. Of its thirty-one actions, the audit found
+seven covered by the new screen, four one click deeper, two dead — and eighteen
+with no entry point anywhere. Three of those eighteen were capabilities rather
+than shortcuts, and **all three now have a home**:
+
+| Was homeless | Now |
+| --- | --- |
+| `restoreVersions.show` — restoring an earlier version of a file, which matters especially here because §4's staggered versioning is seeded **on** for every folder | **History → Older versions** (§19), reached from every folder card |
+| `revertOverrideConfirmationModal('revert', …)` — the only way out of a wedged receive-only folder, the mode recommended for both modellers in the table below | **Undo my changes here**, on the folder card, shown only for a receive-only folder that actually has local changes |
+| `showFailed` — *which* files failed, as opposed to how many | **N that would not sync**, on the folder card, shown only when the count is non-zero |
+
+All three call upstream's own handlers. Every modal is `<ng-include>`d
+*outside* the collapsed region, so these are entry points rather than
+reimplementations — which is what made each of them cost one button.
+
+That does not finish the job. Fifteen shortcuts still have no second door, and
+two of them are the ones to be careful with: `showListenerStatus` and
+`showDiscoveryStatus` have no replacement planned, and after the region goes
+the log viewer is all that is left. Deleting upstream's markup remains a pass
+of its own; it is now a smaller one.
+
+## 19. Two promises the interface was only half keeping
+
+Both of these were the same shape of mistake: a sentence that was true, next to
+a sentence that should have been there and was not.
+
+### "Choose files" was never about disk space
+
+Un-ticking something in the picker writes an exclusion into the folder's
+managed ignore block. Syncthing then stops keeping that thing up to date. It
+does **not** delete what is already on the disk, and for a while the interface
+said neither one thing nor the other — a modeller who un-ticked three gigabytes
+of reference scans to make room watched their free space not move, with nothing
+anywhere explaining why.
+
+Those are two separate actions and the fork now offers both. Un-ticking stops
+updates. **Free it up**, on the folder card, deletes the local copies — and it
+is offered whenever there is something to reclaim, not only in the moment after
+a pick, because the bytes outlive the moment.
+
+It is the only thing this build does that deletes your files, so what it
+refuses to touch is the interesting part. Four rails, all re-checked
+server-side per file at the instant of deletion rather than trusted from the
+browser:
+
+1. The file matches the ignore patterns **currently loaded** for the folder,
+   re-read at that moment. A pattern the screen thought was in force but is not
+   can never reach a live file.
+2. The global index still has it, undeleted.
+3. A device **connected right now** has the current version. This is the rail
+   that makes it reversible: ticking the item again pulls the file back. "Kai
+   had it last week" is not good enough, and the confirmation names who it is
+   relying on for exactly that reason.
+4. The copy on disk matches that version in size and modification time. If you
+   edited it offline and then un-ticked it, your edit is not their file and is
+   not deleted.
+
+Anything failing a rail is **named with its reason**, never silently skipped:
+*"Deleted 3,178 files, 3.0 GB freed. 2 files were kept — RefPhotos/notes.txt,
+nobody else connected has this copy."*
+
+The residual risk is worth stating plainly, because no rail removes it: if
+Kai later deletes the folder too and you never re-ticked it, it is gone from
+both machines. That is inherent in reclaiming space. What the rails guarantee
+is narrower and more useful — you can never lose something that existed *only*
+on your disk.
+
+**One implementation note that is easy to get wrong.** Rail 4 stats the disk
+rather than reading the local index, because *marking a file ignored blanks its
+size in the index*: `protocol.FileInfo.SetIgnored` → `setLocalFlags` →
+`setNoContent` sets `Size` to 0 and drops the block hashes. An ignored file
+therefore reports zero bytes locally, and comparing against that number would
+have made every ignored file look identical to every other. The global entry is
+authoritative and is not blanked. This is the same class of trap as
+`/rest/db/browse?dirsonly=1` reporting every directory as zero bytes — local
+state that looks like an answer and is not — and it is the fourth instance this
+fork has hit.
+
+### Thirty days of history nobody could read
+
+§4 seeds staggered versioning **on**, thirty days, for every folder this build
+creates. That is right for two people overwriting each other's `.blend` files.
+But until now the only door to the archive it writes was inside upstream's
+collapsed region, so the fork was diligently keeping old copies that nobody
+could reach — versioning as a disk-space leak with good intentions.
+
+**History**, on every folder card, has two tabs.
+
+**Recent changes** is who touched what, lately. Read the empty state carefully:
+it says *"nothing has changed since this computer started"*, and it means it.
+That feed comes from `/rest/events/disk`, which is a memory-only buffer that
+begins again at every restart. Three things it cannot do, which the wording is
+built around:
+
+- It never says a file was **added**. `action` is only ever `modified` or
+  `deleted` (`lib/model/folder.go`), so a file that was just created arrives as
+  modified and nothing in the feed can tell them apart.
+- It is not a complete record, and says so in its own footer. The first scan of
+  a folder emits one event per existing file, which on a real asset folder
+  overruns the thousand-deep buffer by itself.
+- It shows nothing for **ignored** files at all — `emitDiskChangeEvents` skips
+  invalid entries — so a folder that has been through the picker is quieter
+  here than it is on disk.
+
+**Older versions** is the archive, and it is the one that survives a restart.
+Files are listed newest-first with a count of copies kept and what they cost on
+disk; expanding one lists its copies with a **Restore** beside each. A file
+that has been deleted outright is tagged, and its button says **Put it back**,
+because undeleting is not the same act as rolling back and one word for both
+hides that.
+
+Restoring is safer than it sounds and the screen says so: Syncthing archives
+the current file *before* overwriting it, so the thing you were about to lose
+becomes the newest entry in that same list. An accidental restore is undone by
+restoring again.
+
+**Why there is a fork endpoint behind it.** Upstream's `/rest/folder/versions`
+returns every version of every file in one document. Staggered versioning at
+thirty days keeps roughly fifty copies per file; five thousand files is a
+quarter of a million entries and tens of megabytes of JSON, to paint twenty
+rows. `/rest/folder/history` (`lib/api/api_history.go`) is the same data
+summarised server-side, and the per-file list is fetched only when a row is
+expanded. Restoring still goes through upstream's `POST`, which was always the
+right shape.
 
 ## Recommended configuration
 

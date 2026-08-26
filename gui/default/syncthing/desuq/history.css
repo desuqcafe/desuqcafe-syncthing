@@ -272,8 +272,14 @@ reads as "no longer here" rather than "alarm".
     white-space: nowrap;
 }
 
-/* Removed, not wrong. See the header comment. */
-.desuq-hist-row.is-removed .desuq-hist-line b:last-of-type {
+/* Removed, not wrong. See the header comment.
+
+   The strike goes on the *thing*, never on the person. b:last-of-type was
+   wrong here and looked right in review: the person's <b> is a direct child
+   of the line while the count's is nested inside an ng-if span, so they are
+   not siblings and last-of-type picked the person. "You" arrived on screen
+   with a line through it. */
+.desuq-hist-row.is-removed .desuq-hist-what {
     text-decoration: line-through;
     text-decoration-thickness: 1px;
 }

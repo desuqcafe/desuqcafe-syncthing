@@ -86,8 +86,8 @@
             <b>{{ r.person }}</b>
             <span ng-if="r.action == 'deleted'">removed</span>
             <span ng-if="r.action != 'deleted'">changed</span>
-            <span ng-if="r.count == 1"><b>{{ r.names[0] }}</b></span>
-            <span ng-if="r.count > 1"><b>{{ r.count }} files</b></span>
+            <span class="desuq-hist-what" ng-if="r.count == 1"><b>{{ r.names[0] }}</b></span>
+            <span class="desuq-hist-what" ng-if="r.count > 1"><b>{{ r.count }} files</b></span>
           </div>
           <div class="desuq-hist-sub">
             <span>{{ r.label }}</span>
@@ -120,12 +120,31 @@
       Copies older than thirty days are removed automatically.
     </div>
 
+    <!-- Three different empty states, because they are three different facts.
+         "Nothing matches your search" is not "nothing has been overwritten
+         yet", and neither of those is "this folder will not keep anything if
+         it is". Collapsing them into one line is how somebody comes away
+         believing they have a safety net they do not have. -->
     <div class="desuq-hist-empty" ng-if="hist.versionsReady && !hist.archive.rows.length">
       <div class="desuq-hist-empty-main" ng-if="hist.search">Nothing here matches.</div>
-      <div class="desuq-hist-empty-main" ng-if="!hist.search">No older copies have been kept yet.</div>
-      <div class="desuq-hist-empty-sub" ng-if="!hist.search">
-        A copy is kept whenever a file is replaced or deleted, so this stays
-        empty until something is overwritten. Nothing is lost in the meantime.
+
+      <div ng-if="!hist.search && !hist.anyVersioning">
+        <div class="desuq-hist-empty-main">Old copies are not being kept here.</div>
+        <div class="desuq-hist-empty-sub">
+          File versioning is switched off for
+          <span ng-if="hist.folder">this folder</span><span ng-if="!hist.folder">every folder</span>,
+          so replacing or deleting a file is permanent. Turn it on under
+          <b>Settings</b> on the folder's card &mdash; this build normally sets
+          it to keep thirty days.
+        </div>
+      </div>
+
+      <div ng-if="!hist.search && hist.anyVersioning">
+        <div class="desuq-hist-empty-main">No older copies have been kept yet.</div>
+        <div class="desuq-hist-empty-sub">
+          A copy is kept whenever a file is replaced or deleted, so this stays
+          empty until something is overwritten. Nothing is lost in the meantime.
+        </div>
       </div>
     </div>
 

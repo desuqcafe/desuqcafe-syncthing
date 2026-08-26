@@ -447,7 +447,7 @@
            the difference between a Low and a Medium row in CUSTOMIZATIONS.md.
            The two lines below and the two at the end of the row are the entire
            edit; upstream's markup between them is untouched. -->
-      <details class="desuq-technical" ng-if="authenticated">
+      <details class="desuq-technical" ng-if="authenticated && !desuqHistoryState.open">
         <summary>Technical details<span class="desuq-technical-hint">&mdash; every folder and device setting, exactly as Syncthing shows them</span></summary>
 
       <!-- First regular row -->

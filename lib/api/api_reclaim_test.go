@@ -160,6 +160,10 @@ func TestModTimeEqualWindow(t *testing.T) {
 func TestParentDir(t *testing.T) {
 	t.Parallel()
 
+	// Both separators. Index names carry the OS separator, so on Windows
+	// AllGlobalFiles hands back `refs\scan1.png` -- and a slash-only split
+	// reads that as a root-level file, leaving the directory it emptied
+	// behind. Found on a live pair, not in review.
 	cases := map[string]string{
 		"a.png":           "",
 		"refs/a.png":      "refs",
@@ -167,6 +171,13 @@ func TestParentDir(t *testing.T) {
 		"/leading":        "",
 		"refs/wood/":      "refs/wood",
 		"":                "",
+
+		`refs\a.png`:      "refs",
+		`refs\wood\a.png`: `refs\wood`,
+		`\leading`:        "",
+		// Mixed, because nothing promises they cannot be.
+		`refs/wood\a.png`: "refs/wood",
+		`refs\wood/a.png`: `refs\wood`,
 	}
 	for in, want := range cases {
 		if got := parentDir(in); got != want {
@@ -193,6 +204,15 @@ func TestDeepestFirstCollapsesAChain(t *testing.T) {
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+
+	// The same chain spelled the way Windows spells it must collapse too.
+	back := deepestFirst(map[string]struct{}{`refs\wood\oak`: {}})
+	wantBack := []string{`refs\wood\oak`, `refs\wood`, "refs"}
+	for i := range wantBack {
+		if i >= len(back) || back[i] != wantBack[i] {
+			t.Fatalf("backslash chain: got %v, want %v", back, wantBack)
 		}
 	}
 

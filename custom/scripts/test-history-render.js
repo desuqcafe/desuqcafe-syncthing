@@ -129,7 +129,7 @@ angular.module('syncthing.core')
                     });
                 }
                 return reply(world.archive[p.folder] ||
-                    { files: 0, versions: 0, bytes: 0, total: 0, rows: [] });
+                    { versioning: true, files: 0, versions: 0, bytes: 0, total: 0, rows: [] });
             }
             throw new Error('unstubbed GET ' + url);
         };
@@ -381,7 +381,7 @@ console.log('\n-- the older versions tab');
 
 {
     world.archive['assets'] = {
-        folder: 'assets', files: 2, versions: 9, bytes: 4096, total: 2,
+        folder: 'assets', versioning: true, files: 2, versions: 9, bytes: 4096, total: 2,
         rows: [
             { name: 'refs/chair_v3.blend', versions: 6, bytes: 3072, newest: '2026-08-26T09:14:00+09:00', oldest: '2026-08-20T09:14:00+09:00', deleted: false },
             { name: 'old_test.blend', versions: 3, bytes: 1024, newest: '2026-08-25T17:02:00+09:00', oldest: '2026-08-22T17:02:00+09:00', deleted: true }
@@ -435,7 +435,7 @@ console.log('\n-- the older versions tab');
 {
     // The empty archive is the state the developer's own machine is in today,
     // and "no history" must not read as "history is broken".
-    world.archive['assets'] = { folder: 'assets', files: 0, versions: 0, bytes: 0, total: 0, rows: [] };
+    world.archive['assets'] = { folder: 'assets', versioning: true, files: 0, versions: 0, bytes: 0, total: 0, rows: [] };
     svc.close();
     const el = render();
     svc.open('assets', 'versions');
@@ -445,6 +445,25 @@ console.log('\n-- the older versions tab');
         text.indexOf('replaced or deleted') !== -1, text.slice(0, 140));
     check('and reassures rather than alarms',
         text.indexOf('Nothing is lost') !== -1);
+}
+
+{
+    // A folder with versioning switched off is a *different* fact, and the
+    // one that actually matters: an empty list here means there is no safety
+    // net, not that nothing has happened yet. Collapsing the two is how
+    // somebody comes away believing they are covered when they are not. Found
+    // live -- the test pair's folder has no versioner, and the server used to
+    // answer that with a 500 the screen rendered as "could not read".
+    world.archive['assets'] = { folder: 'assets', versioning: false, files: 0, versions: 0, bytes: 0, total: 0, rows: [] };
+    svc.close();
+    const el = render();
+    svc.open('assets', 'versions');
+    flush();
+    const text = el.text();
+    check('versioning off says so', text.indexOf('not being kept') !== -1, text.slice(0, 140));
+    check('and warns that deletion is permanent', text.indexOf('permanent') !== -1);
+    check('without claiming nothing has happened yet',
+        text.indexOf('Nothing is lost') === -1);
 }
 
 

@@ -84,7 +84,13 @@
         <span class="desuq-home-dot" ng-if="f.needBytes > 0" aria-hidden="true">·</span>
         <span class="desuq-home-pending" ng-if="f.needBytes > 0">{{ bytes(f.needBytes) }} still to come</span>
         <span class="desuq-home-dot" ng-if="f.heldBack" aria-hidden="true">·</span>
-        <span class="desuq-home-pending" ng-if="f.heldBack">{{ bytes(f.heldBackBytes) }} not taken</span>
+        <!-- "not taken" was a guess that is true only half the time. heldBack
+             is global minus local, and a file goes local-invalid the moment it
+             is ignored -- so a directory unticked *after* it downloaded counts
+             here while sitting on the disk in full. The reclaim row underneath
+             says exactly that, and the two read as a contradiction. "Not kept
+             up to date" is true whether the bytes ever arrived or not. -->
+        <span class="desuq-home-pending" ng-if="f.heldBack">{{ bytes(f.heldBackBytes) }} not kept up to date</span>
       </div>
 
       <!-- Who has this, and how far each of them has got.
@@ -124,8 +130,13 @@
            the moment after a pick -- the bytes outlive the moment. -->
       <div class="desuq-home-reclaim" ng-if="home.reclaimable[f.id]">
         <div class="desuq-home-reclaim-line">
-          <b>{{ bytes(home.reclaimable[f.id].bytes) }}</b> is on this computer but
-          no longer being kept up to date.
+          <!-- Deliberately self-contained rather than "of that": the held-back
+               line above is conditional, and a sentence starting "of that"
+               with nothing above it is a dangling reference. The two numbers
+               can differ, and the confirmation explains the gap by listing
+               every file it refused to touch and why. -->
+          <b>{{ bytes(home.reclaimable[f.id].bytes) }}</b> here is no longer being
+          kept up to date, and can be deleted.
           <button type="button" class="desuq-home-linkbtn" ng-click="toggleReclaim(f.id)">
             <span ng-if="!reclaimOpen[f.id]">Free it up</span>
             <span ng-if="reclaimOpen[f.id]">Never mind</span>
@@ -134,8 +145,9 @@
 
         <div class="desuq-home-reclaim-confirm" ng-if="reclaimOpen[f.id]">
           <div class="desuq-home-reclaim-ask">
-            Delete your copies of
-            <b>{{ home.reclaimable[f.id].files }}</b> files
+            Delete your
+            <span ng-if="home.reclaimable[f.id].files == 1">copy of <b>1</b> file</span><span
+                  ng-if="home.reclaimable[f.id].files > 1">copies of <b>{{ home.reclaimable[f.id].files }}</b> files</span>
             ({{ bytes(home.reclaimable[f.id].bytes) }})?
           </div>
 
@@ -145,9 +157,12 @@
                guarantee actually rests on. -->
           <div class="desuq-home-reclaim-why" ng-if="home.reclaimable[f.id].peers.length">
             {{ home.reclaimable[f.id].peers.join(' and ') }}
-            <span ng-if="home.reclaimable[f.id].peers.length == 1">is</span><span ng-if="home.reclaimable[f.id].peers.length > 1">are</span>
-            connected and still have them, so ticking them again in
-            <b>Choose files</b> brings them back.
+            <span ng-if="home.reclaimable[f.id].peers.length == 1">is connected and still has</span><span
+                  ng-if="home.reclaimable[f.id].peers.length > 1">are connected and still have</span>
+            <span ng-if="home.reclaimable[f.id].files == 1">it</span><span ng-if="home.reclaimable[f.id].files > 1">them</span>,
+            so ticking <span ng-if="home.reclaimable[f.id].files == 1">it</span><span ng-if="home.reclaimable[f.id].files > 1">them</span>
+            again in <b>Choose files</b> brings
+            <span ng-if="home.reclaimable[f.id].files == 1">it</span><span ng-if="home.reclaimable[f.id].files > 1">them</span> back.
           </div>
 
           <div class="desuq-home-reclaim-kept" ng-if="home.reclaimable[f.id].keptTotal">
@@ -160,7 +175,10 @@
           </div>
 
           <div class="desuq-home-reclaim-actions">
-            <button type="button" class="btn btn-sm btn-default" ng-click="toggleReclaim(f.id)">Keep them</button>
+            <button type="button" class="btn btn-sm btn-default" ng-click="toggleReclaim(f.id)">
+              <span ng-if="home.reclaimable[f.id].files == 1">Keep it</span><span
+                    ng-if="home.reclaimable[f.id].files > 1">Keep them</span>
+            </button>
             <button type="button" class="btn btn-sm btn-danger"
                     ng-disabled="reclaimBusy == f.id"
                     ng-click="doReclaim(f.id, home.reclaimable[f.id].bytes)">
