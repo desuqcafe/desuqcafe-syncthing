@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/tls"
 	"errors"
 	"os/exec"
 	"runtime"
@@ -18,10 +17,6 @@ func hideWindow(cmd *exec.Cmd) {
 		HideWindow:    true,
 		CreationFlags: 0x08000000, // CREATE_NO_WINDOW
 	}
-}
-
-func insecureLoopbackTLS() *tls.Config {
-	return &tls.Config{InsecureSkipVerify: true} //nolint:gosec // loopback only, self-signed by design
 }
 
 // openURL hands a URL to whatever the user has set as their browser.

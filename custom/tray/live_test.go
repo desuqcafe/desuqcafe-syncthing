@@ -188,7 +188,7 @@ func TestMarkFoldersForExplorer(t *testing.T) {
 		if len(raw) < 2 || raw[0] != 0xFF || raw[1] != 0xFE {
 			t.Errorf("%s: desktop.ini has no UTF-16LE BOM: % X", f.ID, raw[:min(4, len(raw))])
 		}
-		if !bytes.Contains(raw, utf16LE("IconResource="+m.iconPath)[2:]) {
+		if !bytes.Contains(raw, utf16LE("IconResource=" + m.iconPath)[2:]) {
 			t.Errorf("%s: desktop.ini does not point at the icon", f.ID)
 		}
 		checkExplorerAttributes(t, f.ID, f.Path, ini)

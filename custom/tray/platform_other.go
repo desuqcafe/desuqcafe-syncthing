@@ -3,7 +3,6 @@
 package main
 
 import (
-	"crypto/tls"
 	"os/exec"
 	"runtime"
 )
@@ -12,10 +11,6 @@ import (
 // vets on a developer's Mac or Linux box.
 
 func hideWindow(*exec.Cmd) {}
-
-func insecureLoopbackTLS() *tls.Config {
-	return &tls.Config{InsecureSkipVerify: true} //nolint:gosec // loopback only, self-signed by design
-}
 
 func openURL(url string) error {
 	opener := "xdg-open"

@@ -225,6 +225,15 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
   way. Anything that checks the exit code reports every successful open as a
   failure. It is also why the route only ever passes a **directory** —
   `explorer.exe` given an executable runs it.
+- **Syncthing's GUI certificate has no IP SAN.** `https-cert.pem` carries the
+  device name as its common name and its only DNS SAN (`CN=desuq, DNS:desuq`),
+  so a connection to `https://127.0.0.1:8384` can never pass hostname
+  verification however the trust store is arranged. That is why
+  `custom/tray/tlspin.go` pins: the certificate goes in a one-entry root pool
+  *and* `ServerName` is read back off the certificate. Verified against a
+  bare non-CA leaf, which is what Syncthing writes. GUI TLS is off by default
+  and is not seeded on, so this path is rarely exercised -- which is how the
+  tray carried `InsecureSkipVerify: true` for as long as it did.
 - Windows suppresses toasts while anything is full screen (automatic Do Not
   Disturb). They land in the Action Centre instead, so a notifier that looks
   broken during testing may be working perfectly.

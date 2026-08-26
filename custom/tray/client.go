@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -22,6 +23,10 @@ import (
 type endpoint struct {
 	baseURL string
 	apiKey  string
+	// tls is nil unless the GUI has TLS switched on, which is neither the
+	// default nor what this fork seeds. When it is set it pins the exact
+	// certificate Syncthing generated for this home -- see tlspin.go.
+	tls *tls.Config
 }
 
 // configXML is the sliver of Syncthing's config we care about. Decoding into a
@@ -79,8 +84,13 @@ func readEndpoint(home string) (endpoint, error) {
 	}
 
 	scheme := "http"
+	var tlsCfg *tls.Config
 	if cfg.GUI.TLS == "true" {
 		scheme = "https"
+		tlsCfg, err = loopbackTLS(home)
+		if err != nil {
+			return endpoint{}, err
+		}
 	}
 
 	addr := cfg.GUI.Address
@@ -94,6 +104,7 @@ func readEndpoint(home string) (endpoint, error) {
 	return endpoint{
 		baseURL: scheme + "://" + addr,
 		apiKey:  cfg.GUI.APIKey,
+		tls:     tlsCfg,
 	}, nil
 }
 
@@ -110,11 +121,12 @@ type client struct {
 func newClient(ep endpoint) *client {
 	transport := func() *http.Transport {
 		return &http.Transport{
-			// The GUI certificate is self-signed and regenerated per install;
-			// there is nothing to pin it against. This only ever talks to
-			// loopback, so there is no meaningful attacker in the path to
-			// protect from either.
-			TLSClientConfig: insecureLoopbackTLS(),
+			// nil on a plain-HTTP GUI, which is the default and is what this
+			// fork seeds; net/http ignores it entirely then. When the GUI does
+			// use TLS this pins the one certificate Syncthing generated for
+			// this home -- see tlspin.go for why that needs a pin rather than
+			// ordinary verification.
+			TLSClientConfig: ep.tls,
 		}
 	}
 	return &client{
