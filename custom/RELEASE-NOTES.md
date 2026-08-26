@@ -3,88 +3,52 @@
      install section to it, so this file is only ever "what changed".
      Old releases keep their own notes on GitHub; git history keeps these. -->
 
-# desuqcafe Syncthing v2.1.4-desuq.4
+# desuqcafe Syncthing v2.1.4-desuq.5
 
-Two things the interface was only half telling you, and a first look at three
-screens nobody had ever seen in a browser.
+A small release with one change, and a warning worth reading if you install
+this on somebody else's machine.
 
 Update by running the installer over the top. Your folders, devices and
 settings are untouched.
 
-## "Choose files" was never about disk space
+## The tray no longer launches your browser the way malware does
 
-Unticking something in the picker stops Syncthing keeping it up to date. It
-does **not** delete what is already on your disk — and until now nothing said
-so plainly, so unticking three gigabytes of reference scans to make room left
-your free space exactly where it was.
+Opening the web interface from the tray menu used to go through
+`rundll32 url.dll,FileProtocolHandler`. That was chosen for good reasons — no
+console window flashes up, and there are no command-line quoting rules to get
+wrong — but it is also a well-known technique for hiding which program really
+started something, which is why antivirus software is trained to be suspicious
+of it.
 
-Those are two separate actions and both are now offered. Unticking stops
-updates. **Free it up**, on the folder's card, deletes the local copies — and
-it appears whenever there is something to reclaim, not only in the moment
-after a pick, because the bytes outlive the moment.
+It now uses `ShellExecute`, the interface Windows actually provides for this.
+Same result, no child process, nothing to be suspicious of.
 
-This is the only thing this build does that deletes your files, so what it
-*refuses* to delete is the important part. Before anything is removed, every
-file is checked again on the spot:
+## Windows Defender may quarantine the tray
 
-- it must match the ignore rules **currently** in force,
-- somebody you are **connected to right now** must still have it,
-- and your copy must match theirs in size and timestamp.
+This happened on a real machine installing **desuq.4**:
 
-So a file you edited after unticking it is kept, and a file nobody else has is
-kept. Everything it declines to touch is listed by name with the reason:
+```
+Trojan:Win32/Bearfoos.A!ml
+  desuq-syncthing-tray.exe
+  the setup .exe
+  both Start Menu shortcuts
+```
 
-> Deleted 3,178 files, 3.0 GB freed. 2 files were kept:
-> RefPhotos/notes.txt — nobody else connected has this copy
+**It is a false positive.** The `!ml` means it is Defender's machine-learning
+classifier guessing from behaviour rather than recognising known malware, and
+that classifier is well known for eating small unsigned programs written in Go.
+The change above removes the most suspicious-looking thing in the file, but
+nothing can guarantee it stops.
 
-Because the guarantee is "somebody else still has it", ticking the item again
-brings the files back.
+**It matters more than a missing icon.** Both shortcuts are quarantined too, so
+"start when I sign in" stops working and Syncthing does not come back after a
+restart — the machine goes quiet without saying anything.
 
-## Thirty days of history you could not read
+If it happens, in **Windows Security → Virus & threat protection → Protection
+history**, restore the files, then add an exclusion for the install folder so
+the next update survives. Reporting the file to Microsoft as a false positive
+is the fix that helps everybody rather than one machine.
 
-Every folder this build creates keeps old copies of files for thirty days.
-That has been true for several releases. What was missing was any way to look
-at them — so the copies were being written, taking up space, and were
-unreachable.
-
-**History**, on every folder card, has two tabs.
-
-**Recent changes** — who touched what, lately, collapsed so that one save or
-one scan is one line rather than four hundred. It is honest about its limits:
-the list lives in memory and starts again whenever Syncthing restarts, and the
-screen says so rather than showing you an empty list you might read as "nobody
-has done anything".
-
-**Older versions** — the archive, which survives restarts. Files are listed
-newest first with how many copies are kept and what they cost; open one and
-every copy has a **Restore** beside it. A file somebody deleted is tagged, and
-its button says **Put it back**.
-
-Restoring is safer than it sounds, and the screen says so: your current file is
-archived *before* it is replaced, so it becomes the newest entry in the same
-list. An accidental restore is undone by restoring again.
-
-If a folder has versioning switched off, the tab now says exactly that, and
-warns that deleting a file there is permanent. It used to show an error.
-
-## Three things that had nowhere to live
-
-Reaching them meant opening **Technical details** and knowing what to look
-for. All three are now on the folder's card:
-
-- **History** — described above.
-- **N that would not sync** — *which* files failed, not just how many.
-- **Undo my changes here** — on a receive-only folder, the only way to unstick
-  it after something changed locally. This is the folder type recommended for
-  people who only receive work, so until now that configuration had no exit.
-
-## Smaller
-
-- The folder card said *"879 KiB not taken"* about files that were sitting on
-  the disk in full. It now says "not kept up to date", which is true either way.
-- The first-run **Setup guide** used green ticks for finished steps — the one
-  fork screen that did. It is violet throughout now, like everything else.
-- Empty folders left behind by reclaiming are tidied up.
-- A twelfth test suite, and the first-run guide, the main screen and the new
-  history screen have all now been looked at in a real browser rather than
-  only in tests.
+`custom/DEPLOYMENT-3D-TEAM.md` section 20 has the details: what the tray
+actually does, why a classifier dislikes it, and the fact that its entire
+network surface is one file talking to Syncthing on this computer.
