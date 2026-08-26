@@ -3,52 +3,41 @@
      install section to it, so this file is only ever "what changed".
      Old releases keep their own notes on GitHub; git history keeps these. -->
 
-# desuqcafe Syncthing v2.1.4-desuq.5
+# desuqcafe Syncthing v2.1.4-desuq.6
 
-A small release with one change, and a warning worth reading if you install
-this on somebody else's machine.
+One security fix in the notification-area app. Nothing you will see.
 
 Update by running the installer over the top. Your folders, devices and
 settings are untouched.
 
-## The tray no longer launches your browser the way malware does
+## The tray now checks who it is talking to
 
-Opening the web interface from the tray menu used to go through
-`rundll32 url.dll,FileProtocolHandler`. That was chosen for good reasons — no
-console window flashes up, and there are no command-line quoting rules to get
-wrong — but it is also a well-known technique for hiding which program really
-started something, which is why antivirus software is trained to be suspicious
-of it.
+If you switch the web interface over to HTTPS — not the default, and not what
+this build sets up — the tray used to accept **any** certificate offered on
+that port, on the reasoning that the connection never leaves your computer.
 
-It now uses `ShellExecute`, the interface Windows actually provides for this.
-Same result, no child process, nothing to be suspicious of.
+That reasoning does not hold on a machine with more than one account. Anything
+that managed to answer on that port first would have been handed the tray's
+API key, which is complete control of every folder Syncthing is managing.
 
-## Windows Defender may quarantine the tray
+It now accepts exactly one certificate: the one Syncthing generated for your
+install, sitting beside your configuration. Anything else is refused.
 
-This happened on a real machine installing **desuq.4**:
+On a normal install, where the web interface is plain HTTP on this computer
+only, none of this code runs at all.
 
-```
-Trojan:Win32/Bearfoos.A!ml
-  desuq-syncthing-tray.exe
-  the setup .exe
-  both Start Menu shortcuts
-```
+## Still true from desuq.5
 
-**It is a false positive.** The `!ml` means it is Defender's machine-learning
-classifier guessing from behaviour rather than recognising known malware, and
-that classifier is well known for eating small unsigned programs written in Go.
-The change above removes the most suspicious-looking thing in the file, but
-nothing can guarantee it stops.
+Windows Defender may quarantine the tray on install, as
+`Trojan:Win32/Bearfoos.A!ml`. It is a false positive — the `!ml` marks it as a
+machine-learning guess rather than recognised malware, and that classifier is
+well known for eating small unsigned programs written in Go.
 
-**It matters more than a missing icon.** Both shortcuts are quarantined too, so
-"start when I sign in" stops working and Syncthing does not come back after a
-restart — the machine goes quiet without saying anything.
+**It takes both Start Menu shortcuts with it**, so "start when I sign in"
+stops working and Syncthing will not come back after a restart. If it happens:
+*Windows Security → Virus & threat protection → Protection history*, restore
+the files, then add an exclusion for the install folder so future updates
+survive.
 
-If it happens, in **Windows Security → Virus & threat protection → Protection
-history**, restore the files, then add an exclusion for the install folder so
-the next update survives. Reporting the file to Microsoft as a false positive
-is the fix that helps everybody rather than one machine.
-
-`custom/DEPLOYMENT-3D-TEAM.md` section 20 has the details: what the tray
-actually does, why a classifier dislikes it, and the fact that its entire
-network surface is one file talking to Syncthing on this computer.
+`custom/DEPLOYMENT-3D-TEAM.md` section 20 has the full picture, including an
+audit of what the tray actually does and why a classifier dislikes it.
