@@ -69,6 +69,9 @@ angular.module('syncthing.core')
             folders: [],
             peers: [],
             errors: [],
+            // folder id -> the dry run from /rest/db/reclaimable, only for
+            // folders that have something to reclaim.
+            reclaimable: {},
             // {tone, text, detail} -- tone drives colour and weight, nothing else.
             headline: { tone: 'busy', text: 'Checking…', detail: '' }
         };
@@ -612,6 +615,7 @@ angular.module('syncthing.core')
                             globalBytes: s.globalBytes || 0,
                             globalFiles: s.globalFiles || 0,
                             failedItems: s.errors || 0,
+                            hasIgnores: !!s.ignorePatterns,
                             heldBack: heldBack,
                             heldBackBytes: heldBackBytes,
                             // Who this folder is shared with, and where each of
@@ -620,6 +624,8 @@ angular.module('syncthing.core')
                             peopleNote: peopleNote(people, heldBack)
                         };
                     });
+
+                    refreshReclaimable(st.folders);
 
                     peers.forEach(function (p) { p.note = peerNote(p.shares); });
                     st.peers = peers;
@@ -637,6 +643,81 @@ angular.module('syncthing.core')
         // it has not -- a folder on a drive that is not plugged in is the case
         // that actually happens, and it is worth saying out loud rather than
         // leaving a button that does nothing when pressed.
+        // ------------------------------------------------------- reclaiming
+        //
+        // /rest/db/reclaimable walks the global index and stats every ignored
+        // file, so it is emphatically not something to hang off the 2.5 second
+        // poll. Two things keep it cheap:
+        //
+        //   - it is only asked at all for a folder whose /rest/db/status says
+        //     ignorePatterns, which is the folders that have been through the
+        //     picker and no others;
+        //   - and then at most once a minute. The number it returns changes
+        //     when somebody re-picks, which is a thing a person does every few
+        //     weeks, not every few seconds.
+        //
+        // markReclaimStale() is how the picker and a completed reclaim ask for
+        // an immediate answer rather than waiting out the interval.
+        var RECLAIM_MS = 60000;
+        var reclaimAsked = {};
+
+        function refreshReclaimable(folders) {
+            var now = Date.now();
+            folders.forEach(function (f) {
+                if (!f.hasIgnores) {
+                    delete st.reclaimable[f.id];
+                    return;
+                }
+                if (reclaimAsked[f.id] && now - reclaimAsked[f.id] < RECLAIM_MS) {
+                    return;
+                }
+                reclaimAsked[f.id] = now;
+                $http.get(urlbase + '/db/reclaimable', { params: { folder: f.id } })
+                    .then(function (r) {
+                        if (r.data && r.data.bytes > 0) {
+                            st.reclaimable[f.id] = r.data;
+                        } else {
+                            delete st.reclaimable[f.id];
+                        }
+                    })
+                    .catch(function () {
+                        // Leave whatever was there. A failed probe is not
+                        // evidence that nothing is reclaimable, and blanking
+                        // the row would make the button flicker.
+                    });
+            });
+        }
+
+        function markReclaimStale(folderID) {
+            if (folderID) {
+                delete reclaimAsked[folderID];
+            } else {
+                reclaimAsked = {};
+            }
+        }
+
+        // reclaim deletes. The server re-runs every rail itself; expectBytes is
+        // the one thing it takes on trust from here, and it takes it in order
+        // to *refuse* -- if the folder moved underneath the confirmation, the
+        // numbers the person agreed to no longer describe the set, and 409 is
+        // a better outcome than deleting a different one.
+        function reclaim(folderID, expectBytes) {
+            return $http.post(urlbase + '/db/reclaim', {
+                folder: folderID,
+                expectBytes: expectBytes
+            }).then(function (r) {
+                markReclaimStale(folderID);
+                delete st.reclaimable[folderID];
+                return { ok: true, result: r.data };
+            }, function (r) {
+                if (r && r.status === 409) {
+                    markReclaimStale(folderID);
+                    return { ok: false, message: 'This folder changed while you were deciding, so nothing was deleted. Have another look.' };
+                }
+                return { ok: false, message: 'Could not delete those copies.' };
+            });
+        }
+
         function reveal(folderID) {
             return $http.post(urlbase + '/system/reveal?folder=' +
                 encodeURIComponent(folderID)).then(function () {
@@ -656,6 +737,8 @@ angular.module('syncthing.core')
             state: st,
             refresh: refresh,
             reveal: reveal,
+            reclaim: reclaim,
+            markReclaimStale: markReclaimStale,
             pollMs: POLL_MS,
             // Exported for custom/scripts/test-home-render.js, which asserts
             // the headline rules directly without standing up Angular.
@@ -668,7 +751,7 @@ angular.module('syncthing.core')
         };
     })
 
-    .directive('desuqHome', function (desuqHome, $timeout) {
+    .directive('desuqHome', function (desuqHome, desuqHistory, $timeout) {
         'use strict';
 
         return {
@@ -691,11 +774,62 @@ angular.module('syncthing.core')
                 // would take the message with it.
                 scope.revealError = {};
 
+                // The history screen is a sibling element, not a child, so the
+                // two share state through the service rather than a scope. The
+                // template hides this whole screen while that one is open.
+                scope.hist = desuqHistory.state;
+                scope.openHistory = function (folderID, tab) {
+                    desuqHistory.open(folderID, tab);
+                };
+
+                // Which card has its reclaim confirmation open, and what the
+                // last attempt said. Keyed by folder id for the same reason
+                // revealError is: refresh() rebuilds the folder array every
+                // 2.5 seconds and would take anything held on it away.
+                scope.reclaimOpen = {};
+                scope.reclaimNote = {};
+
+                scope.toggleReclaim = function (folderID) {
+                    scope.reclaimOpen[folderID] = !scope.reclaimOpen[folderID];
+                    scope.reclaimNote[folderID] = '';
+                };
+
+                scope.doReclaim = function (folderID, expectBytes) {
+                    scope.reclaimBusy = folderID;
+                    desuqHome.reclaim(folderID, expectBytes).then(function (out) {
+                        scope.reclaimBusy = '';
+                        scope.reclaimOpen[folderID] = false;
+                        if (!out.ok) {
+                            scope.reclaimNote[folderID] = out.message;
+                            return;
+                        }
+                        var r = out.result || {};
+                        var msg = 'Deleted ' + r.files + ' ' +
+                            (r.files === 1 ? 'file' : 'files') + ', ' +
+                            desuqHome._size(r.bytes) + ' freed.';
+                        if (r.keptTotal) {
+                            msg += ' ' + r.keptTotal + ' ' +
+                                (r.keptTotal === 1 ? 'file was' : 'files were') +
+                                ' kept — see below.';
+                        }
+                        scope.reclaimNote[folderID] = msg;
+                        scope.reclaimKept[folderID] = r.kept || [];
+                    });
+                };
+                scope.reclaimKept = {};
+
                 scope.reveal = function (folderID) {
                     desuqHome.reveal(folderID).then(function (msg) {
                         scope.revealError[folderID] = msg;
                     });
                 };
+
+                // The picker says so when it rewrites a folder's ignores; the
+                // probe is throttled to once a minute otherwise, and waiting
+                // that long to notice your own click is the wrong answer.
+                scope.$on('desuq:ignoresChanged', function (_, folderID) {
+                    desuqHome.markReclaimStale(folderID);
+                });
 
                 var poller = null;
                 var dead = false;

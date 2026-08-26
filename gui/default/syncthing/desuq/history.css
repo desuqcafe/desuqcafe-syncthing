@@ -1,0 +1,435 @@
+/**
+
+The history screen. See syncthing/desuq/history.js.
+
+Like home.css this writes var(--v-x) with no fallback: tokens.css guarantees
+the whole palette under every theme, and a fallback here would be a second,
+silently wrong answer waiting for somebody to add a fifth theme and forget it.
+
+THE RULE THIS SCREEN ADDS
+
+A list of things that happened is read by scanning down the left edge, so the
+left edge has to be the same shape on every row. Time sits in a fixed column
+and everything else flows beside it; the run-collapsing in history.js exists so
+that column stays scannable when a scan writes four hundred events in one
+second.
+
+No green here either, and one further restraint: **deleted is not red**. Red is
+for "something is wrong and you should act". A file somebody deliberately
+removed is not a fault, and colouring it like one makes the actual faults on
+the main screen worth less. Removed rows are dimmed and struck instead, which
+reads as "no longer here" rather than "alarm".
+
+**/
+
+.desuq-hist {
+    margin-bottom: 24px;
+}
+
+/* ----------------------------------------------------------------- the bar */
+
+.desuq-hist-bar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+.desuq-hist-back {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--v-border);
+    background: var(--v-surface);
+    color: var(--v-text-muted);
+    border-radius: var(--v-radius);
+    padding: 5px 12px 5px 9px;
+    font-size: 13px;
+    transition: background var(--v-transition), color var(--v-transition);
+}
+
+.desuq-hist-back:hover,
+.desuq-hist-back:focus {
+    background: var(--v-surface-hover);
+    color: var(--v-accent-deep);
+    outline: none;
+}
+
+.desuq-hist-back:focus-visible {
+    box-shadow: var(--v-ring);
+}
+
+.desuq-hist-title {
+    margin: 0;
+    font-size: 21px;
+    font-weight: 600;
+    color: var(--v-text);
+}
+
+/* ---------------------------------------------------------------- the tabs */
+
+.desuq-hist-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--v-border);
+    margin-bottom: 16px;
+}
+
+.desuq-hist-tab {
+    border: 0;
+    background: none;
+    padding: 9px 15px;
+    font-size: 14px;
+    color: var(--v-text-dim);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color var(--v-transition), border-color var(--v-transition);
+}
+
+.desuq-hist-tab:hover {
+    color: var(--v-text);
+}
+
+.desuq-hist-tab.is-on {
+    color: var(--v-accent-deep);
+    border-bottom-color: var(--v-accent);
+    font-weight: 600;
+}
+
+.desuq-hist-tab:focus-visible {
+    outline: none;
+    box-shadow: var(--v-ring-inset);
+    border-radius: var(--v-radius-sm) var(--v-radius-sm) 0 0;
+}
+
+/* ------------------------------------------------------------- the filters */
+
+.desuq-hist-filters {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+}
+
+.desuq-hist-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-weight: 400;
+}
+
+.desuq-hist-field-grow {
+    flex: 1 1 220px;
+}
+
+.desuq-hist-field-label {
+    font-size: 12px;
+    color: var(--v-text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.desuq-hist-field select,
+.desuq-hist-field input {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: 1px solid var(--v-border);
+    border-radius: var(--v-radius);
+    background: var(--v-surface);
+    color: var(--v-text);
+    padding: 6px 10px;
+    font-size: 14px;
+}
+
+.desuq-hist-field select:focus,
+.desuq-hist-field input:focus {
+    outline: none;
+    border-color: var(--v-accent);
+    box-shadow: var(--v-ring-inset);
+}
+
+/* -------------------------------------------------------- states and notes */
+
+.desuq-hist-loading,
+.desuq-hist-empty,
+.desuq-hist-foot {
+    color: var(--v-text-dim);
+    font-size: 14px;
+}
+
+.desuq-hist-loading {
+    padding: 18px 2px;
+}
+
+.desuq-hist-empty {
+    padding: 30px 2px;
+}
+
+.desuq-hist-empty-main {
+    font-size: 16px;
+    color: var(--v-text-muted);
+    margin-bottom: 6px;
+}
+
+.desuq-hist-empty-sub {
+    max-width: 52ch;
+    line-height: 1.5;
+}
+
+.desuq-hist-foot {
+    margin-top: 18px;
+    padding-top: 12px;
+    border-top: 1px solid var(--v-border);
+    max-width: 62ch;
+    line-height: 1.5;
+    font-size: 13px;
+}
+
+.desuq-hist-notice {
+    border: 1px solid var(--v-accent);
+    background: var(--v-accent-wash);
+    color: var(--v-accent-deep);
+    border-radius: var(--v-radius);
+    padding: 10px 13px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.desuq-hist-error {
+    border: 1px solid var(--v-danger);
+    background: rgba(192, 57, 47, 0.08);
+    color: var(--v-danger-bright);
+    border-radius: var(--v-radius);
+    padding: 10px 13px;
+    margin-bottom: 16px;
+    font-size: 14px;
+}
+
+.desuq-hist-summary {
+    color: var(--v-text-muted);
+    font-size: 14px;
+    line-height: 1.55;
+    max-width: 62ch;
+    margin-bottom: 18px;
+}
+
+/* --------------------------------------------------------- recent changes */
+
+.desuq-hist-day {
+    margin-bottom: 22px;
+}
+
+.desuq-hist-day-title {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--v-text-dim);
+    padding-bottom: 7px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--v-border);
+}
+
+.desuq-hist-row {
+    display: flex;
+    gap: 14px;
+    padding: 9px 4px;
+    border-bottom: 1px solid var(--v-border);
+}
+
+.desuq-hist-row:last-child {
+    border-bottom: 0;
+}
+
+/* The fixed column that makes the list scannable. Tabular figures so the
+   colon lines up between 09:05 and 14:22. */
+.desuq-hist-time {
+    flex: 0 0 44px;
+    font-size: 13px;
+    color: var(--v-text-dim);
+    font-variant-numeric: tabular-nums;
+    padding-top: 1px;
+}
+
+.desuq-hist-body {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.desuq-hist-line {
+    font-size: 14px;
+    color: var(--v-text);
+    line-height: 1.45;
+}
+
+.desuq-hist-sub {
+    font-size: 12.5px;
+    color: var(--v-text-dim);
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Removed, not wrong. See the header comment. */
+.desuq-hist-row.is-removed .desuq-hist-line b:last-of-type {
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+}
+
+.desuq-hist-row.is-removed .desuq-hist-line {
+    color: var(--v-text-muted);
+}
+
+/* --------------------------------------------------------- older versions */
+
+.desuq-hist-file {
+    border: 1px solid var(--v-border);
+    border-radius: var(--v-radius);
+    background: var(--v-surface);
+    margin-bottom: 8px;
+    overflow: hidden;
+}
+
+.desuq-hist-file-top {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    border: 0;
+    background: none;
+    padding: 11px 14px;
+    transition: background var(--v-transition);
+}
+
+.desuq-hist-file-top:hover {
+    background: var(--v-surface-hover);
+}
+
+.desuq-hist-file-top:focus-visible {
+    outline: none;
+    box-shadow: var(--v-ring-inset);
+}
+
+/* Fork Awesome's family name is one word. "Fork Awesome" with a space falls
+   back silently and renders a tofu box, which in a caret is easy to miss --
+   so this caret is drawn with borders and owes nothing to a font. */
+.desuq-hist-caret {
+    flex: 0 0 auto;
+    width: 0;
+    height: 0;
+    border-left: 5px solid var(--v-text-dim);
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    transition: transform var(--v-transition);
+    transform-origin: 2px 50%;
+    align-self: center;
+}
+
+.desuq-hist-caret.is-open {
+    transform: rotate(90deg);
+}
+
+.desuq-hist-file-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--v-text);
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.desuq-hist-file-path {
+    font-size: 12px;
+    color: var(--v-text-dim);
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    direction: rtl;
+    text-align: left;
+}
+
+.desuq-hist-file-meta {
+    flex: 0 0 auto;
+    margin-left: auto;
+    font-size: 12.5px;
+    color: var(--v-text-dim);
+    font-variant-numeric: tabular-nums;
+}
+
+.desuq-hist-tag {
+    flex: 0 0 auto;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--v-text-muted);
+    border: 1px solid var(--v-border-strong);
+    border-radius: 999px;
+    padding: 1px 8px;
+}
+
+.desuq-hist-file.is-gone .desuq-hist-file-name {
+    color: var(--v-text-muted);
+}
+
+.desuq-hist-versions {
+    border-top: 1px solid var(--v-border);
+    background: var(--v-surface-sunken);
+    padding: 6px 14px 12px;
+}
+
+.desuq-hist-version {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--v-border);
+}
+
+.desuq-hist-version:last-of-type {
+    border-bottom: 0;
+}
+
+.desuq-hist-version-when {
+    flex: 0 0 auto;
+    font-size: 13.5px;
+    color: var(--v-text);
+    font-variant-numeric: tabular-nums;
+}
+
+.desuq-hist-version-size {
+    flex: 1 1 auto;
+    font-size: 12.5px;
+    color: var(--v-text-dim);
+    font-variant-numeric: tabular-nums;
+}
+
+.desuq-hist-version-note {
+    margin-top: 9px;
+    font-size: 12.5px;
+    color: var(--v-text-dim);
+    line-height: 1.5;
+    max-width: 62ch;
+}
+
+@media (max-width: 620px) {
+    .desuq-hist-file-path,
+    .desuq-hist-names {
+        display: none;
+    }
+
+    .desuq-hist-file-meta {
+        margin-left: 0;
+        flex-basis: 100%;
+    }
+
+    .desuq-hist-file-top {
+        flex-wrap: wrap;
+    }
+}

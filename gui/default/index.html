@@ -40,6 +40,8 @@
   <link href="syncthing/desuq/wizard.css" rel="stylesheet"/>
   <!-- desuqcafe fork: the main screen -->
   <link href="syncthing/desuq/home.css" rel="stylesheet"/>
+  <!-- desuqcafe fork: the history screen -->
+  <link href="syncthing/desuq/history.css" rel="stylesheet"/>
 </head>
 
 <body>
@@ -421,6 +423,15 @@
            here, who am I sharing with, is anything wrong -- and nothing else.
            See syncthing/desuq/home.js. -->
       <desuq-home ng-if="authenticated"></desuq-home>
+
+      <!-- desuqcafe fork: the history screen.
+
+           A sibling of the main screen rather than a modal, because it is a
+           place you go and look around rather than a question to answer and
+           dismiss. It renders nothing until opened, and <desuq-home> hides
+           itself while it is; the pair behave as two views of one page.
+           See syncthing/desuq/history.js. -->
+      <desuq-history ng-if="authenticated"></desuq-history>
 
       <!-- desuqcafe fork: upstream's main screen, kept and collapsed.
 
@@ -1227,6 +1238,7 @@
   <script type="text/javascript" src="syncthing/desuq/lanLimitDirective.js"></script>
   <script type="text/javascript" src="syncthing/desuq/firstRunWizard.js"></script>
   <script type="text/javascript" src="syncthing/desuq/home.js"></script>
+  <script type="text/javascript" src="syncthing/desuq/history.js"></script>
   <script type="text/javascript" src="assets/lang/valid-langs.js"></script>
   <script type="text/javascript" src="assets/lang/prettyprint.js"></script>
   <script type="text/javascript" src="meta.js"></script>

@@ -1,0 +1,185 @@
+<!--
+  desuqcafe fork: the history screen. See syncthing/desuq/history.js.
+
+  Fork-added strings use plain {{ }} interpolation, never translate/{%..%}:
+  angular-translate renders a {%placeholder%} literally for any string missing
+  from assets/lang, and every string here is missing from every one of them.
+-->
+<div class="desuq-hist" ng-if="hist.open">
+
+  <div class="desuq-hist-bar">
+    <button type="button" class="desuq-hist-back" ng-click="history.close()">
+      <span class="fas fa-chevron-left" aria-hidden="true"></span>&nbsp;<span>Back</span>
+    </button>
+    <h2 class="desuq-hist-title">History</h2>
+  </div>
+
+  <div class="desuq-hist-tabs" role="tablist">
+    <button type="button" role="tab" class="desuq-hist-tab"
+            ng-class="{ 'is-on': hist.tab == 'changes' }"
+            ng-click="history.setTab('changes')">
+      Recent changes
+    </button>
+    <button type="button" role="tab" class="desuq-hist-tab"
+            ng-class="{ 'is-on': hist.tab == 'versions' }"
+            ng-click="history.setTab('versions')">
+      Older versions
+    </button>
+  </div>
+
+  <div class="desuq-hist-filters">
+    <label class="desuq-hist-field">
+      <span class="desuq-hist-field-label">Folder</span>
+      <select ng-model="hist.folder" ng-change="history.setFolder(hist.folder)">
+        <option value="">All folders</option>
+        <option ng-repeat="f in hist.folders" value="{{ f.id }}">{{ f.label }}</option>
+      </select>
+    </label>
+    <label class="desuq-hist-field desuq-hist-field-grow">
+      <span class="desuq-hist-field-label">Search</span>
+      <input type="text" ng-model="hist.search"
+             ng-change="history.setSearch(hist.search)"
+             ng-model-options="{ debounce: 250 }"
+             placeholder="part of a file name" />
+    </label>
+  </div>
+
+  <div class="desuq-hist-notice" ng-if="hist.notice">{{ hist.notice }}</div>
+
+  <!-- ============================================== recent changes ======= -->
+  <div ng-if="hist.tab == 'changes'">
+
+    <div class="desuq-hist-error" ng-if="hist.changesError">{{ hist.changesError }}</div>
+
+    <div class="desuq-hist-loading" ng-if="!hist.changesReady && !hist.changesError">
+      Reading recent changes…
+    </div>
+
+    <!-- The empty state names the boundary rather than saying "nothing".
+         This feed genuinely begins when the daemon starts, and a person who
+         does not know that reads an empty list as "nobody has touched
+         anything", which may be very wrong. -->
+    <div class="desuq-hist-empty" ng-if="hist.changesReady && !hist.days.length && !hist.changesError">
+      <div class="desuq-hist-empty-main" ng-if="!hist.search && !hist.folder">
+        Nothing has changed since this computer started.
+      </div>
+      <div class="desuq-hist-empty-main" ng-if="hist.search || hist.folder">
+        Nothing here matches.
+      </div>
+      <div class="desuq-hist-empty-sub" ng-if="!hist.search && !hist.folder">
+        This list is kept in memory, so it begins again each time Syncthing
+        restarts. <b>Older versions</b> is the one that survives.
+      </div>
+    </div>
+
+    <div class="desuq-hist-day" ng-repeat="day in hist.days">
+      <div class="desuq-hist-day-title">{{ day.title }}</div>
+
+      <div class="desuq-hist-row" ng-repeat="r in day.rows"
+           ng-class="{ 'is-removed': r.action == 'deleted' }">
+        <div class="desuq-hist-time">{{ r.at | date:'HH:mm' }}</div>
+        <div class="desuq-hist-body">
+          <!-- "changed", never "added". action is only ever modified or
+               deleted, so a newly created file arrives here as modified and
+               this feed cannot tell the two apart. -->
+          <div class="desuq-hist-line">
+            <b>{{ r.person }}</b>
+            <span ng-if="r.action == 'deleted'">removed</span>
+            <span ng-if="r.action != 'deleted'">changed</span>
+            <span ng-if="r.count == 1"><b>{{ r.names[0] }}</b></span>
+            <span ng-if="r.count > 1"><b>{{ r.count }} files</b></span>
+          </div>
+          <div class="desuq-hist-sub">
+            <span>{{ r.label }}</span>
+            <span ng-if="r.count > 1" class="desuq-hist-names">
+              · {{ r.names.join(', ') }}<span ng-if="r.count > r.names.length"> and {{ r.count - r.names.length }} more</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="desuq-hist-foot" ng-if="hist.days.length">
+      This is not a complete record. Changes are kept in memory only, the most
+      recent few hundred, and start again when Syncthing restarts.
+    </div>
+  </div>
+
+  <!-- ============================================== older versions ======= -->
+  <div ng-if="hist.tab == 'versions'">
+
+    <div class="desuq-hist-error" ng-if="hist.versionsError">{{ hist.versionsError }}</div>
+
+    <div class="desuq-hist-loading" ng-if="!hist.versionsReady">
+      Reading the archive…
+    </div>
+
+    <div class="desuq-hist-summary" ng-if="hist.versionsReady && hist.archive.files">
+      <b>{{ hist.archive.files }}</b> files have older copies kept
+      &mdash; <b>{{ hist.archive.versions }}</b> copies, {{ bytes(hist.archive.bytes) }} on disk.
+      Copies older than thirty days are removed automatically.
+    </div>
+
+    <div class="desuq-hist-empty" ng-if="hist.versionsReady && !hist.archive.rows.length">
+      <div class="desuq-hist-empty-main" ng-if="hist.search">Nothing here matches.</div>
+      <div class="desuq-hist-empty-main" ng-if="!hist.search">No older copies have been kept yet.</div>
+      <div class="desuq-hist-empty-sub" ng-if="!hist.search">
+        A copy is kept whenever a file is replaced or deleted, so this stays
+        empty until something is overwritten. Nothing is lost in the meantime.
+      </div>
+    </div>
+
+    <div class="desuq-hist-file" ng-repeat="row in hist.archive.rows"
+         ng-class="{ 'is-gone': row.deleted }">
+
+      <button type="button" class="desuq-hist-file-top" ng-click="history.toggle(row)">
+        <span class="desuq-hist-caret" aria-hidden="true"
+              ng-class="{ 'is-open': history.expandedFor(row) }"></span>
+        <span class="desuq-hist-file-name">{{ pretty(row.name) }}</span>
+        <span class="desuq-hist-file-path" ng-if="row.name != pretty(row.name)">{{ row.name }}</span>
+        <span class="desuq-hist-tag" ng-if="row.deleted">deleted</span>
+        <span class="desuq-hist-file-meta">
+          {{ row.versions }} kept · {{ bytes(row.bytes) }} · newest {{ row.newest | date:'d MMM HH:mm' }}
+        </span>
+      </button>
+
+      <div class="desuq-hist-versions" ng-if="history.expandedFor(row)">
+        <div class="desuq-hist-loading" ng-if="history.expandedFor(row).loading">Reading…</div>
+        <div class="desuq-hist-error" ng-if="history.expandedFor(row).error">
+          {{ history.expandedFor(row).error }}
+        </div>
+
+        <!-- The sentence under the list is the whole reason this is not
+             frightening: restoring archives the current file first, so the
+             thing you are about to overwrite becomes the newest entry here
+             and the action undoes itself. -->
+        <div class="desuq-hist-version" ng-repeat="v in history.expandedFor(row).versions">
+          <span class="desuq-hist-version-when">{{ v.versionTime | date:'d MMM yyyy HH:mm' }}</span>
+          <span class="desuq-hist-version-size">{{ bytes(v.size) }}</span>
+          <button type="button" class="btn btn-sm btn-default"
+                  ng-disabled="hist.busy"
+                  ng-click="history.restore(row, v)">
+            <span ng-if="row.deleted">Put it back</span>
+            <span ng-if="!row.deleted">Restore</span>
+          </button>
+        </div>
+
+        <div class="desuq-hist-version-note" ng-if="!history.expandedFor(row).loading">
+          <span ng-if="row.deleted">
+            Putting this back writes the file into the folder again and shares
+            it with everybody.
+          </span>
+          <span ng-if="!row.deleted">
+            Restoring keeps what is there now &mdash; it is archived first, and
+            becomes the newest copy in this list.
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="desuq-hist-foot" ng-if="hist.truncated">
+      Showing the {{ hist.archive.rows.length }} most recently changed of
+      {{ hist.archive.total }} files. Use the search box to narrow it down.
+    </div>
+  </div>
+</div>

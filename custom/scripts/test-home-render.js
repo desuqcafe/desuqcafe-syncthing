@@ -64,6 +64,10 @@ window.eval(fs.readFileSync(
 const angular = window.angular;
 angular.module('syncthing.core', []);
 window.eval(fs.readFileSync(path.join(desuq, 'home.js'), 'utf8'));
+// home.js injects desuqHistory: the two screens are siblings that share open
+// state through the service, so the injector cannot build one without the
+// other.
+window.eval(fs.readFileSync(path.join(desuq, 'history.js'), 'utf8'));
 
 // --- the world the stub answers from -------------------------------------
 
@@ -73,6 +77,7 @@ const world = {
     connections: {},
     status: {},
     completion: {},
+    reclaimable: {},
     errors: []
 };
 
@@ -106,6 +111,10 @@ angular.module('syncthing.core')
             if (url.indexOf('rest/db/status?folder=') === 0) {
                 const id = decodeURIComponent(url.split('folder=')[1]);
                 return reply(world.status[id] || {});
+            }
+            if (url.indexOf('rest/db/reclaimable') === 0) {
+                const id = decodeURIComponent(url.split('folder=')[1] || '');
+                return reply(world.reclaimable[id] || { bytes: 0, files: 0, peers: [] });
             }
             if (url.indexOf('rest/db/completion?') === 0) {
                 const f = decodeURIComponent(url.split('folder=')[1].split('&')[0]);

@@ -12,7 +12,9 @@
   the controller's maps keyed by id, which is how a card hands a real config
   object to an action that expects one.
 -->
-<div class="desuq-home" ng-if="home.ready">
+<!-- Hidden rather than unmounted while <desuq-history> is open: the poll
+     keeps running, so coming Back is instant instead of a fresh load. -->
+<div class="desuq-home" ng-if="home.ready && !hist.open">
 
   <!-- ------------------------------------------------ is everything here? -->
   <!-- and: is anything wrong? One line answers both, because to a person they
@@ -115,9 +117,72 @@
         {{ revealError[f.id] }}
       </div>
 
+      <!-- Un-ticking in the picker stops a folder being kept up to date; it
+           does not free the disk, and for a long time the interface said
+           neither. This row is the second half of that sentence, and it is
+           offered whenever there is something to reclaim rather than only in
+           the moment after a pick -- the bytes outlive the moment. -->
+      <div class="desuq-home-reclaim" ng-if="home.reclaimable[f.id]">
+        <div class="desuq-home-reclaim-line">
+          <b>{{ bytes(home.reclaimable[f.id].bytes) }}</b> is on this computer but
+          no longer being kept up to date.
+          <button type="button" class="desuq-home-linkbtn" ng-click="toggleReclaim(f.id)">
+            <span ng-if="!reclaimOpen[f.id]">Free it up</span>
+            <span ng-if="reclaimOpen[f.id]">Never mind</span>
+          </button>
+        </div>
+
+        <div class="desuq-home-reclaim-confirm" ng-if="reclaimOpen[f.id]">
+          <div class="desuq-home-reclaim-ask">
+            Delete your copies of
+            <b>{{ home.reclaimable[f.id].files }}</b> files
+            ({{ bytes(home.reclaimable[f.id].bytes) }})?
+          </div>
+
+          <!-- The reversibility claim, named. It is only true because the
+               server refuses to delete anything a connected device is not
+               currently offering, so saying who by name is saying what the
+               guarantee actually rests on. -->
+          <div class="desuq-home-reclaim-why" ng-if="home.reclaimable[f.id].peers.length">
+            {{ home.reclaimable[f.id].peers.join(' and ') }}
+            <span ng-if="home.reclaimable[f.id].peers.length == 1">is</span><span ng-if="home.reclaimable[f.id].peers.length > 1">are</span>
+            connected and still have them, so ticking them again in
+            <b>Choose files</b> brings them back.
+          </div>
+
+          <div class="desuq-home-reclaim-kept" ng-if="home.reclaimable[f.id].keptTotal">
+            <b>{{ home.reclaimable[f.id].keptTotal }}</b>
+            <span ng-if="home.reclaimable[f.id].keptTotal == 1">file will be kept:</span>
+            <span ng-if="home.reclaimable[f.id].keptTotal > 1">files will be kept:</span>
+            <ul>
+              <li ng-repeat="k in home.reclaimable[f.id].kept">{{ k.name }} &mdash; {{ k.reason }}</li>
+            </ul>
+          </div>
+
+          <div class="desuq-home-reclaim-actions">
+            <button type="button" class="btn btn-sm btn-default" ng-click="toggleReclaim(f.id)">Keep them</button>
+            <button type="button" class="btn btn-sm btn-danger"
+                    ng-disabled="reclaimBusy == f.id"
+                    ng-click="doReclaim(f.id, home.reclaimable[f.id].bytes)">
+              Delete {{ bytes(home.reclaimable[f.id].bytes) }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="desuq-home-reclaim-note" ng-if="reclaimNote[f.id]">
+        {{ reclaimNote[f.id] }}
+        <ul ng-if="reclaimKept[f.id].length">
+          <li ng-repeat="k in reclaimKept[f.id]">{{ k.name }} &mdash; {{ k.reason }}</li>
+        </ul>
+      </div>
+
       <div class="desuq-home-card-actions">
         <button type="button" class="btn btn-sm btn-default" ng-click="reveal(f.id)">
           <span class="far fa-folder-open"></span>&nbsp;<span>Open folder</span>
+        </button>
+        <button type="button" class="btn btn-sm btn-default" ng-click="openHistory(f.id, 'versions')">
+          <span class="fas fa-history"></span>&nbsp;<span>History</span>
         </button>
         <button type="button" class="btn btn-sm btn-default"
                 ng-if="(folders[f.id].type == 'sendreceive' || folders[f.id].type == 'receiveonly') && folders[f.id].devices.length > 1"
@@ -135,12 +200,35 @@
         <button type="button" class="btn btn-sm btn-default" ng-click="editFolderExisting(folders[f.id])">
           <span class="fas fa-pencil-alt"></span>&nbsp;<span>Settings</span>
         </button>
+
+        <!-- Two capabilities that had no entry point outside upstream's
+             collapsed region. Both call upstream's own handlers: every modal
+             is <ng-include>d outside that region, so these are entry points
+             rather than reimplementations, and deleting the region later costs
+             nothing more than it already did. -->
+        <button type="button" class="btn btn-sm btn-default" ng-if="f.failedItems > 0"
+                ng-click="showFailed(f.id)">
+          <span class="fas fa-exclamation-triangle"></span>&nbsp;<span>{{ f.failedItems }} that would not sync</span>
+        </button>
+
+        <!-- The only way out of a wedged receive-only folder, which is the
+             mode DEPLOYMENT-3D-TEAM.md recommends for both modellers -- so
+             without this button the recommended configuration has no exit.
+             Destructive, hence btn-danger and upstream's own confirmation. -->
+        <button type="button" class="btn btn-sm btn-danger"
+                ng-if="folders[f.id].type == 'receiveonly' && hasReceiveOnlyChanged(folders[f.id])"
+                ng-click="revertOverrideConfirmationModal('revert', f.id)">
+          <span class="fas fa-undo"></span>&nbsp;<span>Undo my changes here</span>
+        </button>
       </div>
     </div>
 
     <div class="desuq-home-block-actions">
       <button type="button" class="btn btn-sm btn-default" ng-click="addFolder()">
         <span class="fas fa-plus"></span>&nbsp;<span>Add a folder</span>
+      </button>
+      <button type="button" class="btn btn-sm btn-default" ng-click="openHistory('', 'changes')">
+        <span class="fas fa-history"></span>&nbsp;<span>What has been happening</span>
       </button>
     </div>
   </section>

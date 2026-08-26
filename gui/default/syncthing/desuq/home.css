@@ -493,3 +493,98 @@ be filled with something. One column lets the page be as short as its content.
         font-size: 17px;
     }
 }
+
+
+/* ------------------------------------------------------------- reclaiming */
+/*
+   Amber, not red. Holding bytes you are no longer keeping up to date is a
+   thing worth telling somebody about and not a fault -- the folder is working
+   exactly as it was asked to. Red here would compete with the headline, which
+   is the one place on this screen that is allowed to mean "act now".
+*/
+
+.desuq-home-reclaim {
+    margin-top: 10px;
+    border: 1px solid var(--v-border);
+    border-left: 3px solid var(--v-warning);
+    border-radius: var(--v-radius);
+    background: var(--v-surface-sunken);
+    padding: 9px 12px;
+}
+
+.desuq-home-reclaim-line {
+    font-size: 13.5px;
+    color: var(--v-text-muted);
+    line-height: 1.5;
+}
+
+/* A button that reads as a link. The row is a sentence and a grey box in the
+   middle of one stops it being read as a sentence. */
+.desuq-home-linkbtn {
+    border: 0;
+    background: none;
+    padding: 0;
+    margin-left: 4px;
+    color: var(--v-accent-deep);
+    font-size: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.desuq-home-linkbtn:hover {
+    color: var(--v-accent-strong);
+}
+
+.desuq-home-linkbtn:focus-visible {
+    outline: none;
+    box-shadow: var(--v-ring);
+    border-radius: var(--v-radius-sm);
+}
+
+.desuq-home-reclaim-confirm {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--v-border);
+}
+
+.desuq-home-reclaim-ask {
+    font-size: 14.5px;
+    color: var(--v-text);
+    margin-bottom: 5px;
+}
+
+.desuq-home-reclaim-why,
+.desuq-home-reclaim-kept {
+    font-size: 13px;
+    color: var(--v-text-muted);
+    line-height: 1.5;
+    max-width: 62ch;
+    margin-bottom: 8px;
+}
+
+.desuq-home-reclaim-kept ul,
+.desuq-home-reclaim-note ul {
+    margin: 4px 0 0;
+    padding-left: 18px;
+}
+
+.desuq-home-reclaim-kept li,
+.desuq-home-reclaim-note li {
+    font-size: 12.5px;
+    color: var(--v-text-dim);
+    line-height: 1.45;
+}
+
+.desuq-home-reclaim-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.desuq-home-reclaim-note {
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--v-text-muted);
+    line-height: 1.5;
+    max-width: 62ch;
+}

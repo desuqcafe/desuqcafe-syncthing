@@ -234,6 +234,12 @@ angular.module('syncthing.core')
                 if (r.data && r.data.error) {
                     return $q.reject({ data: r.data.error, parse: true });
                 }
+                // What is held back has just changed, so the main screen's
+                // "free it up" figure is stale. Broadcast rather than inject
+                // desuqHome: the picker has no other reason to know the main
+                // screen exists, and a probe that walks the global index is
+                // not something to leave on a timer alone.
+                $rootScope.$broadcast('desuq:ignoresChanged', folderID);
                 return r;
             });
         }

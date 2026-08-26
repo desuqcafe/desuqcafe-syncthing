@@ -3,9 +3,9 @@
     Runs every test suite this fork has, and says which ones it skipped.
 
 .DESCRIPTION
-    There are eleven suites in three languages, five of them need jsdom and one
+    There are twelve suites in three languages, six of them need jsdom and one
     needs two live Syncthing instances, so until this existed the only way to
-    run them all was to remember eleven command lines. Nothing did, which is why
+    run them all was to remember twelve command lines. Nothing did, which is why
     nothing ran them.
 
     What it runs, cheapest first, so a typo does not cost a two-minute wait:
@@ -19,8 +19,9 @@
       7. test-lanlimit-render.js       LAN note       Node + jsdom
       8. test-wizard-render.js         first run      Node + jsdom
       9. test-home-render.js           main screen    Node + jsdom
-     10. test-seed-naming.ps1          seeding        the built binary
-     11. test-selective-render.js      picker         jsdom + a live test pair
+     10. test-history-render.js        history        Node + jsdom
+     11. test-seed-naming.ps1          seeding        the built binary
+     12. test-selective-render.js      picker         jsdom + a live test pair
 
     A missing prerequisite is reported as SKIP rather than as failure, and the
     exit code is non-zero only if something actually failed. But a run that
@@ -32,7 +33,7 @@
     runs in well under a minute from a clean checkout.
 
 .PARAMETER NoPair
-    Do not start a test pair. Suite 11 runs only if one is already up.
+    Do not start a test pair. Suite 12 runs only if one is already up.
 
 .PARAMETER Binary
     The Syncthing binary to test against. Defaults to custom/dist.
@@ -103,7 +104,7 @@ function Find-Node {
     return $null
 }
 
-# jsdom is a 30 MB dependency tree used by three test scripts and by nothing
+# jsdom is a 30 MB dependency tree used by six test scripts and by nothing
 # that ships, so it is not vendored and not in any package.json. Find it
 # wherever it already is before considering installing it.
 #
@@ -217,12 +218,12 @@ if (-not $go) {
     }
 }
 
-# --- 5 to 9. Node ----------------------------------------------------------
+# --- 5 to 10. Node ---------------------------------------------------------
 Section 'Node'
 $jsdomPath = $null
 if (-not $node) {
     foreach ($n in @('test-handshake', 'test-handshake-render', 'test-lanlimit-render',
-                     'test-wizard-render', 'test-home-render')) {
+                     'test-wizard-render', 'test-home-render', 'test-history-render')) {
         Record $n 'SKIP' 'node not found'
     }
 } else {
@@ -231,7 +232,7 @@ if (-not $node) {
     $jsdomPath = Resolve-Jsdom -NodeExe $node -Install:$InstallJsdom
     if ($null -eq $jsdomPath) {
         foreach ($n in @('test-handshake-render', 'test-lanlimit-render',
-                         'test-wizard-render', 'test-home-render')) {
+                         'test-wizard-render', 'test-home-render', 'test-history-render')) {
             Record $n 'SKIP' 'jsdom not found; pass -InstallJsdom or set NODE_PATH'
         }
     } else {
@@ -240,6 +241,7 @@ if (-not $node) {
         Invoke-Suite 'test-lanlimit-render'  { & $node (Join-Path $ScriptDir 'test-lanlimit-render.js') }
         Invoke-Suite 'test-wizard-render'    { & $node (Join-Path $ScriptDir 'test-wizard-render.js') }
         Invoke-Suite 'test-home-render'      { & $node (Join-Path $ScriptDir 'test-home-render.js') }
+        Invoke-Suite 'test-history-render'   { & $node (Join-Path $ScriptDir 'test-history-render.js') }
     }
 }
 

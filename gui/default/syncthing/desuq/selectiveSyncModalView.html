@@ -123,9 +123,17 @@
               This choice is per machine &mdash; ignore patterns are never synced &mdash;
               so it does not change what anyone else receives.
             </p>
+            <!-- Two separate things, and for a long time this said only the
+                 first half. Stopping updates is what unticking does; freeing
+                 the disk is a second, deliberate action, and a person who
+                 unticked three gigabytes to make room needs to be told where
+                 it is rather than left watching their free space not move. -->
             <p class="desuq-pick-note desuq-pick-note-warn" ng-if="!st.fresh && !st.everything">
               Unticking something that is already on this disk does not delete it.
-              Syncthing stops maintaining it and leaves the copy where it is.
+              Syncthing stops keeping it up to date and leaves the copy where it is.
+              To get the space back, use <b>Free it up</b> on this folder's card on
+              the main screen &mdash; it only deletes copies somebody you are
+              connected to still has, so ticking them again brings them back.
             </p>
           </div>
         </div>
