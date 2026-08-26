@@ -1284,14 +1284,41 @@ launching things through `rundll32` is a documented evasion technique because
 it hides the real parent process. It is `ShellExecute` now
 (`custom/tray/platform_windows.go`).
 
-**It did not help, and that is worth recording rather than quietly hoping.**
-desuq.5 shipped with the change and was quarantined on install exactly as
-desuq.4 had been — same `ThreatID 2147731250`, same four files, within seconds
-of the installer finishing. So `rundll32` was not what the classifier objected
-to. The change stands on its own merits, but **do not expect source-level
-tidying to shift this detection**: what trips it is the whole binary's
-behavioural profile, not any one call, and the only levers that reliably work
-are a trusted signature and a false-positive delisting.
+**It did not help.** desuq.5 shipped with the change and was quarantined on
+install exactly as desuq.4 had been — same `ThreatID 2147731250`, same four
+files, within seconds of the installer finishing. So `rundll32` was not what
+the classifier objected to.
+
+**desuq.6 was not caught, and nobody should read that as a fix.** That build
+replaced the tray's `InsecureSkipVerify: true` with a real certificate pin
+(§21) — removing a bypass-TLS-verification pattern that behavioural scanners
+genuinely do weigh. It installed, ran, and was left alone. But three other
+explanations fit the same evidence just as well: Defender's cloud reputation
+catching up after seeing the file repeatedly, a definition update landing
+between the two builds, or the classifier's score simply sitting near a
+threshold and falling the other side of it.
+
+**Two of three builds were quarantined. Treat the detection as live.** Expect
+it on a machine that has not seen this software before — which is every
+machine except the one these notes were written on — and keep the recovery
+steps below to hand.
+
+### What was tried, and what is left
+
+| Tried | Outcome |
+| --- | --- |
+| Remove the `rundll32` LOLBin (desuq.5) | No effect — quarantined identically |
+| Pin the GUI certificate, dropping `InsecureSkipVerify` (desuq.6) | Not caught. Unattributable — see above |
+
+The remaining lever, if this keeps happening, is **to stop shipping a separate
+tray executable**: fold it into `desuq-syncthing.exe` as a mode, so the flagged
+file ceases to exist. Note that the daemon has never once been flagged —
+larger, does far more, same compiler, same directory, equally unsigned. The
+cost is real: the tray is a separate Go module specifically to keep the
+`systray` dependency out of the root `go.mod`, where it would conflict on
+every upstream dependency bump. And it is a gamble — the merged binary might
+inherit the detection, which would cost the daemon too. Do not reach for it
+until the detection recurs on a build that already has the pin.
 
 ### What to actually do
 
@@ -1308,6 +1335,38 @@ is the real cost, and it is what a **code-signing certificate** buys: a signed
 binary from a consistent publisher is far less likely to be classified this way
 at all, and it is the only durable answer for a team that installs on machines
 you are not sitting at.
+
+## 21. The tray now checks who it is talking to
+
+Only relevant if you switch the web interface to HTTPS — not the default, and
+not what this build seeds. Left here because the reasoning generalises.
+
+The tray used to accept **any** certificate presented on the GUI port
+(`InsecureSkipVerify: true`), justified in a comment two ways: the certificate
+is self-signed and regenerated per install so "there is nothing to pin it
+against", and loopback has no meaningful attacker in the path.
+
+The first was simply false. `https-cert.pem` sits in the same directory as the
+`config.xml` the tray already reads, so there is exactly one certificate it
+should ever accept and it knows where to find it. The second is weaker than it
+sounds: loopback is not private on a multi-user machine, and "anything that
+answers on this port is trusted" hands over the API key — which is complete
+control of every folder Syncthing manages.
+
+**Why it needs a pin rather than ordinary verification.** Syncthing generates
+that certificate with the device name as its common name and its only DNS SAN
+(`CN=desuq, DNS:desuq` on the machine this was written on) and **no IP SAN**.
+So `https://127.0.0.1:8384` can never satisfy hostname verification, whatever
+is in the trust store — which is presumably how the bypass got there in the
+first place. `custom/tray/tlspin.go` supplies both halves from the certificate
+itself: a one-entry root pool, and `ServerName` read back off the certificate.
+Full verification, exactly one acceptable certificate.
+
+The tests are written to make it *refuse*. Connecting successfully proves
+nothing — `InsecureSkipVerify` does that too — so what is asserted is that a
+different certificate carrying the same name is rejected, and that a missing
+or unparseable file is an error rather than a quiet fallback to trusting
+anything.
 
 ## Recommended configuration
 
