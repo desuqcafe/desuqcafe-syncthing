@@ -304,6 +304,37 @@ func (c *client) connections() (connections, error) {
 	return out, err
 }
 
+// deviceStat is one entry of /rest/stats/device, keyed by device ID.
+//
+// LastSeen for a device that has never connected comes back as
+// "1970-01-01T00:00:00Z" -- the Unix epoch, NOT Go's zero time. So IsZero is
+// false for it and never-seen looks like fifty-six years of silence. Verified
+// against a live instance, where this device's own entry reads 1970: see
+// stale_live_test.go, which is the test that caught it. seenEver in stale.go
+// is the check to use.
+type deviceStat struct {
+	LastSeen time.Time `json:"lastSeen"`
+}
+
+func (c *client) deviceStats() (map[string]deviceStat, error) {
+	var out map[string]deviceStat
+	err := c.get("/rest/stats/device", nil, &out)
+	return out, err
+}
+
+// systemStatus is /rest/system/status. Only MyID is read, and only so that
+// this device can be left out of a list of "peers" -- /rest/config includes
+// the local device like any other.
+type systemStatus struct {
+	MyID string `json:"myID"`
+}
+
+func (c *client) myID() (string, error) {
+	var out systemStatus
+	err := c.get("/rest/system/status", nil, &out)
+	return out.MyID, err
+}
+
 func (c *client) version() (string, error) {
 	var out systemVersion
 	err := c.get("/rest/system/version", nil, &out)

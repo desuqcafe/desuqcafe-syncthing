@@ -86,7 +86,12 @@ const world = {
     diskEvents: [],
     sinceEvents: {},
     archive: {},
-    fileVersions: {}
+    fileVersions: {},
+    conflicts: { total: 0, folders: [] },
+    // What POST /rest/folder/conflict answers with. A function so a case can
+    // reject: the refusal path is the interesting one.
+    resolve: null,
+    posted: []
 };
 
 angular.module('syncthing.core')
@@ -131,9 +136,18 @@ angular.module('syncthing.core')
                 return reply(world.archive[p.folder] ||
                     { versioning: true, files: 0, versions: 0, bytes: 0, total: 0, rows: [] });
             }
+            if (url === 'rest/folder/conflicts') {
+                return reply(world.conflicts);
+            }
             throw new Error('unstubbed GET ' + url);
         };
-        http.post = function () { return $q.when({ data: {} }); };
+        http.post = function (url, body) {
+            world.posted.push({ url: url, body: body });
+            if (url === 'rest/folder/conflict' && world.resolve) {
+                return world.resolve(body);
+            }
+            return $q.when({ data: {} });
+        };
         return http;
     });
 
@@ -468,6 +482,187 @@ console.log('\n-- the older versions tab');
 
 
 // =========================================================================
+
+console.log('\n-- previewable is the server\'s extension list');
+{
+    const previewable = window.previewable;
+    const previewURL = window.previewURL;
+    check('a texture is previewable', previewable('refs/wood.PNG') && previewable('a.jpg') && previewable('b.gif'));
+    check('a blend file is not', !previewable('scene.blend') && !previewable('notes') && !previewable(''));
+    // The extension gate is here so that a folder of .blend files costs no
+    // requests at all -- the server would refuse them one at a time.
+    check('the url carries folder, file and version',
+        previewURL('assets', 'refs\\a.png', '2026-08-26T09:14:00+09:00') ===
+        'preview/?folder=assets&file=refs%5Ca.png&version=2026-08-26T09%3A14%3A00%2B09%3A00',
+        previewURL('assets', 'refs\\a.png', '2026-08-26T09:14:00+09:00'));
+    check('and leaves version off for the live file',
+        previewURL('assets', 'a.png').indexOf('version') === -1);
+}
+
+console.log('\n-- an archived conflict copy is named after the file it came from');
+{
+    const co = window.conflictOriginal;
+    check('a conflict copy resolves to its original',
+        co('texture4.sync-conflict-20260826-155856-V7OXBJ3.png') === 'texture4.png',
+        co('texture4.sync-conflict-20260826-155856-V7OXBJ3.png'));
+    check('with a path in front of it',
+        co('refs/chair.sync-conflict-20260826-155856-V7OXBJ3.blend') === 'chair.blend');
+    // The extension sits after the stamp, so a file with none is the case a
+    // last-dot split gets wrong -- the same trap as the server's parser.
+    check('and no extension at all still works',
+        co('notes.sync-conflict-20260826-155856-V7OXBJ3') === 'notes');
+    check('an ordinary name is left alone', co('texture4.png') === '');
+    check('and is what the row shows', window.prettyArchive('refs/texture4.png') === 'texture4.png');
+}
+
+console.log('\n-- thumbnails in the archive');
+{
+    world.archive['assets'] = {
+        folder: 'assets', versioning: true, files: 2, versions: 4, bytes: 4096, total: 2,
+        rows: [
+            { name: 'wood_albedo.png', versions: 2, bytes: 2048, newest: '2026-08-26T09:14:00+09:00', oldest: '2026-08-20T09:14:00+09:00', deleted: false },
+            { name: 'scene.blend', versions: 2, bytes: 2048, newest: '2026-08-25T09:14:00+09:00', oldest: '2026-08-20T09:14:00+09:00', deleted: false }
+        ]
+    };
+    world.fileVersions['wood_albedo.png'] = [
+        { versionTime: '2026-08-26T09:14:00+09:00', modTime: '2026-08-26T09:14:00+09:00', size: 2048 }
+    ];
+    svc.close();
+    const el = render();
+    svc.open('assets', 'versions');
+    flush();
+
+    // innerHTML escapes the ampersands in the query string, so the raw URL
+    // never appears verbatim -- compare against the unescaped form.
+    const src = () => el.html().replace(/&amp;/g, '&');
+    check('a texture row draws its picture',
+        src().indexOf('preview/?folder=assets&file=wood_albedo.png') !== -1);
+    check('a blend file row asks for nothing',
+        el.html().indexOf('file=scene.blend') === -1);
+    // The path is the load-bearing part: under rest/ every one of these would
+    // be a 403 in a real browser and pass here.
+    check('and the thumbnails are not asked for under rest/',
+        el.html().indexOf('rest/folder/preview') === -1);
+
+    svc.toggle(world.archive['assets'].rows[0]);
+    flush();
+    check('and each archived copy gets one, by its version time',
+        el.html().indexOf('version=2026-08-26T09') !== -1, '');
+}
+
+console.log('\n-- the conflicts tab');
+{
+    world.conflicts = {
+        total: 1,
+        folders: [{
+            folder: 'assets', label: 'Shared Art', count: 1, bytes: 2048,
+            versioning: true, receiveOnly: false,
+            rows: [{
+                conflict: 'refs/chair.sync-conflict-20260824-032916-X7Z653J.png',
+                name: 'refs/chair.png',
+                when: '2026-08-24T03:29:16+09:00',
+                current: { present: true, size: 4096, modified: '2026-08-24T03:29:00+09:00', by: 'Kai', mine: false },
+                aside: { present: true, size: 2048, modified: '2026-08-24T03:20:00+09:00', by: 'this computer', mine: true }
+            }]
+        }]
+    };
+    svc.close();
+    const el = render();
+    svc.open('assets', 'conflicts');
+    flush();
+    const text = el.text();
+
+    check('the file is named as a person would say it', text.indexOf('chair.png') !== -1, text.slice(0, 160));
+    check('both sides are labelled', text.indexOf('In use now') !== -1 && text.indexOf('Set aside') !== -1);
+    check('with a size each', text.indexOf('4 KiB') !== -1 && text.indexOf('2 KiB') !== -1);
+    // Who wrote each copy comes from the index, never from the device id in
+    // the conflict file's name -- that one belongs to whoever's edit won.
+    check('and who wrote each one', text.indexOf('Kai') !== -1 && text.indexOf('you') !== -1);
+    check('both choices are offered',
+        text.indexOf('Keep this one') !== -1 && text.indexOf('Use this one instead') !== -1);
+    check('and the promise that makes them safe',
+        text.indexOf('the other copy goes to') !== -1);
+    check('the two copies are shown as pictures',
+        el.html().indexOf('file=refs%2Fchair.png') !== -1 &&
+        el.html().indexOf('file=refs%2Fchair.sync-conflict') !== -1);
+
+    // Resolving.
+    world.posted = [];
+    world.resolve = function () {
+        return injector.get('$q').when({ data: { archived: true, remaining: 0 } });
+    };
+    world.conflicts = { total: 0, folders: [] };
+    svc.resolveConflict('assets', world.conflicts.folders[0] ||
+        { conflict: 'refs/chair.sync-conflict-20260824-032916-X7Z653J.png', name: 'refs/chair.png' }, 'aside');
+    flush();
+    check('resolving posts the decision',
+        world.posted.length === 1 && world.posted[0].body.keep === 'aside',
+        JSON.stringify(world.posted[0] && world.posted[0].body));
+    check('and says where the other copy went',
+        svc.state.notice.indexOf('Older versions') !== -1, svc.state.notice);
+}
+
+{
+    // A folder with no versioning cannot keep the promise, so the server
+    // refuses and the screen turns into a question rather than an error.
+    const $q = injector.get('$q');
+    world.conflicts = {
+        total: 1,
+        folders: [{
+            folder: 'assets', label: 'Shared Art', count: 1, bytes: 2048,
+            versioning: false, receiveOnly: true,
+            rows: [{
+                conflict: 'scene.sync-conflict-20260824-032916-X7Z653J.blend',
+                name: 'scene.blend',
+                when: '2026-08-24T03:29:16+09:00',
+                current: { present: true, size: 4096, modified: '2026-08-24T03:29:00+09:00', by: 'Kai', mine: false },
+                aside: { present: true, size: 2048, modified: '2026-08-24T03:20:00+09:00', by: 'this computer', mine: true }
+            }]
+        }]
+    };
+    svc.close();
+    const el = render();
+    svc.open('assets', 'conflicts');
+    flush();
+
+    check('a folder with no history says the loss is permanent',
+        el.text().indexOf('deleted for good') !== -1, el.text().slice(0, 200));
+    check('and a receive-only folder says the choice stays here',
+        el.text().indexOf('only receives') !== -1);
+
+    world.resolve = function () {
+        return $q.reject({ status: 409, data: 'this folder keeps no history, so the copy you do not keep would be deleted permanently' });
+    };
+    svc.resolveConflict('assets', world.conflicts.folders[0].rows[0], 'current');
+    flush();
+    check('the refusal becomes a question, not a failure',
+        svc.state.confirm !== null && svc.state.notice === '',
+        svc.state.notice);
+    flush();
+    check('and the question is on screen', el.text().indexOf('cannot be undone') !== -1);
+
+    world.resolve = function () { return $q.when({ data: { archived: false, remaining: 0 } }); };
+    world.posted = [];
+    svc.resolveConflict('assets', world.conflicts.folders[0].rows[0], 'current', true);
+    flush();
+    check('answering it forces the call through',
+        world.posted.length === 1 && world.posted[0].body.force === true);
+    check('and the wording drops the promise it cannot keep',
+        svc.state.notice.indexOf('has been deleted') !== -1, svc.state.notice);
+}
+
+{
+    // Nothing in conflict is the normal state and must not read as an error.
+    world.conflicts = { total: 0, folders: [] };
+    svc.close();
+    const el = render();
+    svc.open('assets', 'conflicts');
+    flush();
+    check('an empty conflicts tab is reassuring',
+        el.text().indexOf('Nothing is in conflict') !== -1, el.text().slice(0, 140));
+    check('and explains what would put something there',
+        el.text().indexOf('before their computers can talk') !== -1);
+}
 
 console.log('\n-- no green anywhere');
 {

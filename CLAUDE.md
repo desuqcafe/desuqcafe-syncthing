@@ -32,7 +32,7 @@ future `git merge upstream/main` is work you can plan rather than a surprise:
   A line in the root `go.mod`/`go.sum` is a conflict on every upstream
   dependency bump: a recurring tax for a one-off convenience.
 
-Seventeen upstream files carry fork edits today, 625 insertions against 207
+Seventeen upstream files carry fork edits today, 632 insertions against 207
 deletions. Stripping the telemetry is what changed the character of that: it
 is the first work that had to *delete* upstream behaviour rather than sit
 beside it, because there is no additive way to remove a consent nag or a
@@ -225,6 +225,36 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
   way. Anything that checks the exit code reports every successful open as a
   failure. It is also why the route only ever passes a **directory** —
   `explorer.exe` given an executable runs it.
+- **Anything served to an `<img>` cannot live under `/rest/`.** Every path
+  there is behind the CSRF middleware, which admits a request only with a CSRF
+  token header or an API key header, and an `<img src>` sends neither -- it is
+  answered 403. The thumbnails in `lib/api/api_preview.go` are therefore
+  mounted on the *outer* mux at `/preview/`, beside upstream's `/qr/`, which
+  exists for exactly the same reason. Still behind the authentication
+  middleware: a session cookie *is* sent by an `<img>`. This fails **only in a
+  browser** -- the jsdom render tests stub `$http` and never reach the
+  middleware, so all twelve suites passed while every thumbnail 403'd.
+- **`/rest/stats/device` reports a never-connected device's `lastSeen` as the
+  Unix epoch, not as a zero time.** `IsZero()` is false for it, so a brand new
+  peer reads as fifty-six years of silence. `seenEver` in `custom/tray/stale.go`
+  is the check; `stale_live_test.go` is what found it, and a fixture written by
+  hand would have had the zero time in it.
+- **The short device ID in a conflict copy's name is not the author of that
+  copy.** `moveForConflict(name, file.ModifiedBy.String())` renames the *local*
+  file aside and tags it with the *incoming* version's device -- the one that
+  won. So the bytes are the losing edit and the name belongs to the winner.
+  Verified on a pair: B won, and both sides ended up with
+  `texture1.sync-conflict-...-V7OXBJ3.png` (B's ID) holding A's work. Take
+  "who wrote this" from the index's `ModifiedBy` on each side, never from the
+  name. Fifth instance of the local-state-lies class.
+- **`custom/build-windows.ps1` needs PowerShell 7, not Windows PowerShell
+  5.1.** Under 5.1 the generated `versioninfo.json` gets a UTF-8 BOM and the
+  build dies at `goversioninfo` with *"could not parse the .json file: invalid
+  character 'ï'"*, which names neither the file nor the cause.
+- **Syncthing holds the folder root open**, so a test that wants to simulate a
+  vanished folder has to pause the folder first. Deleting it anyway removes the
+  *contents* and fails on the root -- which is, usefully, the exact shape of a
+  drive that came back empty.
 - **Syncthing's GUI certificate has no IP SAN.** `https-cert.pem` carries the
   device name as its common name and its only DNS SAN (`CN=desuq, DNS:desuq`),
   so a connection to `https://127.0.0.1:8384` can never pass hostname

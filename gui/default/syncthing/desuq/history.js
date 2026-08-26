@@ -37,6 +37,20 @@
 // not apply here. Asking with a different mask is not possible; there is no
 // mask.
 //
+// THE THIRD TAB: TWO PEOPLE EDITED THE SAME FILE
+//
+// Syncthing renames the losing copy to
+// scene.sync-conflict-20260824-032916-F67Q3OS.blend and stops. The tray says
+// so, and until now nothing could act on it. A .blend cannot be merged, so the
+// only resolution is a choice between two whole files -- which means the
+// screen's real job is showing which is which. Size, time, who wrote it, and
+// for an image, the picture itself.
+//
+// The device id in a conflict file's name is NOT the author of that copy. See
+// lib/api/api_conflicts.go: the id belongs to whoever's edit *won*. Both
+// authors here come from the server, off the index, and neither is read out of
+// the name.
+//
 // WHY THE ARCHIVE TAB TALKS TO THE FORK'S OWN ENDPOINT
 //
 // /rest/folder/history rather than upstream's /rest/folder/versions: the
@@ -89,6 +103,16 @@ angular.module('syncthing.core')
             versionsReady: false,
             versionsError: '',
             truncated: false,
+
+            // Conflicts tab.
+            conflicts: { total: 0, folders: [] },
+            conflictsReady: false,
+            conflictsError: '',
+            // confirm is set when the server refuses a resolution because the
+            // folder keeps no history, so the copy not kept would be deleted
+            // for good. It holds everything needed to repeat the call with
+            // force, and the screen turns into a question until it is answered.
+            confirm: null,
 
             // Shared.
             busy: false,
@@ -401,6 +425,93 @@ angular.module('syncthing.core')
                 });
         }
 
+        // ------------------------------------------------------- conflicts
+
+        // loadConflicts asks for one folder or all of them, and applies the
+        // search box on this side. The server has no filter and does not need
+        // one: this is a list of things somebody has to decide about, and if
+        // it is long enough for paging to matter the folder has a much bigger
+        // problem than the screen does.
+        function loadConflicts() {
+            st.conflictsError = '';
+            var params = {};
+            if (st.folder) {
+                params.folder = st.folder;
+            }
+            return $http.get(urlbase + '/folder/conflicts', { params: params })
+                .then(function (r) {
+                    var data = r.data || {};
+                    var folders = (data.folders || []).map(function (f) {
+                        var copy = angular.extend({}, f);
+                        copy.rows = (f.rows || []).filter(function (row) {
+                            return matches(row.name, st.search);
+                        });
+                        return copy;
+                    }).filter(function (f) {
+                        return f.rows.length;
+                    });
+                    st.conflicts = { total: data.total || 0, folders: folders };
+                })
+                .catch(function () {
+                    st.conflictsError = 'Could not read the list of conflicting copies.';
+                })
+                .finally(function () {
+                    st.conflictsReady = true;
+                });
+        }
+
+        // resolveConflict performs one decision. keep is 'current' or 'aside',
+        // spelled the way the screen is -- see api_conflicts.go for why "mine"
+        // and "theirs" would be a lie about which copy is whose.
+        function resolveConflict(folder, row, keep, force) {
+            st.busy = true;
+            st.notice = '';
+            return $http.post(urlbase + '/folder/conflict', {
+                folder: folder,
+                conflict: row.conflict,
+                keep: keep,
+                force: !!force
+            }).then(function (r) {
+                st.confirm = null;
+                st.notice = conflictNotice(row, keep, r.data || {});
+                // The folder card carries the same count on a one-minute
+                // probe, and it is the thing that sent most people here.
+                $rootScope.$broadcast('desuq:conflictsChanged');
+                return loadConflicts();
+            }).catch(function (e) {
+                // 409 with no versioning is a question, not a failure: the
+                // server refused because one of the two copies would be gone
+                // for good, and that is a thing to be asked rather than
+                // discovered afterwards.
+                if (e && e.status === 409 && String(e.data || '').indexOf('keeps no history') !== -1) {
+                    st.confirm = { folder: folder, row: row, keep: keep };
+                    return;
+                }
+                st.notice = 'Could not resolve ' + pretty(row.name) + ': ' +
+                    String((e && e.data) || 'the folder may have changed since this list was drawn').trim();
+            }).finally(function () {
+                st.busy = false;
+            });
+        }
+
+        // Plain text, no markup: st.notice is rendered through {{ }} like every
+        // other fork string, so a <b> in here reaches the screen as four
+        // literal characters. It did, once.
+        function conflictNotice(row, keep, res) {
+            var name = pretty(row.name);
+            var other = res.archived
+                ? 'The other one is under Older versions if you want it back.'
+                : 'The other one has been deleted.';
+            if (keep === 'aside') {
+                return name + ': the copy that was set aside is now the one in use. ' + other;
+            }
+            return name + ': kept the copy that was already in use. ' + other;
+        }
+
+        function cancelConfirm() {
+            st.confirm = null;
+        }
+
         // --------------------------------------------------------- lifecycle
 
         function open(folderID, tab) {
@@ -412,10 +523,19 @@ angular.module('syncthing.core')
             st.expanded = {};
             st.changesReady = false;
             st.versionsReady = false;
+            st.conflictsReady = false;
+            st.confirm = null;
 
             loadDevices().finally(function () {
                 refresh();
                 start();
+                // Asked for whatever tab is open, because the count is on the
+                // tab itself: a screen that only mentions conflicts once you
+                // have already thought to look for them is the situation this
+                // tab exists to fix.
+                if (st.tab !== 'conflicts') {
+                    loadConflicts();
+                }
             });
         }
 
@@ -425,6 +545,9 @@ angular.module('syncthing.core')
         }
 
         function refresh() {
+            if (st.tab === 'conflicts') {
+                return loadConflicts();
+            }
             if (st.tab === 'changes') {
                 if (!st.changesReady) {
                     return bootstrapChanges();
@@ -438,21 +561,30 @@ angular.module('syncthing.core')
         function setTab(tab) {
             st.tab = tab;
             st.notice = '';
+            st.confirm = null;
             if (tab === 'changes') {
                 start();
                 if (!st.changesReady) {
                     bootstrapChanges();
                 }
-            } else {
-                stop();
-                loadArchive();
+                return;
             }
+            stop();
+            if (tab === 'conflicts') {
+                loadConflicts();
+                return;
+            }
+            loadArchive();
         }
 
         function setFolder(id) {
             st.folder = id;
             st.expanded = {};
+            st.confirm = null;
             refresh();
+            if (st.tab !== 'conflicts') {
+                loadConflicts();
+            }
         }
 
         function setSearch(text) {
@@ -499,6 +631,9 @@ angular.module('syncthing.core')
             expandedFor: function (row) { return st.expanded[rowKey(row)]; },
             restore: restore,
             refresh: refresh,
+            resolveConflict: resolveConflict,
+            cancelConfirm: cancelConfirm,
+            loadConflicts: loadConflicts,
             // Exported for custom/scripts/test-history-render.js, which
             // asserts them directly rather than through the DOM.
             _collapse: collapse,
@@ -526,6 +661,38 @@ angular.module('syncthing.core')
                 // parent is the controller scope, which has neither.
                 scope.bytes = desuqBytes;
                 scope.pretty = pretty;
+                scope.previewable = previewable;
+                scope.previewURL = previewURL;
+                scope.prettyArchive = prettyArchive;
+                scope.conflictOriginal = conflictOriginal;
+            }
+        };
+    })
+    // desuqThumb is one thumbnail, and the whole of its job is disappearing
+    // quietly.
+    //
+    // /rest/folder/preview refuses anything it cannot decode -- a .png that is
+    // really a .tga renamed, a file still being written, an archived copy the
+    // versioner has since cleaned away -- and a bare <img> answers that with a
+    // broken-image icon, which reads as "your file is damaged" rather than
+    // "there is no picture of this". So the element removes itself instead.
+    //
+    // A directive rather than an inline onerror because the GUI is served with
+    // its own headers and inline handlers are the kind of thing a future
+    // Content-Security-Policy switches off silently.
+    .directive('desuqThumb', function () {
+        'use strict';
+        return {
+            restrict: 'E',
+            scope: { src: '@' },
+            template: '<img class="desuq-thumb" ng-show="ok" ng-src="{{ src }}" alt="" />',
+            link: function (scope, el) {
+                scope.ok = true;
+                el.find('img').on('error', function () {
+                    scope.$applyAsync(function () {
+                        scope.ok = false;
+                    });
+                });
             }
         };
     });
@@ -560,6 +727,61 @@ function desuqBytes(bytes) {
     return (b >= 10 ? Math.round(b) : Math.round(b * 10) / 10) + ' ' + units[i];
 }
 
+// conflictOriginal is the file a conflict copy is a copy *of*, or '' for an
+// ordinary name. The same surgery as lib/api/api_conflicts.go's conflictParse,
+// and for the same reason: the extension sits after the stamp, so splitting on
+// the last dot of the whole name gets an extensionless file wrong.
+//
+// This exists because resolving a conflict archives the copy that lost, and an
+// archived copy keeps the name it had -- so the archive fills up with rows
+// called texture4.sync-conflict-20260826-155856-V7OXBJ3.png. Verified on a live
+// pair: that is exactly what .stversions holds afterwards. Somebody looking for
+// the copy they did not keep is looking for "texture4.png".
+function conflictOriginal(name) {
+    var base = pretty(name);
+    var i = base.lastIndexOf('.sync-conflict-');
+    if (i < 0) {
+        return '';
+    }
+    var rest = base.slice(i + '.sync-conflict-'.length);
+    var dot = rest.lastIndexOf('.');
+    return base.slice(0, i) + (dot > -1 ? rest.slice(dot) : '');
+}
+
+// prettyArchive is what an archive row is called on screen. The generated name
+// is still shown underneath as the path, so nothing is hidden -- it is just
+// not the headline.
+function prettyArchive(name) {
+    return conflictOriginal(name) || pretty(name);
+}
+
+// previewable is the same extension list lib/api/api_preview.go accepts.
+// Checked here so an unpreviewable file costs no request at all -- a folder of
+// .blend files would otherwise ask for, and be refused, one thumbnail per row.
+function previewable(name) {
+    return /\.(png|jpe?g|gif)$/i.test(String(name || ''));
+}
+
+// previewURL points at the fork's thumbnail endpoint. versionTime is the
+// versionTime from the archive listing; omit it for the live file.
+//
+// Deliberately a plain URL in an <img> rather than an XHR: the session cookie
+// goes with it, so it needs no key handling, and the browser gets to cache the
+// archived ones -- which never change, and which the server marks accordingly.
+//
+// NOT under rest/. Everything there is behind the CSRF middleware and an <img>
+// cannot send a header, so this endpoint is mounted beside upstream's /qr/,
+// which is an <img> source for the same reason. Getting this wrong fails only
+// in a browser -- the render tests stub $http and never see the middleware.
+function previewURL(folder, name, versionTime) {
+    var u = 'preview/?folder=' + encodeURIComponent(folder) +
+        '&file=' + encodeURIComponent(name);
+    if (versionTime) {
+        u += '&version=' + encodeURIComponent(versionTime);
+    }
+    return u;
+}
+
 function matches(haystack, needle) {
     if (!needle) {
         return true;
@@ -591,5 +813,9 @@ function dayTitle(d) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { pretty: pretty, matches: matches, dayKey: dayKey, dayTitle: dayTitle, desuqBytes: desuqBytes };
+    module.exports = {
+        pretty: pretty, matches: matches, dayKey: dayKey, dayTitle: dayTitle,
+        desuqBytes: desuqBytes, previewable: previewable, previewURL: previewURL,
+        conflictOriginal: conflictOriginal, prettyArchive: prettyArchive
+    };
 }

@@ -123,6 +123,52 @@
         {{ revealError[f.id] }}
       </div>
 
+      <!-- A stopped folder used to say "Stopped" and offer nothing. All
+           three ways out are named here, in the order somebody should try
+           them: the drive, the path, and only then making it again. The last
+           one is the dangerous one and the server refuses it whenever the
+           index still holds files -- see lib/api/api_repair.go. -->
+      <div class="desuq-home-repair" ng-if="f.state == 'stopped'">
+        <div class="desuq-home-repair-why">
+          <b>This folder has stopped.</b>
+          <span ng-if="f.error">{{ f.error }}</span>
+        </div>
+        <div class="desuq-home-repair-what">
+          If it lives on a drive that is not plugged in, plug it in and this
+          clears on its own. If it has moved, point this folder at the new
+          place under <b>Settings</b>.
+        </div>
+        <div class="desuq-home-repair-actions">
+          <button type="button" class="btn btn-sm btn-default"
+                  ng-click="editFolderExisting(folders[f.id])">
+            <span class="fas fa-search"></span>&nbsp;<span>Find it…</span>
+          </button>
+          <button type="button" class="btn btn-sm btn-default"
+                  ng-disabled="repairBusy == f.id"
+                  ng-click="doRepair(f.id)">
+            <span class="fas fa-wrench"></span>&nbsp;<span>Set it up again</span>
+          </button>
+        </div>
+        <div class="desuq-home-repair-note" ng-if="repairNote[f.id]">{{ repairNote[f.id] }}</div>
+      </div>
+
+      <!-- Two people changed the same file. Both copies are kept and neither
+           is chosen, which is correct and is also a decision somebody has to
+           make -- so it is a permanent row while it is true, like the reclaim
+           one, rather than a notification that scrolls away. -->
+      <div class="desuq-home-conflict" ng-if="home.conflicts[f.id]">
+        <span>
+          <b>{{ home.conflicts[f.id].count }}</b>
+          <span ng-if="home.conflicts[f.id].count == 1">file was</span><span
+                ng-if="home.conflicts[f.id].count > 1">files were</span>
+          changed in two places at once, so both copies were kept.
+        </span>
+        <button type="button" class="desuq-home-linkbtn" ng-click="openHistory(f.id, 'conflicts')">
+          <span ng-if="home.conflicts[f.id].count == 1">Choose one</span>
+          <span ng-if="home.conflicts[f.id].count > 1">Choose between them</span>
+        </button>
+      </div>
+
       <!-- Un-ticking in the picker stops a folder being kept up to date; it
            does not free the disk, and for a long time the interface said
            neither. This row is the second half of that sentence, and it is

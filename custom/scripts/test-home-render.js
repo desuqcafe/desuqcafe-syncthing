@@ -78,6 +78,7 @@ const world = {
     status: {},
     completion: {},
     reclaimable: {},
+    conflicts: { total: 0, folders: [] },
     errors: []
 };
 
@@ -111,6 +112,9 @@ angular.module('syncthing.core')
             if (url.indexOf('rest/db/status?folder=') === 0) {
                 const id = decodeURIComponent(url.split('folder=')[1]);
                 return reply(world.status[id] || {});
+            }
+            if (url.indexOf('rest/folder/conflicts') === 0) {
+                return reply(world.conflicts);
             }
             if (url.indexOf('rest/db/reclaimable') === 0) {
                 const id = decodeURIComponent(url.split('folder=')[1] || '');
@@ -403,6 +407,45 @@ flush();
 flush();
 check('an unaccepted share becomes a banner', /is-attention/.test(headline()), headline());
 check('and says so in words', /not accepted/.test(text()), text().slice(0, 120));
+
+console.log('\n-- two copies of the same file');
+// The count is on a one-minute probe of its own, so the poll that follows a
+// refresh() is not enough on its own -- markConflictsStale is what the history
+// screen's broadcast reaches, and what this asserts is reachable.
+world.conflicts = {
+    total: 2,
+    folders: [{ folder: 'assets', label: 'Project Assets', count: 2, bytes: 2048, versioning: true, rows: [] }]
+};
+svc.markConflictsStale();
+svc.refresh();
+flush();
+flush();
+check('the card says both copies were kept', /changed in two places at once/.test(text()), text().slice(0, 160));
+check('and names the number', /2 files were/.test(text()));
+check('with a way through to the choice', /Choose between them/.test(text()));
+
+// A count that has gone to zero must take the row with it: this row is a
+// decision waiting, and a decision that has been made is not one.
+world.conflicts = { total: 0, folders: [] };
+svc.markConflictsStale();
+svc.refresh();
+flush();
+flush();
+check('the row goes when the conflicts do', !/changed in two places at once/.test(text()));
+
+console.log('\n-- a folder that has stopped');
+// This is the state one of the author's own folders has been in since 24
+// August: "Stopped", and nothing to press. All three ways out are named, and
+// the dangerous one is a server call with its own rails (api_repair.go).
+world.status = { assets: { state: 'error', error: 'folder path missing' } };
+svc.refresh();
+flush();
+flush();
+check('the card says it has stopped', /This folder has stopped/.test(text()), text().slice(0, 200));
+check('and repeats what Syncthing said', /folder path missing/.test(text()));
+check('the drive is the first thing suggested', /plug it in/.test(text()));
+check('and there is a way to point it somewhere else', /Find it/.test(text()));
+check('and a way to set it up again', /Set it up again/.test(text()));
 
 console.log('\n-- no green anywhere');
 // The palette rule, asserted where it can actually regress: the stylesheet.

@@ -1368,6 +1368,167 @@ different certificate carrying the same name is rejected, and that a missing
 or unparseable file is an error rather than a quiet fallback to trusting
 anything.
 
+## 22. Two people edited the same file, and the product stopped there
+
+This is the normal week for the team this build is for, not an edge case.
+
+Syncthing handles it correctly: nothing is lost, and the copy that loses the
+race is renamed rather than overwritten:
+
+    scene.sync-conflict-20260824-032916-F67Q3OS.blend
+
+Then it stops. The tray raised a toast naming `scene.blend` (§8), and after
+that the product had nothing more to say. What is left is two files, one of
+them with a name nobody will type, no way to tell which is which, and a
+well-founded suspicion that deleting either one loses somebody's afternoon. So
+nobody deletes anything, and a year later the asset folder has four hundred
+conflict copies in it.
+
+A `.blend` cannot be merged. The only honest resolution is a choice between two
+whole files, which makes the screen's real job **showing which is which**.
+
+**The Conflicts tab** (History → Conflicts, and a row on the folder card while
+there is anything in it) puts the two copies side by side: size, when each was
+written, who wrote it, and — for an image — the picture. Two buttons, *Keep
+this one* and *Use this one instead*.
+
+**Neither button deletes anything.** Keeping the copy in use archives the other
+into version history; adopting the copy set aside archives the one it replaces
+first. Both choices are one click from being undone under *Older versions*,
+and the screen says so. A folder with versioning switched off cannot make that
+promise, so there the server **refuses** the operation and the screen turns
+into a question naming what would be lost for good — you can still say yes.
+
+Resolving on one machine is enough. The rename is an ordinary local change: the
+other side sees the conflict copy deleted and the file updated, and its own
+Conflicts tab empties on its own. Verified on a live pair.
+
+### The device ID in the name is not who wrote that copy
+
+Reading it as "Kai's copy" gets the attribution exactly backwards, and this
+screen exists to answer "which of these two is mine".
+
+`lib/model/folder_sendrecv.go` moves the **local** file aside and tags it with
+`file.ModifiedBy` — where `file` is the **incoming** version, the one that
+won. So the bytes inside the conflict copy are the *losing* edit and the ID in
+its name belongs to whoever made the *winning* one. Confirmed on the pair: A and
+B each edited `texture1.png`, B won, and both machines ended up with
+`texture1.sync-conflict-…-V7OXBJ3.png` — B's ID on a file containing A's work.
+
+Both authors on the screen therefore come from the **index**
+(`FileInfo.ModifiedBy`, which for a conflict copy is the device that set it
+aside), and the filename is read only for *when*. See
+`lib/api/api_conflicts.go`.
+
+This is the fifth instance of the pattern §18 describes: a value that looks
+like an answer and is about something else.
+
+### Pictures, because a timestamp is not an answer
+
+The same thumbnails appear under *Older versions*. Staggered versioning at
+thirty days keeps roughly fifty copies of a texture that gets saved twice an
+afternoon, and the screen used to offer them as fifty timestamps. Nobody knows
+what they did at 14:22 on the 3rd, and the only way to find out was to restore
+a copy and look — which overwrites the file you were trying to protect.
+
+`/preview/` decodes the image server-side and box-samples it down, so a strip
+of twenty thumbnails costs a few kilobytes each rather than twenty 4K textures.
+PNG, JPEG and GIF only: refusing everything else also keeps it from being a
+"read any file in any folder" route. A `.blend` shows no thumbnail — reading
+one honestly means a Blender header parser.
+
+**It is the one fork endpoint not under `/rest/`.** A thumbnail is an `<img>`
+source, an `<img>` cannot send a header, and everything under `/rest/` is
+behind the CSRF middleware. Upstream's QR-code image sits outside that prefix
+for exactly the same reason, and this sits beside it — still behind the
+authentication middleware, because a session cookie *is* sent by an `<img>`.
+
+Also: a conflict copy that has been resolved keeps its generated name in the
+archive, so *Older versions* lists the row as `texture4.png` with a **copy set
+aside** tag rather than under forty characters of timestamp and device ID.
+
+## 23. A folder that stopped, and a button that would have destroyed the library
+
+A folder whose directory is not there stops, says *folder path missing*, and
+waits. On the machine this document was written for, one of three folders had
+been in that state for two days behind a card that said **Stopped** and offered
+nothing to press.
+
+There are three ways out and the card now names all three: plug the drive back
+in (and it clears on its own), point the folder at where it lives now under
+*Settings*, or make the directory again.
+
+**The third one is dangerous in a way that looks like success**, which is why
+the server holds the rail rather than the button. Syncthing refuses to run a
+folder with no marker precisely because an empty directory where a full one
+used to be is indistinguishable from "the user deleted everything" — and a
+send-receive folder that scans an empty root announces every one of those
+deletions to everybody else. An unplugged drive becomes the whole team losing
+the asset library, at the speed of a LAN.
+
+So `POST /rest/folder/repair` will not create a directory for a folder whose
+index still holds files, and the refusal names the count:
+
+> This folder is supposed to hold 3 files, and the directory is empty. Setting
+> it up again from here would tell everybody else that you deleted them, and
+> they would delete their copies too. Plug the drive back in, or use Settings
+> to point this folder at where it lives now.
+
+What it *will* do:
+
+| Situation | Answer |
+| --- | --- |
+| Directory gone, nothing ever in it | Creates it. This is the folder that was stuck on the author's machine |
+| Directory gone, files in the index | **Refused**, naming the count |
+| Marker gone, files still on disk | Puts the marker back. Somebody's cleaner ate a dot-directory |
+| Marker gone, directory empty, files in the index | **Refused**. Same disk letter, different disk |
+| Nothing wrong | Says so |
+
+All four verified against a live instance — the third and fourth by accident,
+when a delete of the folder root removed its contents and then failed on the
+root itself because Syncthing held the directory open. That is exactly the
+remounted-empty-drive shape, and the rail caught it.
+
+## 24. Two more ways syncing stops without anybody noticing
+
+The failure this fork keeps finding is not a sync that goes wrong; it is a sync
+that quietly stops. §20 is one instance — Defender quarantining the tray takes
+both shortcuts and start-at-sign-in with it, so the machine stops syncing at
+its next reboot and nothing says so. **The machine it happens to is by
+definition the one that cannot warn anybody.** The other side can.
+
+**"Kai has not synced for four days."** The tray checks, slowly, whether any
+peer has been silent for more than three days — three rather than one, so a
+normal weekend never produces a toast. It cannot tell whose fault it is, so it
+says three different things depending on what the evidence supports:
+
+| Evidence | What it says |
+| --- | --- |
+| Others connected, one is not | Names them; it really is their computer |
+| Nothing connected, one peer | "You and Kai have not synced for 4 days" — blames nobody |
+| Nothing connected, several peers | "…usually this computer that is offline" |
+
+A device that has never connected at all is excluded: that is the setup story,
+and the first-run guide owns it. Worth knowing if you ever touch this code —
+**`/rest/stats/device` reports a never-connected device's `lastSeen` as the
+Unix epoch, not as a zero time**, so `IsZero` is false for it and the naive
+version reports a brand new peer as twenty thousand days silent. Found by the
+live test, not by reasoning; a hand-written fixture would have had the zero
+time in it.
+
+**A pause that ends by itself.** The tray's *Pause Syncing* checkbox pauses
+until somebody unpauses it, and the reason people press it is never
+open-ended — a render is going, or a big import, and they want the disk to
+themselves for a while. Then they forget, because a paused Syncthing looks
+exactly like a working one from inside Blender. *Pause for a while → 1 hour /
+4 hours* pauses and then starts again on its own, says when in the menu while
+it is holding, and toasts when it lifts.
+
+The timer lives in the tray process and nowhere else, which is deliberate:
+quitting the tray lifts the hold on the way out, so a timed pause can never
+outlive the thing that promised to end it. The indefinite checkbox is still
+there and still honest about being indefinite.
+
 ## Recommended configuration
 
 Applied per machine, under *Actions → Advanced → Defaults*:

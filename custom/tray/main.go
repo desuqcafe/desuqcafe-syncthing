@@ -65,9 +65,13 @@ type app struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
 
-	mStatus  *systray.MenuItem
-	mOpen    *systray.MenuItem
-	mPause   *systray.MenuItem
+	mStatus       *systray.MenuItem
+	mOpen         *systray.MenuItem
+	mPause        *systray.MenuItem
+	mPauseFor     *systray.MenuItem
+	mPauseChoices []*systray.MenuItem
+	// hold is the timed pause. See pausefor.go.
+	hold     pauseHold
 	mQuit    *systray.MenuItem
 	quitOnce sync.Once
 	openOnce sync.Once
@@ -252,6 +256,12 @@ func (a *app) onReady() {
 	systray.AddSeparator()
 	a.mOpen = systray.AddMenuItem("Open "+appName, "Open the web interface in your browser")
 	a.mPause = systray.AddMenuItemCheckbox("Pause Syncing", "Stop syncing with all other devices", false)
+	// A pause with an end, beside the one without. See pausefor.go for why
+	// the indefinite one is not simply replaced.
+	a.mPauseFor = systray.AddMenuItem("Pause for a while", "Stop syncing, and start again by itself")
+	for _, c := range pauseChoices {
+		a.mPauseChoices = append(a.mPauseChoices, a.mPauseFor.AddSubMenuItem(c.label, c.tip))
+	}
 	systray.AddSeparator()
 
 	quitLabel := "Quit " + appName
@@ -263,6 +273,11 @@ func (a *app) onReady() {
 	a.mQuit = systray.AddMenuItem(quitLabel, quitTip)
 
 	go a.watchClicks()
+	for i, item := range a.mPauseChoices {
+		// One goroutine per entry rather than a select over a slice: the set
+		// is fixed at two and this is the whole of the plumbing.
+		go a.watchPauseChoice(item, pauseChoices[i].d)
+	}
 	go a.pollLoop()
 	// The event stream both feeds the notifications and wakes the status
 	// refresh, so the icon changes when Syncthing does rather than up to a
@@ -271,6 +286,7 @@ func (a *app) onReady() {
 	go a.alerts.watchDisk(a.ctx)
 	go a.alerts.watchVersions(a.ctx)
 	go a.alerts.watchConflicts(a.ctx)
+	go a.alerts.watchStale(a.ctx)
 	if !a.opts.noIcons {
 		go a.watchFolders(a.ctx)
 	}
@@ -366,6 +382,11 @@ func (a *app) togglePause() {
 		return
 	}
 
+	// Pressing the button is a decision that outranks a timer set earlier --
+	// both for Resume, which ends the hold, and for Pause, which turns a timed
+	// pause into an indefinite one.
+	a.hold.cancel()
+
 	var err error
 	if paused {
 		err = cl.resumeAll()
@@ -379,11 +400,81 @@ func (a *app) togglePause() {
 	a.pokeRefresh()
 }
 
+// watchPauseChoice waits on one entry of the "Pause for a while" submenu.
+func (a *app) watchPauseChoice(item *systray.MenuItem, d time.Duration) {
+	for {
+		select {
+		case <-a.ctx.Done():
+			return
+		case <-item.ClickedCh:
+			a.pauseFor(d)
+		}
+	}
+}
+
+// pauseFor pauses and arms the timer that will lift it.
+//
+// The hold is armed *before* the pause is asked for and dropped again if that
+// fails, so there is no window in which the menu claims a deadline that
+// nothing is going to honour.
+func (a *app) pauseFor(d time.Duration) {
+	a.mu.Lock()
+	cl := a.cl
+	a.mu.Unlock()
+	if cl == nil {
+		return
+	}
+
+	a.hold.arm(d, a.expirePause)
+	if err := cl.pauseAll(); err != nil {
+		a.hold.cancel()
+		slog.Error("could not pause", "err", err, "for", d.String())
+		return
+	}
+	a.mPause.SetTitle(pauseHoldTitle(a.hold.deadline()))
+	a.pokeRefresh()
+	slog.Info("syncing paused", "until", a.hold.deadline().Format(time.Kitchen))
+}
+
+// expirePause runs when the hold's timer fires.
+func (a *app) expirePause() {
+	a.mu.Lock()
+	cl := a.cl
+	a.mu.Unlock()
+	if cl == nil {
+		return
+	}
+	if err := cl.resumeAll(); err != nil {
+		slog.Error("could not resume after a timed pause", "err", err)
+		return
+	}
+	a.mPause.SetTitle(pauseHoldTitle(time.Time{}))
+	a.pokeRefresh()
+	// Worth a toast: the point of the feature is that syncing comes back, and
+	// something that happens silently an hour later is something nobody can
+	// tell happened at all.
+	a.notify.Notify(Notification{
+		Title:  "Syncing has started again",
+		Body:   "The pause you set has ended.",
+		Launch: a.guiURL(),
+	})
+}
+
 func (a *app) quit() {
 	a.quitOnce.Do(func() {
 		a.mu.Lock()
 		cl := a.cl
 		a.mu.Unlock()
+
+		// A timed pause must not outlive the tray that promised to lift it.
+		// In the normal case the daemon is about to be stopped anyway and the
+		// pause would come back with it at the next sign-in; under -attach the
+		// daemon stays up and would sit paused for ever. Both are fixed here.
+		if a.hold.cancel() && cl != nil {
+			if err := cl.resumeAll(); err != nil {
+				slog.Error("could not lift the timed pause on the way out", "err", err)
+			}
+		}
 
 		if a.sup != nil {
 			a.mStatus.SetTitle("Stopping...")
@@ -545,6 +636,7 @@ func (a *app) apply(s Status) {
 	if s.State == StateOffline {
 		a.mOpen.Disable()
 		a.mPause.Disable()
+		a.mPauseFor.Disable()
 	} else {
 		a.mOpen.Enable()
 		a.mPause.Enable()
@@ -552,9 +644,18 @@ func (a *app) apply(s Status) {
 
 	if s.Paused {
 		a.mPause.Check()
-		a.mPause.SetTitle("Resume Syncing")
+		// The deadline comes from the hold rather than from Status, which is
+		// what Syncthing knows and Syncthing does not know about deadlines.
+		a.mPause.SetTitle(pauseHoldTitle(a.hold.deadline()))
+		a.mPauseFor.Disable()
 	} else {
 		a.mPause.Uncheck()
 		a.mPause.SetTitle("Pause Syncing")
+		// Not simply Enable: the offline branch above has already disabled
+		// this, and an unpaused *offline* instance is exactly the state where
+		// it must stay that way.
+		if s.State != StateOffline {
+			a.mPauseFor.Enable()
+		}
 	}
 }

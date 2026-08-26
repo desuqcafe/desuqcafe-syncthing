@@ -69,6 +69,9 @@ angular.module('syncthing.core')
             folders: [],
             peers: [],
             errors: [],
+            // folder id -> { count, bytes } from /rest/folder/conflicts. Only
+            // folders with something in conflict appear.
+            conflicts: {},
             // folder id -> the dry run from /rest/db/reclaimable, only for
             // folders that have something to reclaim.
             reclaimable: {},
@@ -615,6 +618,11 @@ angular.module('syncthing.core')
                             globalBytes: s.globalBytes || 0,
                             globalFiles: s.globalFiles || 0,
                             failedItems: s.errors || 0,
+                            // Why a stopped folder stopped. Upstream puts the
+                            // sentence in the summary and nothing showed it,
+                            // so "Stopped" was the whole of what the screen
+                            // knew how to say.
+                            error: s.error || '',
                             hasIgnores: !!s.ignorePatterns,
                             heldBack: heldBack,
                             heldBackBytes: heldBackBytes,
@@ -626,6 +634,7 @@ angular.module('syncthing.core')
                     });
 
                     refreshReclaimable(st.folders);
+                    refreshConflicts();
 
                     peers.forEach(function (p) { p.note = peerNote(p.shares); });
                     st.peers = peers;
@@ -688,6 +697,60 @@ angular.module('syncthing.core')
             });
         }
 
+        // ------------------------------------------------------- conflicts
+        //
+        // One request for every folder rather than one per folder: the server
+        // walks the global index either way, and the card only wants a count.
+        // Same cadence as the reclaim probe and for the same reason -- a
+        // conflict is created by somebody else's edit landing, which is not a
+        // thing that happens between two ticks of a 2.5 second poll.
+        var CONFLICT_MS = 60000;
+        var conflictsAsked = 0;
+
+        function refreshConflicts() {
+            var now = Date.now();
+            if (conflictsAsked && now - conflictsAsked < CONFLICT_MS) {
+                return;
+            }
+            conflictsAsked = now;
+            $http.get(urlbase + '/folder/conflicts')
+                .then(function (r) {
+                    var next = {};
+                    ((r.data && r.data.folders) || []).forEach(function (f) {
+                        if (f.count > 0) {
+                            next[f.folder] = { count: f.count, bytes: f.bytes };
+                        }
+                    });
+                    st.conflicts = next;
+                })
+                .catch(function () {
+                    // Leave what is there. A failed probe is not evidence that
+                    // a conflict went away, and blanking the row would make it
+                    // flicker.
+                });
+        }
+
+        function markConflictsStale() {
+            conflictsAsked = 0;
+        }
+
+        // ------------------------------------------------------------ repair
+        //
+        // The server holds every rail -- see lib/api/api_repair.go, which will
+        // not create an empty directory for a folder whose index still holds
+        // files. This only carries the answer back.
+        function repair(folderID) {
+            return $http.post(urlbase + '/folder/repair', { folder: folderID })
+                .then(function (r) {
+                    return { ok: true, message: (r.data && r.data.message) || 'Done.' };
+                }, function (r) {
+                    if (r && r.status === 409) {
+                        return { ok: false, message: String(r.data || '').trim() };
+                    }
+                    return { ok: false, message: 'Could not set that folder up again.' };
+                });
+        }
+
         function markReclaimStale(folderID) {
             if (folderID) {
                 delete reclaimAsked[folderID];
@@ -738,7 +801,9 @@ angular.module('syncthing.core')
             refresh: refresh,
             reveal: reveal,
             reclaim: reclaim,
+            repair: repair,
             markReclaimStale: markReclaimStale,
+            markConflictsStale: markConflictsStale,
             pollMs: POLL_MS,
             // Exported for custom/scripts/test-home-render.js, which asserts
             // the headline rules directly without standing up Angular.
@@ -818,6 +883,20 @@ angular.module('syncthing.core')
                 };
                 scope.reclaimKept = {};
 
+                scope.repairNote = {};
+                scope.repairBusy = '';
+                scope.doRepair = function (folderID) {
+                    scope.repairBusy = folderID;
+                    scope.repairNote[folderID] = '';
+                    desuqHome.repair(folderID).then(function (out) {
+                        scope.repairBusy = '';
+                        scope.repairNote[folderID] = out.message;
+                        if (out.ok) {
+                            desuqHome.refresh();
+                        }
+                    });
+                };
+
                 scope.reveal = function (folderID) {
                     desuqHome.reveal(folderID).then(function (msg) {
                         scope.revealError[folderID] = msg;
@@ -827,6 +906,15 @@ angular.module('syncthing.core')
                 // The picker says so when it rewrites a folder's ignores; the
                 // probe is throttled to once a minute otherwise, and waiting
                 // that long to notice your own click is the wrong answer.
+                // Resolving a conflict happens on the history screen, which
+                // has no way back into this service. The count here is on a
+                // slow probe, so without this the row would go on claiming a
+                // decision that has already been made for up to a minute.
+                scope.$on('desuq:conflictsChanged', function () {
+                    desuqHome.markConflictsStale();
+                    desuqHome.refresh();
+                });
+
                 scope.$on('desuq:ignoresChanged', function (_, folderID) {
                     desuqHome.markReclaimStale(folderID);
                 });

@@ -588,3 +588,54 @@ be filled with something. One column lets the page be as short as its content.
     line-height: 1.5;
     max-width: 62ch;
 }
+
+/* ------------------------------------------------- a folder that has stopped
+   Same shape as the reclaim row, in danger rather than warning: this one is
+   not an offer, it is a folder that is not syncing at all. */
+.desuq-home-repair {
+    margin-top: 10px;
+    border: 1px solid var(--v-border);
+    border-left: 3px solid var(--v-danger);
+    border-radius: var(--v-radius);
+    background: var(--v-surface-sunken);
+    padding: 9px 12px;
+}
+
+.desuq-home-repair-why {
+    font-size: 13.5px;
+    color: var(--v-text);
+    line-height: 1.5;
+}
+
+.desuq-home-repair-what,
+.desuq-home-repair-note {
+    margin-top: 5px;
+    font-size: 12.5px;
+    color: var(--v-text-muted);
+    line-height: 1.55;
+    max-width: 62ch;
+}
+
+.desuq-home-repair-note {
+    color: var(--v-text);
+}
+
+.desuq-home-repair-actions {
+    margin-top: 9px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* --------------------------------------------- two copies of the same file */
+.desuq-home-conflict {
+    margin-top: 10px;
+    border: 1px solid var(--v-border);
+    border-left: 3px solid var(--v-warning);
+    border-radius: var(--v-radius);
+    background: var(--v-surface-sunken);
+    padding: 9px 12px;
+    font-size: 13.5px;
+    color: var(--v-text-muted);
+    line-height: 1.5;
+}

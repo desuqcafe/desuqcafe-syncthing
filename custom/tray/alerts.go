@@ -109,6 +109,13 @@ type alerter struct {
 	// it cannot be skewed by however long start-up took. See conflicts.go.
 	conflictsSince time.Time
 
+	// staleNagged is when each device was last named in a "has not synced"
+	// toast, so a machine that stays away for a fortnight is mentioned every
+	// few days rather than every few hours. Keyed by device ID, and never
+	// cleared: a device that comes back has its entry go stale on its own,
+	// and the map is bounded by the number of devices configured.
+	staleNagged map[string]time.Time
+
 	// naggedVersion is the peer version last announced, and lastNag when. The
 	// pair means a *newer* version still gets through inside the cooldown --
 	// two releases in a day is unusual but the second one is not less true --
@@ -130,6 +137,7 @@ func newAlerter(n notifier, guiURL func() string, current func() *client) *alert
 		lastErrored:      map[string]time.Time{},
 		lastDisk:         map[string]time.Time{},
 		seenConflicts:    map[string]bool{},
+		staleNagged:      map[string]time.Time{},
 	}
 }
 
@@ -500,6 +508,111 @@ func (a *alerter) checkPeerVersions() {
 	})
 	slog.Info("a connected device is running a newer build",
 		"peer", ahead.name, "theirs", ahead.version, "ours", mine)
+}
+
+// watchStale is the "somebody stopped syncing and nobody noticed" check. See
+// stale.go for the rules and for why the wording is so careful.
+func (a *alerter) watchStale(ctx context.Context) {
+	if !sleepCtx(ctx, staleFirstCheck) {
+		return
+	}
+	for {
+		a.checkStale()
+		if !sleepCtx(ctx, staleCheckInterval) {
+			return
+		}
+	}
+}
+
+// checkStale gathers the three things stale.go needs -- who is configured, who
+// is connected now, and when each was last seen -- and raises at most one
+// toast for the lot.
+func (a *alerter) checkStale() {
+	cl := a.current()
+	if cl == nil {
+		return
+	}
+
+	cfg, err := cl.config()
+	if err != nil {
+		slog.Debug("could not read the configuration", "err", err)
+		return
+	}
+	stats, err := cl.deviceStats()
+	if err != nil {
+		slog.Debug("could not read device statistics", "err", err)
+		return
+	}
+	// The local device is in /rest/config like any other and would otherwise
+	// be judged for not having connected to itself.
+	me, err := cl.myID()
+	if err != nil {
+		slog.Debug("could not read this device's ID", "err", err)
+		return
+	}
+	conns, err := cl.connections()
+	if err != nil {
+		slog.Debug("could not read connections", "err", err)
+		return
+	}
+
+	var peers []peerSeen
+	for _, d := range cfg.Devices {
+		if d.DeviceID == me {
+			continue
+		}
+		name := d.Name
+		if name == "" {
+			name = shortDeviceID(d.DeviceID)
+		}
+		peers = append(peers, peerSeen{
+			id:        d.DeviceID,
+			name:      name,
+			paused:    d.Paused,
+			connected: conns.Connections[d.DeviceID].Connected,
+			lastSeen:  stats[d.DeviceID].LastSeen,
+		})
+	}
+
+	now := time.Now()
+	v := stalePeers(peers, now, staleAfter)
+	if len(v.Stale) == 0 {
+		return
+	}
+
+	// At least one of the devices in the message has to be outside its own
+	// cooldown, or this is a repeat. Stamping every named device -- not only
+	// the one that got through -- is what stops a second device going stale a
+	// day later from re-announcing the first.
+	fresh := false
+	a.mu.Lock()
+	for _, p := range v.Stale {
+		if now.Sub(a.staleNagged[p.id]) >= staleCooldown {
+			fresh = true
+			break
+		}
+	}
+	if fresh {
+		for _, p := range v.Stale {
+			a.staleNagged[p.id] = now
+		}
+	}
+	a.mu.Unlock()
+	if !fresh {
+		return
+	}
+
+	title, body := staleMessage(v)
+	if title == "" {
+		return
+	}
+	a.notify.Notify(Notification{
+		Title:  title,
+		Body:   body,
+		Launch: a.guiURL(),
+	})
+	slog.Info("a device has not been seen for a while",
+		"devices", len(v.Stale), "silence", v.Oldest.Round(time.Hour).String(), "all", v.All)
 }
 
 // watchDisk is the one alert with no event behind it. Syncthing publishes

@@ -25,6 +25,14 @@
             ng-click="history.setTab('versions')">
       Older versions
     </button>
+    <!-- The count is on the tab because a conflict is a thing waiting for a
+         decision, and a tab that only says how many once you have opened it
+         is no better than the folder listing that already showed both files. -->
+    <button type="button" role="tab" class="desuq-hist-tab"
+            ng-class="{ 'is-on': hist.tab == 'conflicts', 'has-count': hist.conflicts.total }"
+            ng-click="history.setTab('conflicts')">
+      Conflicts<span class="desuq-hist-tab-count" ng-if="hist.conflicts.total">{{ hist.conflicts.total }}</span>
+    </button>
   </div>
 
   <div class="desuq-hist-filters">
@@ -154,9 +162,22 @@
       <button type="button" class="desuq-hist-file-top" ng-click="history.toggle(row)">
         <span class="desuq-hist-caret" aria-hidden="true"
               ng-class="{ 'is-open': history.expandedFor(row) }"></span>
-        <span class="desuq-hist-file-name">{{ pretty(row.name) }}</span>
-        <span class="desuq-hist-file-path" ng-if="row.name != pretty(row.name)">{{ row.name }}</span>
-        <span class="desuq-hist-tag" ng-if="row.deleted">deleted</span>
+        <!-- The live file, for a row that still has one. A deleted file has
+             no live copy to draw, and its thumbnails are on the versions
+             inside. -->
+        <desuq-thumb ng-if="!row.deleted && previewable(row.name)"
+                     src="{{ previewURL(row.folder, row.name) }}"></desuq-thumb>
+        <!-- Resolving a conflict archives the copy that lost, under the name
+             it had -- so without this the archive is full of rows called
+             texture4.sync-conflict-20260826-155856-V7OXBJ3.png and nobody
+             finds anything. The generated name is still on the line below. -->
+        <span class="desuq-hist-file-name">{{ prettyArchive(row.name) }}</span>
+        <span class="desuq-hist-file-path" ng-if="row.name != prettyArchive(row.name)">{{ row.name }}</span>
+        <span class="desuq-hist-tag" ng-if="conflictOriginal(row.name)">copy set aside</span>
+        <!-- A resolved conflict copy is "deleted" in the sense that it is no
+             longer in the folder, which is true and reads as though somebody
+             threw a file away. The tag above already says what happened. -->
+        <span class="desuq-hist-tag" ng-if="row.deleted && !conflictOriginal(row.name)">deleted</span>
         <span class="desuq-hist-file-meta">
           {{ row.versions }} kept · {{ bytes(row.bytes) }} · newest {{ row.newest | date:'d MMM HH:mm' }}
         </span>
@@ -173,6 +194,10 @@
              thing you are about to overwrite becomes the newest entry here
              and the action undoes itself. -->
         <div class="desuq-hist-version" ng-repeat="v in history.expandedFor(row).versions">
+          <!-- A timestamp does not answer "which one is the one I want", and
+               for a texture library the picture does. See api_preview.go. -->
+          <desuq-thumb ng-if="previewable(row.name)"
+                       src="{{ previewURL(row.folder, row.name, v.versionTime) }}"></desuq-thumb>
           <span class="desuq-hist-version-when">{{ v.versionTime | date:'d MMM yyyy HH:mm' }}</span>
           <span class="desuq-hist-version-size">{{ bytes(v.size) }}</span>
           <button type="button" class="btn btn-sm btn-default"
@@ -199,6 +224,125 @@
     <div class="desuq-hist-foot" ng-if="hist.truncated">
       Showing the {{ hist.archive.rows.length }} most recently changed of
       {{ hist.archive.total }} files. Use the search box to narrow it down.
+    </div>
+  </div>
+
+  <!-- ================================================== conflicts ======== -->
+  <div ng-if="hist.tab == 'conflicts'">
+
+    <div class="desuq-hist-error" ng-if="hist.conflictsError">{{ hist.conflictsError }}</div>
+
+    <div class="desuq-hist-loading" ng-if="!hist.conflictsReady && !hist.conflictsError">
+      Looking for conflicting copies…
+    </div>
+
+    <div class="desuq-hist-empty" ng-if="hist.conflictsReady && !hist.conflicts.folders.length && !hist.conflictsError">
+      <div class="desuq-hist-empty-main" ng-if="hist.search">Nothing here matches.</div>
+      <div class="desuq-hist-empty-main" ng-if="!hist.search">Nothing is in conflict.</div>
+      <div class="desuq-hist-empty-sub" ng-if="!hist.search">
+        Two people changing the same file before their computers can talk to
+        each other is what makes a conflict. Both copies are always kept, and
+        they show up here to be chosen between.
+      </div>
+    </div>
+
+    <div class="desuq-conf-folder" ng-repeat="cf in hist.conflicts.folders">
+      <div class="desuq-conf-folder-title" ng-if="!hist.folder">{{ cf.label }}</div>
+
+      <div class="desuq-conf" ng-repeat="row in cf.rows">
+        <div class="desuq-conf-head">
+          <b class="desuq-conf-name">{{ pretty(row.name) }}</b>
+          <span class="desuq-conf-path" ng-if="row.name != pretty(row.name)">{{ row.name }}</span>
+          <span class="desuq-conf-when" ng-if="row.when">set aside {{ row.when | date:'d MMM HH:mm' }}</span>
+        </div>
+
+        <!-- A folder that receives only will hold the resolution as a local
+             change rather than sending it, which is a surprise worth having
+             before the click rather than after. -->
+        <div class="desuq-conf-note" ng-if="cf.receiveOnly">
+          This folder only receives, so your choice stays on this computer
+          until somebody sends it from here.
+        </div>
+
+        <div class="desuq-conf-sides">
+          <div class="desuq-conf-side">
+            <div class="desuq-conf-side-title">In use now</div>
+            <desuq-thumb ng-if="row.current.present && previewable(row.name)"
+                         src="{{ previewURL(cf.folder, row.name) }}"></desuq-thumb>
+            <div class="desuq-conf-facts" ng-if="row.current.present">
+              <div>{{ bytes(row.current.size) }}</div>
+              <div>{{ row.current.modified | date:'d MMM HH:mm' }}</div>
+              <div ng-if="row.current.by">
+                last written by <b ng-if="row.current.mine">you</b><b ng-if="!row.current.mine">{{ row.current.by }}</b>
+              </div>
+            </div>
+            <div class="desuq-conf-facts" ng-if="!row.current.present">
+              <div>This file is not here any more.</div>
+            </div>
+            <button type="button" class="btn btn-sm btn-default"
+                    ng-disabled="hist.busy || !row.aside.present"
+                    ng-click="history.resolveConflict(cf.folder, row, 'current')">
+              Keep this one
+            </button>
+          </div>
+
+          <div class="desuq-conf-side">
+            <div class="desuq-conf-side-title">Set aside</div>
+            <desuq-thumb ng-if="row.aside.present && previewable(row.name)"
+                         src="{{ previewURL(cf.folder, row.conflict) }}"></desuq-thumb>
+            <div class="desuq-conf-facts" ng-if="row.aside.present">
+              <div>{{ bytes(row.aside.size) }}</div>
+              <div>{{ row.aside.modified | date:'d MMM HH:mm' }}</div>
+              <div ng-if="row.aside.by">
+                last written by <b ng-if="row.aside.mine">you</b><b ng-if="!row.aside.mine">{{ row.aside.by }}</b>
+              </div>
+            </div>
+            <!-- Held back by the picker, or simply not pulled yet. There is
+                 nothing to choose between until the bytes are here. -->
+            <div class="desuq-conf-facts" ng-if="!row.aside.present">
+              <div>Not on this computer yet.</div>
+            </div>
+            <button type="button" class="btn btn-sm btn-default"
+                    ng-disabled="hist.busy || !row.aside.present"
+                    ng-click="history.resolveConflict(cf.folder, row, 'aside')">
+              Use this one instead
+            </button>
+          </div>
+        </div>
+
+        <!-- The promise that makes either button safe to press, and it is
+             conditional because a folder with versioning off cannot keep it. -->
+        <div class="desuq-conf-foot" ng-if="cf.versioning">
+          Whichever you choose, the other copy goes to <b>Older versions</b>.
+        </div>
+        <div class="desuq-conf-foot is-warn" ng-if="!cf.versioning">
+          This folder keeps no old copies, so the one you do not choose will be
+          deleted for good.
+        </div>
+
+        <!-- The server refuses that case rather than doing it quietly. This
+             is the question it asks back. -->
+        <div class="desuq-conf-confirm" ng-if="hist.confirm && hist.confirm.row.conflict == row.conflict">
+          <div>
+            There is no history to fall back on here. Deleting
+            <b ng-if="hist.confirm.keep == 'current'">the copy set aside</b><b ng-if="hist.confirm.keep == 'aside'">the copy in use</b>
+            cannot be undone.
+          </div>
+          <button type="button" class="btn btn-sm btn-danger" ng-disabled="hist.busy"
+                  ng-click="history.resolveConflict(cf.folder, row, hist.confirm.keep, true)">
+            Delete it anyway
+          </button>
+          <button type="button" class="btn btn-sm btn-default" ng-disabled="hist.busy"
+                  ng-click="history.cancelConfirm()">
+            Leave both
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="desuq-hist-foot" ng-if="hist.conflicts.folders.length">
+      Nothing is deleted by leaving these alone &mdash; both copies stay in the
+      folder, and everybody you sync with sees both.
     </div>
   </div>
 </div>

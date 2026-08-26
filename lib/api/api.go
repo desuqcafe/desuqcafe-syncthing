@@ -263,6 +263,7 @@ func (s *service) Serve(ctx context.Context) error {
 	restMux.HandlerFunc(http.MethodGet, "/rest/db/dirsizes", s.getDBDirSizes)                 // folder  (desuqcafe fork, see api_dirsizes.go)
 	restMux.HandlerFunc(http.MethodGet, "/rest/db/reclaimable", s.getDBReclaimable)           // folder  (desuqcafe fork, see api_reclaim.go)
 	restMux.HandlerFunc(http.MethodGet, "/rest/folder/history", s.getFolderHistory)           // folder [file]  (desuqcafe fork, see api_history.go)
+	restMux.HandlerFunc(http.MethodGet, "/rest/folder/conflicts", s.getFolderConflicts)       // [folder]  (desuqcafe fork, see api_conflicts.go)
 	restMux.HandlerFunc(http.MethodGet, "/rest/folder/versions", s.getFolderVersions)         // folder
 	restMux.HandlerFunc(http.MethodGet, "/rest/folder/errors", s.getFolderErrors)             // folder [perpage] [page]
 	restMux.HandlerFunc(http.MethodGet, "/rest/folder/pullerrors", s.getFolderErrors)         // folder (deprecated)
@@ -302,6 +303,8 @@ func (s *service) Serve(ctx context.Context) error {
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/reset", s.postSystemReset)                // [folder]
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/reveal", s.postSystemReveal)              // folder [sub]  (desuqcafe fork, see api_reveal.go)
 	restMux.HandlerFunc(http.MethodPost, "/rest/db/reclaim", s.postDBReclaim)                    // <body>  (desuqcafe fork, see api_reclaim.go)
+	restMux.HandlerFunc(http.MethodPost, "/rest/folder/conflict", s.postFolderConflict)          // <body>  (desuqcafe fork, see api_conflicts.go)
+	restMux.HandlerFunc(http.MethodPost, "/rest/folder/repair", s.postFolderRepair)              // <body>  (desuqcafe fork, see api_repair.go)
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/restart", s.postSystemRestart)            // -
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/shutdown", s.postSystemShutdown)          // -
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/upgrade", s.postSystemUpgrade)            // -
@@ -354,6 +357,10 @@ func (s *service) Serve(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.Handle("/rest/", noCacheRestMux)
 	mux.HandleFunc("/qr/", s.getQR)
+	// Thumbnails are <img> sources, so they cannot carry a CSRF header and
+	// cannot live under /rest/. Same reasoning, and the same shape, as the QR
+	// handler above. (desuqcafe fork, see api_preview.go)
+	mux.HandleFunc("/preview/", s.getFolderPreview)
 
 	// Serve compiled in assets unless an asset directory was set (for development)
 	mux.Handle("/", s.statics)
