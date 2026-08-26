@@ -261,6 +261,8 @@ func (s *service) Serve(ctx context.Context) error {
 	restMux.HandlerFunc(http.MethodGet, "/rest/db/status", s.getDBStatus)                     // folder
 	restMux.HandlerFunc(http.MethodGet, "/rest/db/browse", s.getDBBrowse)                     // folder [prefix] [dirsonly] [levels]
 	restMux.HandlerFunc(http.MethodGet, "/rest/db/dirsizes", s.getDBDirSizes)                 // folder  (desuqcafe fork, see api_dirsizes.go)
+	restMux.HandlerFunc(http.MethodGet, "/rest/db/reclaimable", s.getDBReclaimable)           // folder  (desuqcafe fork, see api_reclaim.go)
+	restMux.HandlerFunc(http.MethodGet, "/rest/folder/history", s.getFolderHistory)           // folder [file]  (desuqcafe fork, see api_history.go)
 	restMux.HandlerFunc(http.MethodGet, "/rest/folder/versions", s.getFolderVersions)         // folder
 	restMux.HandlerFunc(http.MethodGet, "/rest/folder/errors", s.getFolderErrors)             // folder [perpage] [page]
 	restMux.HandlerFunc(http.MethodGet, "/rest/folder/pullerrors", s.getFolderErrors)         // folder (deprecated)
@@ -299,6 +301,7 @@ func (s *service) Serve(ctx context.Context) error {
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/ping", s.restPing)                        // -
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/reset", s.postSystemReset)                // [folder]
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/reveal", s.postSystemReveal)              // folder [sub]  (desuqcafe fork, see api_reveal.go)
+	restMux.HandlerFunc(http.MethodPost, "/rest/db/reclaim", s.postDBReclaim)                    // <body>  (desuqcafe fork, see api_reclaim.go)
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/restart", s.postSystemRestart)            // -
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/shutdown", s.postSystemShutdown)          // -
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/upgrade", s.postSystemUpgrade)            // -
