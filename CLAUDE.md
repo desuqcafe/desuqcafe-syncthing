@@ -245,7 +245,20 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
 - A `desktop.ini` does nothing unless the folder itself carries the read-only
   or system attribute, and `SHGetFileInfo` ignores it entirely when COM has not
   been initialised -- it returns the generic icon and no error. Both are silent
-  failures. See `DEPLOYMENT-3D-TEAM.md` section 10.
+  failures. See `DEPLOYMENT-3D-TEAM.md` section 10. **The tray initialises COM
+  nowhere**, so any shell API added to it has to do its own
+  `CoInitializeEx` under a `runtime.LockOSThread` -- the initialisation is
+  per *thread*, and without the lock the runtime may move the goroutine
+  between the two calls. `openURL` in `platform_windows.go` is the worked
+  example.
+- **Defender quarantines the tray as `Trojan:Win32/Bearfoos.A!ml`** on install
+  -- an ML false positive, taking both shortcuts and start-at-sign-in with it,
+  so the machine silently stops syncing at the next reboot. `DEPLOYMENT-3D-TEAM.md`
+  section 20 has the audit of why it fires and what to do. Consequence for
+  development: **a clean local build proves nothing about the installed copy**
+  -- the same binary in `custom\dist\` was untouched while the one the
+  installer wrote was eaten. Do not add LOLBin-shaped code to the tray;
+  `rundll32 url.dll,FileProtocolHandler` was removed for exactly this reason.
 - The device-verification wordlists in `gui/default/syncthing/desuq/` are data,
   not prose: a word's *index* is its meaning. Re-ordering a list or inserting
   into the middle of one silently invalidates every verification anyone has

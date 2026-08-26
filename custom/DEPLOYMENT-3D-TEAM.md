@@ -1229,6 +1229,78 @@ summarised server-side, and the per-file list is fetched only when a row is
 expanded. Restoring still goes through upstream's `POST`, which was always the
 right shape.
 
+## 20. Windows Defender may quarantine the tray on install
+
+Seen for real on 2026-08-26, installing v2.1.4-desuq.4:
+
+```
+Trojan:Win32/Bearfoos.A!ml      ThreatID 2147731250
+  %LOCALAPPDATA%\Programs\desuq-syncthing\desuq-syncthing-tray.exe
+  the setup .exe
+  Start Menu\Programs\desuqcafe Syncthing\desuqcafe Syncthing.lnk
+  Start Menu\Programs\Startup\desuqcafe Syncthing.lnk
+```
+
+**It is a false positive**, and the `!ml` suffix says so fairly plainly: that is
+Defender's machine-learning classifier guessing from behaviour, not a signature
+match. `Bearfoos.A!ml` is one of its catch-all buckets and is well known for
+eating unsigned Go binaries.
+
+**But the consequences are not cosmetic.** Both shortcuts go with it, so there
+is no Start Menu entry and **no start-at-sign-in** — Syncthing does not come
+back after a reboot. Losing the tray also loses the desktop notifications
+(§11), the Explorer folder icons (§10) and the newer-peer update toast (§17).
+A modeller whose tray was eaten has a machine that silently stops syncing the
+next time they restart it, which is the worst failure mode this project has.
+
+### Why it fires
+
+Nothing in the tray is hostile; it is a pile of individually-boring things that
+together match a dropper profile. From an audit of `custom/tray/`:
+
+| Behaviour | Why a classifier dislikes it |
+| --- | --- |
+| spawns a hidden, long-lived child and restarts it | `CREATE_NO_WINDOW` + `HideWindow` + supervision |
+| `HKCU\Software\Classes\AppUserModelId\…` | looks like registry persistence |
+| a named mutex for single-instance | common malware idiom |
+| writes `desktop.ini` and sets system/read-only attributes | modifies user directories |
+| `InsecureSkipVerify: true` | certificate validation off |
+| unsigned, installs to `%LOCALAPPDATA%`, runs immediately | no publisher, not Program Files |
+
+Every one has a reason: the registry key is the documented way to give a toast
+a display name, `InsecureSkipVerify` is for Syncthing's self-signed loopback
+certificate, the attributes are what make the folder icons work at all (§10).
+
+The **network surface is one file**, `custom/tray/client.go`, and it points at
+the GUI address from your own `config.xml`, forced to `127.0.0.1` when that is
+bound to `0.0.0.0`. There is no hardcoded remote host anywhere in the tray.
+The only external URL in the whole program is the releases page in
+`update.go`, which is a string handed to a browser when somebody clicks a
+toast — nothing fetches it.
+
+One line *was* worth removing on its own merits and has been: `openURL` used to
+call `rundll32 url.dll,FileProtocolHandler`, which is a textbook LOLBin —
+launching things through `rundll32` is a documented evasion technique because
+it hides the real parent process. It is `ShellExecute` now
+(`custom/tray/platform_windows.go`). That is not a guaranteed fix for the
+detection; it removes the most incriminating single line in the binary.
+
+### What to actually do
+
+1. **Restore it**, per machine: *Windows Security → Virus & threat protection →
+   Protection history → Restore*. Then add an exclusion for
+   `%LOCALAPPDATA%\Programs\desuq-syncthing\` so the next install survives.
+2. **Report the false positive to Microsoft**, at their submission portal. Free,
+   and it is the only route that fixes it for everyone rather than per machine.
+3. Afterwards, check the tray is running and that *Start at sign-in* survived —
+   the shortcut is what implements it, and it is one of the things quarantined.
+
+Step 1 is not something a non-technical modeller will do over the phone. That
+is the real cost, and it is what a **code-signing certificate** buys: a signed
+binary from a consistent publisher is far less likely to be classified this way
+at all, and it is the only durable answer for a team that installs on machines
+you are not sitting at.
+
 ## Recommended configuration
 
 Applied per machine, under *Actions → Advanced → Defaults*:
