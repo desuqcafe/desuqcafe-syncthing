@@ -258,7 +258,9 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
   development: **a clean local build proves nothing about the installed copy**
   -- the same binary in `custom\dist\` was untouched while the one the
   installer wrote was eaten. Do not add LOLBin-shaped code to the tray;
-  `rundll32 url.dll,FileProtocolHandler` was removed for exactly this reason.
+  `rundll32 url.dll,FileProtocolHandler` was removed for exactly this reason --
+  but **removing it did not clear the detection** (desuq.5 was quarantined
+  identically to desuq.4), so do not treat source-level tidying as a fix.
 - The device-verification wordlists in `gui/default/syncthing/desuq/` are data,
   not prose: a word's *index* is its meaning. Re-ordering a list or inserting
   into the middle of one silently invalidates every verification anyone has

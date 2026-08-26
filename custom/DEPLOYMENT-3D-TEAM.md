@@ -1282,8 +1282,16 @@ One line *was* worth removing on its own merits and has been: `openURL` used to
 call `rundll32 url.dll,FileProtocolHandler`, which is a textbook LOLBin —
 launching things through `rundll32` is a documented evasion technique because
 it hides the real parent process. It is `ShellExecute` now
-(`custom/tray/platform_windows.go`). That is not a guaranteed fix for the
-detection; it removes the most incriminating single line in the binary.
+(`custom/tray/platform_windows.go`).
+
+**It did not help, and that is worth recording rather than quietly hoping.**
+desuq.5 shipped with the change and was quarantined on install exactly as
+desuq.4 had been — same `ThreatID 2147731250`, same four files, within seconds
+of the installer finishing. So `rundll32` was not what the classifier objected
+to. The change stands on its own merits, but **do not expect source-level
+tidying to shift this detection**: what trips it is the whole binary's
+behavioural profile, not any one call, and the only levers that reliably work
+are a trusted signature and a false-positive delisting.
 
 ### What to actually do
 
