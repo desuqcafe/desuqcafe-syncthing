@@ -119,8 +119,12 @@ function Resolve-Jsdom {
     $candidates += $cache
     $candidates += (Join-Path $RepoRoot 'node_modules')
 
+    # Test for jsdom's package.json, not its directory. The cache is in TEMP,
+    # and Windows' temp cleanup deletes old files one at a time: it left a
+    # jsdom\ holding only lib\, which passed a directory check, was never
+    # reinstalled, and failed every render suite with "not installed".
     foreach ($c in $candidates) {
-        if (Test-Path -LiteralPath (Join-Path $c 'jsdom')) { return $c }
+        if (Test-Path -LiteralPath (Join-Path $c 'jsdom\package.json')) { return $c }
     }
 
     & $NodeExe -e "require.resolve('jsdom')" 2>$null | Out-Null
@@ -130,12 +134,19 @@ function Resolve-Jsdom {
 
     Write-Host '  installing jsdom (once, cached in TEMP)...' -ForegroundColor DarkGray
     $dir = Split-Path -Parent $cache
+    # A partial tree from an earlier install is worse than none: npm sees
+    # jsdom listed and leaves the gutted copy where it is.
+    if (Test-Path -LiteralPath $dir) { Remove-Item -Recurse -Force -LiteralPath $dir }
     $null = New-Item -ItemType Directory -Force -Path $dir
     Push-Location $dir
-    try { & npm install --no-audit --no-fund --loglevel=error jsdom 2>&1 | Out-Null }
+    try { $npmOut = & npm install --no-audit --no-fund --loglevel=error jsdom 2>&1 }
     finally { Pop-Location }
 
-    if (Test-Path -LiteralPath (Join-Path $cache 'jsdom')) { return $cache }
+    if (Test-Path -LiteralPath (Join-Path $cache 'jsdom\package.json')) { return $cache }
+    # Say why. Discarding this turned a failed install into six suites
+    # reporting "jsdom not found" with nothing to go on.
+    Write-Host '  npm install jsdom did not produce a usable copy:' -ForegroundColor Yellow
+    $npmOut | Select-Object -Last 15 | ForEach-Object { Write-Host "    $_" -ForegroundColor Yellow }
     return $null
 }
 
