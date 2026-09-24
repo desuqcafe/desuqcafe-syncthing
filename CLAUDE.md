@@ -101,7 +101,11 @@ Everything else is upstream Syncthing, unmodified.
 .\custom\scripts\run-tests.ps1                 # all twelve suites; -Quick for the fast ten
 .\custom\build-windows.ps1 -Installer          # build binary + installer (runs -Quick first)
 .\custom\scripts\sync-upstream.ps1 -DryRun     # preview upstream changes
-git tag v2.1.4-desuq.2; git push origin v2.1.4-desuq.2   # cut a release
+git tag v2.1.6-desuq.8; git push origin v2.1.6-desuq.8   # cut a release
+# Tag shape is load-bearing: vX.Y.Z-desuq.N, where X.Y.Z is the upstream base
+# and N keeps counting across bases. Never carry upstream's "-rc.N" into it:
+# the tray's forkVersionRe (custom/tray/update.go) would not match, and the
+# newer-peer toast would go quiet without an error.
 
 # Two-device testing. Most of what this fork adds only happens between two
 # devices, so this is usually the first thing to run.

@@ -3,93 +3,64 @@
      install section to it, so this file is only ever "what changed".
      Old releases keep their own notes on GitHub; git history keeps these. -->
 
-# desuqcafe Syncthing v2.1.4-desuq.7
+# desuqcafe Syncthing v2.1.6-desuq.8
 
-Five things Syncthing did correctly and then had nothing more to say about.
+Mostly about things that looked fine and were not.
 
 Update by running the installer over the top. Your folders, devices and
 settings are untouched.
 
-## Two people changed the same file
+## If Windows Security removes part of the app, you are told
 
-This is the normal week, not an edge case, and until now it ended badly: your
-folder quietly grew a second file called something like
+Windows Defender sometimes removes this app's notification-area icon right
+after installing, mistaking it for malware (desuq.5 has the story). The
+damage is worse than a missing icon: Syncthing keeps running, so everything
+looks fine, until the next restart. After that it does not start at all.
 
-    scene.sync-conflict-20260824-032916-F67Q3OS.blend
+Two things now catch this:
 
-and nothing anywhere would tell you which of the two was yours. Nobody deletes
-a file they cannot identify, so they pile up.
+- **The installer checks before it closes.** If the file disappears in the
+  seconds after installing, you get a message saying what happened, what it
+  will cost, and how to put it back, with a button that opens Windows
+  Security.
+- **The main screen says so for as long as it is true**, in red, at the top.
+  This covers the case where Defender acts days later, after an update.
 
-There is now a **Conflicts** screen — a row on the folder card while there is
-anything to decide, and a tab under History. It puts the two copies next to
-each other: how big each one is, when it was written, who wrote it, and, for a
-texture, **the picture itself**. Two buttons: keep the one in use, or use the
-one that was set aside.
+Neither changes any security setting for you. Putting the file back is one
+click in Windows Security's *Protection history*: choose **Restore**.
 
-Neither button throws anything away. Whichever copy you do not keep goes into
-*Older versions*, so a wrong click is one more click to undo. On a folder with
-version history switched off it cannot make that promise, so it says so and
-asks first.
+## A share nobody has accepted no longer looks like one in progress
 
-You only have to do this on one computer. The other person's copy sorts itself
-out.
+Share a folder with somebody who is already online and the main screen used to
+say they were *catching up — 12 MiB to go*, when they had not accepted it at
+all. That is the usual way to share a folder, so it was wrong most of the
+time. It now says they have not accepted it yet.
 
-## Pictures instead of timestamps
+## Choosing files
 
-*Older versions* used to offer a list of times. Fifty saves of one texture is
-fifty timestamps, and the only way to find the right one was to restore it and
-look — which overwrites the file you were trying to protect.
+- If you close *Choose what to sync* without choosing, nothing is downloaded
+  and the folder waits, which is what it did before. What changed is how it
+  describes itself: it used to say *Everything you chose is here* about a
+  folder where nothing had been chosen. It now says **Nothing has been picked
+  yet** and points at *Choose files*.
+- The file list in the picker had a stray dot beside every row. Gone.
 
-Image files now show a thumbnail, in version history and in the conflicts
-screen. `.blend` files do not; there is no honest way to read one.
+## Based on Syncthing 2.1.6
 
-## A folder that has stopped now tells you why
+This build now includes upstream Syncthing's latest changes, currently a
+release candidate for 2.1.6. The two that matter here:
 
-*Stopped* used to be the whole message. The card now says what Syncthing
-actually reported, and offers the three things that fix it: plug the drive
-back in, point the folder at where it lives now, or set it up again.
+- **A device you let introduce others could add itself to folders it was never
+  given.** Fixed upstream.
+- Syncthing could stop writing its log file when started without a console
+  window, which is how this app always starts it. Fixed upstream.
 
-**Setting it up again is refused when it would be dangerous.** If the folder is
-supposed to hold files and the directory is empty, making it again would tell
-everybody else you deleted them — and their copies would go too. It says that,
-with the number of files, instead of doing it.
+That is also why the version number moves from 2.1.4 to 2.1.6. It tracks the
+Syncthing it is built on; the number after *desuq* keeps counting as before.
 
-## It notices when syncing has stopped
+## Still true
 
-If a computer you sync with has not been in touch for three days, you are told.
-Three days rather than one, so an ordinary weekend is quiet.
-
-The wording is careful about blame, because it cannot know: if everything else
-is connected it says whose computer it is, and if nothing at all has connected
-it says so without pointing at anybody — that usually means this computer is
-the one that is offline.
-
-This is the other half of the Defender problem below. A machine that has
-stopped syncing is the last one able to warn you; the people it syncs with can.
-
-## Pause for an hour, and mean it
-
-The tray's *Pause Syncing* stays paused until you turn it back on, which is
-fine until you pause for a render and forget — a paused Syncthing looks exactly
-like a working one from inside Blender.
-
-**Pause for a while → 1 hour / 4 hours** starts again on its own, tells you
-when in the menu while it is holding, and says so when it lifts. Quitting the
-tray also lifts it, so a timed pause can never outlast the thing that promised
-to end it.
-
-## Still true from desuq.5
-
-Windows Defender may quarantine the tray on install, as
-`Trojan:Win32/Bearfoos.A!ml`. It is a false positive — the `!ml` marks it as a
-machine-learning guess rather than recognised malware, and that classifier is
-well known for eating small unsigned programs written in Go.
-
-**It takes both Start Menu shortcuts with it**, so "start when I sign in"
-stops working and Syncthing will not come back after a restart. If it happens:
-*Windows Security → Virus & threat protection → Protection history*, restore
-the files, then add an exclusion for the install folder so future updates
-survive.
-
-`custom/DEPLOYMENT-3D-TEAM.md` section 20 has the full picture, including an
-audit of what the tray actually does and why a classifier dislikes it.
+Windows Defender may still quarantine the tray on install, as
+`Trojan:Win32/Bearfoos.A!ml`. It is a false positive; the difference now is
+that you will hear about it. `custom/DEPLOYMENT-3D-TEAM.md` section 20 has the
+full picture.

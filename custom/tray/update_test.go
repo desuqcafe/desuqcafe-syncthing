@@ -38,6 +38,15 @@ func TestParseForkVersion(t *testing.T) {
 		{"unknown-dev", false, forkVersion{}},
 		{"v2.1.4-desuq", false, forkVersion{}},
 		{"v2.1-desuq.1", false, forkVersion{}},
+		// The trap in tagging a fork release off an upstream release
+		// candidate: carrying the "-rc.N" into the tag makes it unparseable,
+		// and the newer-peer toast goes quiet with no error. Tags are
+		// vX.Y.Z-desuq.N (CLAUDE.md, "Common commands").
+		{"v2.1.6-rc.3-desuq.1", false, forkVersion{}},
+		// Between tags on that base, git describe reaches past the lightweight
+		// desuq tags to upstream's annotated rc tag. Not a fork version, so a
+		// dev build there is never compared, which is the safe direction.
+		{"v2.1.6-rc.3-57-g8db943ab-dirty", false, forkVersion{}},
 	}
 
 	for _, c := range cases {
@@ -71,6 +80,10 @@ func TestForkVersionOrder(t *testing.T) {
 		{"v2.1.4-desuq.10", "v2.1.4-desuq.9", true},
 		{"v2.2.0-desuq.1", "v2.1.4-desuq.9", true},
 		{"v3.0.0-desuq.1", "v2.9.9-desuq.9", true},
+		// The first release on the 2.1.6 base, against the last on 2.1.4:
+		// the base decides it, and the revision keeps counting regardless.
+		{"v2.1.6-desuq.8", "v2.1.4-desuq.7", true},
+		{"v2.1.4-desuq.7", "v2.1.6-desuq.8", false},
 
 		// A build made partway between two tags sorts after the tag it came
 		// from and before the next one, which is what git describe means.
