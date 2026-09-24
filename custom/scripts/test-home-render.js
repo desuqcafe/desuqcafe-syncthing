@@ -79,6 +79,8 @@ const world = {
     completion: {},
     reclaimable: {},
     conflicts: { total: 0, folders: [] },
+    // An installed copy with its tray in place, which is the ordinary case.
+    tray: { expected: true, present: true },
     errors: []
 };
 
@@ -108,6 +110,9 @@ angular.module('syncthing.core')
             }
             if (url === 'rest/system/error') {
                 return reply({ errors: world.errors });
+            }
+            if (url === 'rest/system/tray') {
+                return reply(world.tray);
             }
             if (url.indexOf('rest/db/status?folder=') === 0) {
                 const id = decodeURIComponent(url.split('folder=')[1]);
@@ -249,6 +254,31 @@ console.log('\n-- things that are actually wrong');
     const h = H([folder({ state: 'localadditions' })], [peer()], []);
     check('receive-only local changes need a decision', h.tone === 'attention', h.tone);
     check('says they are only here', /only on this computer/.test(h.text), h.text);
+}
+
+console.log('\n-- Windows Security took the tray');
+// DEPLOYMENT-3D-TEAM.md section 20. Syncthing is still running, so every other
+// fact on the screen is true -- until the restart, after which nothing starts.
+{
+    const gone = { expected: true, present: false };
+    const h = H([folder({ people: [person()] })], [peer()], [], gone);
+    check('a missing tray is a problem even when all is in step', h.tone === 'problem', h.tone);
+    check('says what it will cost', /stop after you restart/.test(h.text), h.text);
+    check('says it is a false alarm', /false alarm/.test(h.detail));
+    check('and how to put it back', /Protection history/.test(h.detail) && /Restore/.test(h.detail));
+    check('it outranks a stopped folder',
+        /Windows Security/.test(H([folder({ state: 'stopped' })], [peer()], [], gone).text));
+    check('a system error still outranks it',
+        /problem needs/.test(H([folder()], [peer()], ['disk full'], gone).text));
+}
+{
+    // A development build answers expected:false; it must never raise this.
+    check('a build that is not installed is never alarmed about',
+        H([folder({ people: [person()] })], [peer()], [], { expected: false, present: false }).tone === 'good');
+    check('nor is a tray that is there',
+        H([folder({ people: [person()] })], [peer()], [], { expected: true, present: true }).tone === 'good');
+    check('nor an answer that has not arrived yet',
+        H([folder({ people: [person()] })], [peer()], [], null).tone === 'good');
 }
 
 console.log('\n-- the empty and idle shapes');
@@ -446,6 +476,29 @@ check('and repeats what Syncthing said', /folder path missing/.test(text()));
 check('the drive is the first thing suggested', /plug it in/.test(text()));
 check('and there is a way to point it somewhere else', /Find it/.test(text()));
 check('and a way to set it up again', /Set it up again/.test(text()));
+
+console.log('\n-- a tray that has been quarantined');
+// On a one-minute probe, like conflicts. The first answer in this harness was
+// "present", so this also asserts the probe is asked again rather than once.
+// Two refreshes: the probe's answer lands after the headline is computed, so
+// the banner is the tick after -- 2.5 seconds on a real page.
+world.status = { assets: { state: 'idle', localBytes: 12582912, localFiles: 6, globalBytes: 12582912 } };
+world.tray = { expected: true, present: false };
+{
+    // home.js runs inside the jsdom window, so it is *that* Date which has
+    // to move, not node's.
+    const realNow = window.Date.now;
+    window.Date.now = () => realNow() + 61000;
+    svc.refresh();
+    flush();
+    flush();
+    svc.refresh();
+    flush();
+    flush();
+    window.Date.now = realNow;
+}
+check('the headline turns into the banner', /is-problem/.test(headline()), headline());
+check('and says Windows Security did it', /Windows Security removed/.test(text()), text().slice(0, 160));
 
 console.log('\n-- no green anywhere');
 // The palette rule, asserted where it can actually regress: the stylesheet.

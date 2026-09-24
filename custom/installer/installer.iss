@@ -233,6 +233,69 @@ begin
   Result := '';
 end;
 
+// Check that Windows Security has not taken the tray.
+//
+// Defender has quarantined {#MyAppBinary}-tray.exe on install as
+// Trojan:Win32/Bearfoos.A!ml, a machine-learning false positive, within
+// seconds of setup finishing -- and both shortcuts with it. The sign-in
+// shortcut is what starts Syncthing, so the machine then syncs normally until
+// its next restart and silently never again (DEPLOYMENT-3D-TEAM.md section
+// 20). Nothing afterwards can say so: the tray is the thing that was removed.
+// Setup is still here, and is the one moment the person is looking.
+//
+// Only the file is checked. Quarantine removes it, and that is the fact that
+// matters; whether the tray is *running* is a separate question with benign
+// answers ("Start now" unticked).
+//
+// This deliberately stops at telling. Restoring from quarantine and adding
+// an exclusion are security decisions, and they are made in Windows
+// Security's own window, by the person, not by an installer.
+procedure WarnIfTrayRemoved();
+var
+  Tray: String;
+  Waited, ResultCode: Integer;
+begin
+  Tray := ExpandConstant('{app}\{#MyAppBinary}-tray.exe');
+
+  // ssDone comes after the post-install "Start now" entry, so the tray has
+  // been started by now -- which is when a behavioural classifier looks. Up
+  // to twenty seconds covers "within seconds" with room; a healthy install
+  // waits the full time, which is why the window is hidden first: Sleep does
+  // not pump messages, and a visible window would read as a hang.
+  Log('Checking Windows Security has left the tray in place: ' + Tray);
+  WizardForm.Hide;
+  Waited := 0;
+  while FileExists(Tray) and (Waited < 20000) do
+  begin
+    Sleep(500);
+    Waited := Waited + 500;
+  end;
+  if FileExists(Tray) then
+    Exit;
+
+  Log('Tray missing after install: ' + Tray);
+  if SuppressibleMsgBox(
+       'Windows Security has removed part of {#MyAppName}.' #13#10 #13#10
+       + 'It is a false alarm, but it matters: without that part, syncing will '
+       + 'stop the next time this computer restarts, and nothing will say so.' #13#10 #13#10
+       + 'To put it back: in Windows Security, open Virus & threat protection, '
+       + 'then Protection history. Find the entry that mentions '
+       + '{#MyAppBinary}-tray and choose Restore.' #13#10 #13#10
+       + 'If you are not sure, ask whoever sent you this installer before you '
+       + 'restart.' #13#10 #13#10
+       + 'Open Windows Security now?',
+       mbError, MB_YESNO, IDNO) = IDYES then
+    ShellExec('', 'windowsdefender://threat', '', '', SW_SHOWNORMAL, ewNoWait, ResultCode);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  // A silent install is somebody scripting it, who does not want a twenty-
+  // second tail on every run; the main screen carries the same warning.
+  if (CurStep = ssDone) and not WizardSilent then
+    WarnIfTrayRemoved();
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   DataDir: String;

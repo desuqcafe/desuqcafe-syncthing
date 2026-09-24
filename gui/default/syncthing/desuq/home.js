@@ -75,6 +75,9 @@ angular.module('syncthing.core')
             // folder id -> the dry run from /rest/db/reclaimable, only for
             // folders that have something to reclaim.
             reclaimable: {},
+            // /rest/system/tray: whether the notification-area app is still
+            // on disk. null until the first answer.
+            tray: null,
             // {tone, text, detail} -- tone drives colour and weight, nothing else.
             headline: { tone: 'busy', text: 'Checking…', detail: '' }
         };
@@ -304,7 +307,7 @@ angular.module('syncthing.core')
         // the GUI-password notice, not a peer running a newer build.
         var TONE = { good: 'good', busy: 'busy', attention: 'attention', problem: 'problem' };
 
-        function headline(folders, peers, errors) {
+        function headline(folders, peers, errors, tray) {
             var connected = peers.filter(function (p) { return p.connected; });
             var active = folders.filter(function (f) { return !f.paused; });
 
@@ -314,6 +317,22 @@ angular.module('syncthing.core')
                     tone: TONE.problem,
                     text: errors.length + ' ' + plural(errors.length, 'problem needs', 'problems need') + ' your attention.',
                     detail: 'Open Technical details below to see them.'
+                };
+            }
+            // Windows Security has removed the tray (DEPLOYMENT-3D-TEAM.md
+            // section 20). This IS a sync fact, and the most important one on
+            // the screen: the tray is what starts Syncthing at sign-in, so
+            // everything below stays true until the next restart and then
+            // nothing syncs at all. It outranks a stopped folder because a
+            // stopped folder says so every time you look, and this will not.
+            if (tray && tray.expected && !tray.present) {
+                return {
+                    tone: TONE.problem,
+                    text: 'Windows Security removed part of this app. Syncing will stop after you restart this computer.',
+                    detail: 'It is a false alarm. To put it back: open Windows Security, go to ' +
+                        'Virus & threat protection, then Protection history, find the entry that ' +
+                        'mentions desuq-syncthing-tray, and choose Restore. If you are not sure, ' +
+                        'ask whoever set this up for you before restarting.'
                 };
             }
             var stopped = folders.filter(function (f) { return f.state === 'stopped'; });
@@ -635,10 +654,11 @@ angular.module('syncthing.core')
 
                     refreshReclaimable(st.folders);
                     refreshConflicts();
+                    refreshTray();
 
                     peers.forEach(function (p) { p.note = peerNote(p.shares); });
                     st.peers = peers;
-                    st.headline = headline(st.folders, st.peers, st.errors);
+                    st.headline = headline(st.folders, st.peers, st.errors, st.tray);
                     st.ready = true;
                 });
             });
@@ -732,6 +752,26 @@ angular.module('syncthing.core')
 
         function markConflictsStale() {
             conflictsAsked = 0;
+        }
+
+        // ------------------------------------------------------------- tray
+        //
+        // Whether the notification-area app is still on disk. A stat on the
+        // server, so cheap, but it changes when Defender acts or somebody
+        // restores it, not between ticks -- the conflicts cadence is plenty.
+        // A failed probe keeps the last answer, for the same reason as there.
+        var TRAY_MS = 60000;
+        var trayAsked = 0;
+
+        function refreshTray() {
+            var now = Date.now();
+            if (trayAsked && now - trayAsked < TRAY_MS) {
+                return;
+            }
+            trayAsked = now;
+            $http.get(urlbase + '/system/tray')
+                .then(function (r) { st.tray = r.data || null; })
+                .catch(angular.noop);
         }
 
         // ------------------------------------------------------------ repair

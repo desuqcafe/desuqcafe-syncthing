@@ -1336,6 +1336,32 @@ binary from a consistent publisher is far less likely to be classified this way
 at all, and it is the only durable answer for a team that installs on machines
 you are not sitting at.
 
+### The product now notices
+
+The worst part of the failure was that it was silent: a machine that syncs
+until the next restart and then never again, with nothing on screen to say so.
+Two things now say so, both in plain words and both ending at "open Windows
+Security and choose Restore". Neither restores anything or touches Defender;
+that stays the person's decision, made in Defender's own window.
+
+- **The installer checks before it exits.** After the "Start now" entry has
+  launched the tray, which is when a behavioural classifier looks, setup
+  hides its window and watches the tray file for up to twenty seconds. If it
+  goes, an error box says what happened and what it will cost, and offers to
+  open Windows Security. Silent installs skip the wait. Verified on an
+  isolated install with Defender simulated by killing and deleting the tray:
+  the check starts 0.1 s after the tray is launched and fires 0.4 s after the
+  file goes.
+- **The main screen says so, for as long as it is true.** The daemon, which
+  keeps running when the tray is taken, answers `GET /rest/system/tray`, and
+  a missing tray is the headline, a red banner that outranks everything
+  except a system error. This covers the case the installer cannot: a
+  definition update that eats the tray a week later.
+
+What neither can do is help a machine that has **already** restarted: then
+nothing is running to notice. The installer check is there so that the
+restart never comes first.
+
 ## 21. The tray now checks who it is talking to
 
 Only relevant if you switch the web interface to HTTPS — not the default, and

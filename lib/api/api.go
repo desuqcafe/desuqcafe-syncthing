@@ -302,6 +302,7 @@ func (s *service) Serve(ctx context.Context) error {
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/ping", s.restPing)                        // -
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/reset", s.postSystemReset)                // [folder]
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/reveal", s.postSystemReveal)              // folder [sub]  (desuqcafe fork, see api_reveal.go)
+	restMux.HandlerFunc(http.MethodGet, "/rest/system/tray", s.getSystemTray)                    // (desuqcafe fork, see api_tray.go)
 	restMux.HandlerFunc(http.MethodPost, "/rest/db/reclaim", s.postDBReclaim)                    // <body>  (desuqcafe fork, see api_reclaim.go)
 	restMux.HandlerFunc(http.MethodPost, "/rest/folder/conflict", s.postFolderConflict)          // <body>  (desuqcafe fork, see api_conflicts.go)
 	restMux.HandlerFunc(http.MethodPost, "/rest/folder/repair", s.postFolderRepair)              // <body>  (desuqcafe fork, see api_repair.go)
