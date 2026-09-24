@@ -3,64 +3,51 @@
      install section to it, so this file is only ever "what changed".
      Old releases keep their own notes on GitHub; git history keeps these. -->
 
-# desuqcafe Syncthing v2.1.6-desuq.8
+# desuqcafe Syncthing v2.1.6-desuq.9
 
-Mostly about things that looked fine and were not.
+Say "I'm working on this" before you open a file, so nobody ends up with a
+conflict copy.
 
 Update by running the installer over the top. Your folders, devices and
-settings are untouched.
+settings are untouched. **Everyone you share with needs this version** to see
+each other's marks.
 
-## If Windows Security removes part of the app, you are told
+## "I'm working on this"
 
-Windows Defender sometimes removes this app's notification-area icon right
-after installing, mistaking it for malware (desuq.5 has the story). The
-damage is worse than a missing icon: Syncthing keeps running, so everything
-looks fine, until the next restart. After that it does not start at all.
+When two people open the same `.blend` and both save, Syncthing keeps both and
+renames one aside. Nothing is lost, but two afternoons have gone different
+ways, and one of you has to redo work. What would have stopped it is saying
+something before either of you opened the file.
 
-Two things now catch this:
+Now there is a way to say it. In Explorer, **right-click the file → Send to →
+desuqcafe Syncthing - I'm working on this.** Everyone you share that folder
+with:
 
-- **The installer checks before it closes.** If the file disappears in the
-  seconds after installing, you get a message saying what happened, what it
-  will cost, and how to put it back, with a button that opens Windows
-  Security.
-- **The main screen says so for as long as it is true**, in red, at the top.
-  This covers the case where Defender acts days later, after an update.
+- gets a notification: *Yuki is working on cabin.blend*;
+- sees it on the folder in the app, with the time you started;
+- and, if they change that file anyway, gets a second warning saying so,
+  while there is still time to call you.
 
-Neither changes any security setting for you. Putting the file back is one
-click in Windows Security's *Protection history*: choose **Restore**.
+When you are done, send the file there again, or press **Done** in the app.
+A mark more than three days old is shown faded, as possibly forgotten.
 
-## A share nobody has accepted no longer looks like one in progress
+**Nothing is locked.** Anyone can still open and save a marked file. It is a
+note to the others, not a lock.
 
-Share a folder with somebody who is already online and the main screen used to
-say they were *catching up — 12 MiB to go*, when they had not accepted it at
-all. That is the usual way to share a folder, so it was wrong most of the
-time. It now says they have not accepted it yet.
+## It no longer says someone has "the same files" when they do not
 
-## Choosing files
+If somebody picked only some of a folder's files to keep, your screen used to
+say they had *the same files as you*. Now it says they keep only part of it,
+and how much is not on their computer.
 
-- If you close *Choose what to sync* without choosing, nothing is downloaded
-  and the folder waits, which is what it did before. What changed is how it
-  describes itself: it used to say *Everything you chose is here* about a
-  folder where nothing had been chosen. It now says **Nothing has been picked
-  yet** and points at *Choose files*.
-- The file list in the picker had a stray dot beside every row. Gone.
+## The activity list no longer stops after a restart
 
-## Based on Syncthing 2.1.6
-
-This build now includes upstream Syncthing's latest changes, currently a
-release candidate for 2.1.6. The two that matter here:
-
-- **A device you let introduce others could add itself to folders it was never
-  given.** Fixed upstream.
-- Syncthing could stop writing its log file when started without a console
-  window, which is how this app always starts it. Fixed upstream.
-
-That is also why the version number moves from 2.1.4 to 2.1.6. It tracks the
-Syncthing it is built on; the number after *desuq* keeps counting as before.
+*What has been happening* stopped showing new changes after Syncthing
+restarted, until you reloaded the page. It now notices and starts again.
 
 ## Still true
 
-Windows Defender may still quarantine the tray on install, as
-`Trojan:Win32/Bearfoos.A!ml`. It is a false positive; the difference now is
-that you will hear about it. `custom/DEPLOYMENT-3D-TEAM.md` section 20 has the
-full picture.
+Windows Defender may still quarantine the tray on install as
+`Trojan:Win32/Bearfoos.A!ml`. It is a false positive, and since desuq.8 you
+are told when it happens. `custom/DEPLOYMENT-3D-TEAM.md` section 20 has the
+details.

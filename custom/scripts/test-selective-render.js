@@ -291,8 +291,12 @@ function exclusions(lines) {
         .sort();
 }
 
+// The picker's own re-includes. The claims exception is a "!" line too, but it
+// sits outside the block on purpose and is asserted on its own.
+const CLAIMS_EXCEPTION = '!/.desuq-claims';
+
 function reincludes(lines) {
-    return (lines || []).filter(l => l.charAt(0) === '!').sort();
+    return (lines || []).filter(l => l.charAt(0) === '!' && l !== CLAIMS_EXCEPTION).sort();
 }
 
 // ---------------------------------------------------------------------- main
@@ -475,6 +479,17 @@ async function main() {
     check('the picker wrote a marked block',
         lines.some(l => l.indexOf('desuqcafe selective sync') >= 0),
         JSON.stringify(lines));
+    // The block ends in a catch-all, which would shut out who-is-working-on-
+    // what with everything else (lib/api/api_claims.go). First match wins, so
+    // the exception has to be above the block -- and exactly once, across
+    // however many rewrites.
+    {
+        const at = lines.indexOf(CLAIMS_EXCEPTION);
+        const block = lines.findIndex(l => l.indexOf('desuqcafe selective sync') >= 0);
+        check('claims are let through the catch-all, from above the block',
+            at >= 0 && at < block, JSON.stringify(lines));
+        check('and only once', lines.filter(l => l === CLAIMS_EXCEPTION).length === 1);
+    }
     check('paths unticked inside a kept directory are anchored exclusions, minimal in number',
         exclusions(lines).join(' ') ===
         ['/Characters/Villain', BRACKET_PATTERN, '/Textures/Source'].sort().join(' '),
@@ -643,6 +658,9 @@ async function main() {
         JSON.stringify(reincludes(ign2.ignore)));
     check('and the seeded rules are still there after a second rewrite',
         SEEDED.every(l => (ign2.ignore || []).indexOf(l) >= 0),
+        JSON.stringify(ign2.ignore));
+    check('the claims exception survives a second rewrite without doubling',
+        (ign2.ignore || []).filter(l => l === CLAIMS_EXCEPTION).length === 1,
         JSON.stringify(ign2.ignore));
 
     for (let i = 0; i < 30; i++) {

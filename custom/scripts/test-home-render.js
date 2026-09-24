@@ -81,6 +81,11 @@ const world = {
     conflicts: { total: 0, folders: [] },
     // An installed copy with its tray in place, which is the ordinary case.
     tray: { expected: true, present: true },
+    // Nobody working on anything, and no claims files in any folder.
+    claims: { claims: [], folders: [] },
+    // What each peer is choosing not to keep: nothing, unless a test says so.
+    peerHeld: { files: 0, bytes: 0 },
+    posted: [],
     errors: []
 };
 
@@ -114,6 +119,12 @@ angular.module('syncthing.core')
             if (url === 'rest/system/tray') {
                 return reply(world.tray);
             }
+            if (url.indexOf('rest/db/peerheldback') === 0) {
+                return reply(world.peerHeld);
+            }
+            if (url === 'rest/folder/claims') {
+                return reply(world.claims);
+            }
             if (url.indexOf('rest/db/status?folder=') === 0) {
                 const id = decodeURIComponent(url.split('folder=')[1]);
                 return reply(world.status[id] || {});
@@ -131,6 +142,20 @@ angular.module('syncthing.core')
                 return reply(world.completion[f + ' ' + d] || {});
             }
             throw new Error('unstubbed GET ' + url);
+        };
+        // Every POST is recorded, so a test can assert what a button sent.
+        http.post = function (url, body) {
+            world.posted.push({ url: url, body: body });
+            if (url === 'rest/folder/claim') {
+                // The server answers with the folder's claims afterwards.
+                world.claims.claims = world.claims.claims.filter(c =>
+                    !(c.folder === body.folder && c.path === body.path && c.mine && body.release));
+                return reply({
+                    claims: world.claims.claims.filter(c => c.folder === body.folder),
+                    folders: world.claims.folders.filter(f => f.folder === body.folder)
+                });
+            }
+            throw new Error('unstubbed POST ' + url);
         };
         return http;
     });
@@ -338,6 +363,37 @@ console.log('\n-- a share that was never accepted is not 0%');
     check('but from a disconnected one it claims nothing', d.kind !== 'notaccepted', d.kind);
 }
 
+console.log('\n-- a peer who keeps part of a folder is not "the same"');
+// Completion says 100% for a peer who took one texture out of six: an ignored
+// file is not needed. Their own index says otherwise. Seen on a live pair:
+// "Yuki Laptop has the same files as you" about a machine holding one file.
+{
+    const held = { files: 5, bytes: 10485760 };
+    const s = svc._shareOf(peer(), { completion: 100, remoteState: 'valid' }, held);
+    check('complete by completion, holding back by index, is partial', s.kind === 'partial', s.kind);
+    check('without the index, still complete', svc._shareOf(peer(), { completion: 100, remoteState: 'valid' }).kind === 'complete');
+    check('nothing held back is complete', svc._shareOf(peer(), { completion: 100, remoteState: 'valid' }, { files: 0 }).kind === 'complete');
+    check('a peer still pulling is behind, whatever they hold back',
+        svc._shareOf(peer(), { completion: 40, remoteState: 'valid' }, held).kind === 'behind');
+
+    const N = svc._peopleNote;
+    const p = person({ kind: 'partial', heldFiles: 5, heldBytes: 10485760 });
+    check('the note says they keep part of it, and how much',
+        /Yuki keeps only part of it — 5 files are not on their computer \(10 MiB\)/.test(N([p], 0, 6)), N([p], 0, 6));
+    check('and never "the same files"', !/same files/.test(N([p], 0, 6)));
+    check('beside someone who has it all, both are said',
+        /keeps only part of it/.test(N([p, person({ name: 'Ana' })], 0, 6)) &&
+        /Ana has the same files as you/.test(N([p, person({ name: 'Ana' })], 0, 6)),
+        N([p, person({ name: 'Ana' })], 0, 6));
+    check('both holding back: both directions are said',
+        /Yuki keeps only part of it/.test(N([p], 3, 2)) && /You have chosen part of it/.test(N([p], 3, 2)),
+        N([p], 3, 2));
+
+    const h = H([folder({ people: [p] })], [peer()], []);
+    check('the headline stops saying "has the same"', !/has the same/.test(h.detail), h.detail);
+    check('and says who keeps part of it', /Yuki keeps only part of it/.test(h.detail), h.detail);
+}
+
 console.log('\n-- initials distinguish two people with the same first name');
 {
     check('two words give two letters', svc._initials('Yuki Tanaka') === 'YT', svc._initials('Yuki Tanaka'));
@@ -526,6 +582,79 @@ world.tray = { expected: true, present: false };
 }
 check('the headline turns into the banner', /is-problem/.test(headline()), headline());
 check('and says Windows Security did it', /Windows Security removed/.test(text()), text().slice(0, 160));
+
+console.log('\n-- who is working on what');
+// lib/api/api_claims.go. The claims files are in the folder, so Syncthing's
+// counts include them; the card must not.
+world.tray = { expected: true, present: true };
+world.status = { assets: { state: 'idle', localBytes: 12582912 + 300, localFiles: 8, globalBytes: 12582912 + 300, globalFiles: 8 } };
+world.claims = {
+    claims: [
+        { folder: 'assets', label: 'Project Assets', path: 'mine.blend', device: MY_ID, name: 'You', mine: true, since: new Date().toISOString(), stale: false },
+        { folder: 'assets', label: 'Project Assets', path: 'Scenes/cabin.blend', device: YUKI, name: 'Yuki', mine: false, since: new Date().toISOString(), stale: false }
+    ],
+    folders: [{ folder: 'assets', canClaim: true, files: 2, bytes: 300 }]
+};
+{
+    const realNow = window.Date.now;
+    window.Date.now = () => realNow() + 200000;
+    svc.refresh();
+    flush();
+    flush();
+    svc.refresh();
+    flush();
+    flush();
+    window.Date.now = realNow;
+}
+{
+    const rows = [...el[0].querySelectorAll('.desuq-home-claim')];
+    check('each claim is a row on the card', rows.length === 2, String(rows.length));
+    check('somebody else\'s comes first', rows[0] && /Yuki is working on/.test(rows[0].textContent),
+        rows[0] && rows[0].textContent.replace(/\s+/g, ' '));
+    check('and names the file', rows[0] && /Scenes\/cabin\.blend/.test(rows[0].textContent));
+    check('mine says so, quietly', rows[1] && /claim-mine/.test(rows[1].className) &&
+        /You are working on/.test(rows[1].textContent));
+    check('only mine has a Done button',
+        !rows[0].querySelector('button') && !!(rows[1] && rows[1].querySelector('button')));
+    check('the claims files are not counted as work', /6 files/.test(text()) && !/8 files/.test(text()),
+        text().slice(0, 200));
+    check('there is a way to find out how to mark a file', /Working on a file\?/.test(text()));
+
+    rows[1].querySelector('button').click();
+    flush();
+    flush();
+    const last = world.posted[world.posted.length - 1] || {};
+    check('Done asks the server to release that file, and only that',
+        last.url === 'rest/folder/claim' && last.body.folder === 'assets' &&
+        last.body.path === 'mine.blend' && last.body.release === true,
+        JSON.stringify(last));
+    flush();
+    const after = [...el[0].querySelectorAll('.desuq-home-claim')];
+    check('and the row goes', after.length === 1 && /Yuki/.test(after[0].textContent), String(after.length));
+}
+{
+    // A receive-only copy cannot send a mark, so it is not offered one.
+    world.claims.folders = [{ folder: 'assets', canClaim: false, reason: 'only receives', files: 1, bytes: 150 }];
+    const realNow = window.Date.now;
+    window.Date.now = () => realNow() + 400000;
+    svc.refresh();
+    flush();
+    flush();
+    svc.refresh();
+    flush();
+    flush();
+    window.Date.now = realNow;
+    check('a folder that cannot send a mark does not offer to explain how', !/Working on a file\?/.test(text()));
+    check('but still shows the marks that arrive', /Yuki is working on/.test(text()));
+}
+{
+    const S = svc.claimSince;
+    const now = new Date();
+    check('today reads as a time', /^since \d\d:\d\d$/.test(S(now.toISOString(), false)), S(now.toISOString(), false));
+    const old = new Date(now.getTime() - 4 * 86400000).toISOString();
+    check('a stale one says how old and why it matters', /4 days, may have been forgotten/.test(S(old, true)), S(old, true));
+    check('nonsense reads as nothing', S('not a date', false) === '');
+}
 
 console.log('\n-- no green anywhere');
 // The palette rule, asserted where it can actually regress: the stylesheet.

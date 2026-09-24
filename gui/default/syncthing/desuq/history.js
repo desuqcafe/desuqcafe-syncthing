@@ -189,7 +189,7 @@ angular.module('syncthing.core')
                 .then(function (r) {
                     var fresh = r.data || [];
                     if (!fresh.length) {
-                        return;
+                        return checkRestart();
                     }
                     if (resetIfRestarted(fresh)) {
                         return bootstrapChanges();
@@ -210,13 +210,40 @@ angular.module('syncthing.core')
                 });
         }
 
-        // resetIfRestarted detects the daemon having restarted underneath us.
+        // A poll with since=4211 against a daemon that has restarted does NOT
+        // hand back the new events numbered from 1. lib/events' Since() waits
+        // for its counter to pass 4211 first -- so it returns nothing, every
+        // time, until four thousand more things have happened. The feed just
+        // stops, and looks exactly like a quiet afternoon.
         //
-        // The buffer is memory only and its ids begin again at 1, so a poll
-        // with since=4211 against a fresh daemon returns events numbered from
-        // 1 -- which are newer in time and lower in id. Without this the feed
-        // appends them out of order and then never advances, because lastID
-        // stays at 4211 forever.
+        // The only way to see a restart from here is to ask where the buffer
+        // has got to. An empty poll is the cue, throttled, because an empty
+        // poll is also what every genuinely quiet three seconds looks like.
+        var RESTART_CHECK_MS = 15000;
+        var restartChecked = 0;
+
+        function checkRestart() {
+            var now = Date.now();
+            if (!lastID || now - restartChecked < RESTART_CHECK_MS) {
+                return;
+            }
+            restartChecked = now;
+            return $http.get(urlbase + '/events/disk', { params: { since: 0, limit: 1, timeout: 0 } })
+                .then(function (r) {
+                    var newest = (r.data || [])[0];
+                    // Behind where we were, or nothing at all when we had
+                    // something: either way this is a different buffer.
+                    if (!newest || newest.id < lastID) {
+                        events = [];
+                        lastID = 0;
+                        return bootstrapChanges();
+                    }
+                }, angular.noop);
+        }
+
+        // resetIfRestarted is the other half: a poll that does return events,
+        // but not newer ones. The id is the only thing to go on, and one at or
+        // below lastID is not progress.
         function resetIfRestarted(fresh) {
             if (fresh[0].id > lastID) {
                 return false;
@@ -234,6 +261,12 @@ angular.module('syncthing.core')
                     return false;
                 }
                 if (st.search && !matches(d.path || '', st.search)) {
+                    return false;
+                }
+                // Who is working on what (lib/api/api_claims.go) is kept in
+                // files, so marking one "changes" a file. That is bookkeeping,
+                // and the main screen already says it in words.
+                if (/^\.desuq-claims([\\/]|$)/.test(d.path || '')) {
                     return false;
                 }
                 // Directories being touched is plumbing, not news.
@@ -373,7 +406,7 @@ angular.module('syncthing.core')
         }
 
         function rowKey(row) {
-            return row.folder + ' ' + row.name;
+            return row.folder + '\x00' + row.name;
         }
 
         function toggle(row) {
@@ -638,6 +671,8 @@ angular.module('syncthing.core')
             // asserts them directly rather than through the DOM.
             _collapse: collapse,
             _intoDays: intoDays,
+            _pollChanges: function () { return pollChanges(); },
+            _lastID: function () { return lastID; },
             _resetIfRestarted: function (fresh, last) {
                 lastID = last;
                 events = [1, 2, 3];

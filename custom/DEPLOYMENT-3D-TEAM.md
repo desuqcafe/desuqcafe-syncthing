@@ -1555,6 +1555,75 @@ quitting the tray lifts the hold on the way out, so a timed pause can never
 outlive the thing that promised to end it. The indefinite checkbox is still
 there and still honest about being indefinite.
 
+## 25. "I'm working on this file"
+
+§22 made a conflict recoverable. This makes one avoidable. Two modellers
+opening the same `.blend` is the one loss of work this setup produces by
+design: Syncthing cannot merge a binary, so it keeps both copies and renames
+one aside, and by then two afternoons have diverged. What would have prevented
+it is a sentence said before anybody opened the file.
+
+### How it is used
+
+In Explorer, right-click the file → **Send to** → **desuqcafe Syncthing - I'm
+working on this**. A toast confirms it. Everybody who shares that folder:
+
+- gets a toast: *Yuki is working on cabin.blend*;
+- sees it on the folder card: *Yuki is working on Scenes/cabin.blend · since
+  14:20*;
+- and, if the file changes on their computer anyway, gets a second, louder
+  toast saying so while there is still time to pick up the phone.
+
+Sending the same file again takes the mark off, and so does **Done** on the
+card. A mark older than three days is dimmed and says it may have been
+forgotten; it is never removed on its own, because a file still open after a
+long weekend is still somebody's.
+
+**Nothing is locked.** A marked file can be opened, saved and synced by anyone.
+This is a note to the others, not a lock, and it says so.
+
+### How it works, and why that way
+
+Each device writes one file, `.desuq-claims/<its device ID>.json`, in each
+folder it marks something in, and nothing else writes it
+(`lib/api/api_claims.go`). One writer per file means the claims can never
+conflict among themselves, which in the feature that exists to prevent
+conflicts would be a poor joke. They are ordinary files in the folder, so they
+reach exactly the people the folder is shared with, over the connection that
+already exists: no new protocol, no server, nothing to configure. When a
+device has nothing marked, its file is deleted rather than left empty.
+
+**Who wrote a claim comes from the index, never from the file name.** Anybody
+sharing the folder can create any file in it, including one named after
+somebody else. A claims file is believed only when the global index's
+`ModifiedBy` is the device it is named for -- our own included, because a
+forged "you" would otherwise be kept and re-sent the next time we mark
+something. Verified on a pair: B wrote a file in A's name; neither side
+believed it, and A's next mark replaced it rather than extending it.
+
+It has to survive the rest of the fork:
+
+| Where | What it would have done | What happens |
+| --- | --- | --- |
+| The picker's hold-back (`*`, or an allow-list's `/*`) | Ignored the claims with everything else | `!/.desuq-claims` above the block, written by the picker and added by the tray to folders held back before this existed. Verified: a held-back peer receives the claim and nothing else |
+| The picker's tree | Offered a box that does nothing | Hidden |
+| File counts | "1 of 1 files chosen" about a folder where nothing was picked | Subtracted on the card; the server reports how many claims files each folder holds |
+| History, Conflicts, the activity feed | Listed every mark and unmark as somebody's work | Left out |
+| Explorer | A stray dot-folder in the modellers' asset folder | Hidden, on both sides: attributes do not sync, so the tray hides it where claims arrive |
+| A receive-only copy | A mark that never leaves the machine | Not offered; marks from others still arrive and show |
+
+### Found on the way: a peer who keeps part of the folder "had the same files"
+
+Looking at a pair where B had picked one texture out of six, A's screen said
+*Yuki Laptop has the same files as you*. Completion reads 100% for B, because
+an ignored file is not needed. The fourth instance of the local-state-lies
+class (§18), and the first seen from the *sending* side. B's own index knows
+the truth -- every file it ignores arrives flagged `FlagLocalRemoteInvalid` --
+so `GET /rest/db/peerheldback` counts those, with sizes from the global entry
+because the peer's entry has its size blanked. The card now says *Yuki keeps
+only part of it -- 5 files are not on their computer (10 MiB)* and the headline
+stops saying "has the same".
+
 ## Recommended configuration
 
 Applied per machine, under *Actions → Advanced → Defaults*:

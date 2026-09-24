@@ -192,6 +192,13 @@ func historySummarise(versions map[string][]versioner.FileVersion, prefix string
 		if len(list) == 0 {
 			continue
 		}
+		// The "I'm working on this" files (api_claims.go) are versioned like
+		// anything else in the folder, one copy per mark and unmark. They are
+		// bookkeeping, not somebody's work, and a History screen listing them
+		// beside the textures would only be noise.
+		if isClaimsPath(name) {
+			continue
+		}
 		res.Files++
 		res.Versions += len(list)
 

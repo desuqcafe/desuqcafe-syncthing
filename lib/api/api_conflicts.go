@@ -224,7 +224,7 @@ func (s *service) conflictScan(cfg config.FolderConfiguration) (conflictFolder, 
 		if f.Deleted || f.Type != protocol.FileInfoTypeFile {
 			continue
 		}
-		if !isConflictName(f.Name) {
+		if !isConflictName(f.Name) || isClaimsPath(f.Name) {
 			continue
 		}
 

@@ -52,6 +52,13 @@ angular.module('syncthing.core')
         // yet. Anchored, so it is the root's business only.
         var ROOT_CATCH_ALL = '/*';
 
+        // Who is working on what. Must match claimsDir in lib/api/api_claims.go
+        // and the tray's line in custom/tray/claims.go, comment included -- the
+        // tray recognises the line as already there by the directory name.
+        var CLAIMS_DIR = '.desuq-claims';
+        var CLAIMS_EXCEPTION = '!/' + CLAIMS_DIR;
+        var CLAIMS_COMMENT = '// Added by desuqcafe Syncthing: who is working on what must arrive even when files are held back';
+
         // Past this many files the whole-tree fetch gets slow and fancytree
         // gets unusable, so the picker drops to directories only. A texture
         // library can easily be six figures.
@@ -185,6 +192,20 @@ angular.module('syncthing.core')
             }
             if (!body.length) {
                 return lines;
+            }
+            // Who is working on what (lib/api/api_claims.go) travels as files
+            // in .desuq-claims, and a block that ends in a catch-all -- the
+            // hold-back "*", or an allow-list's "/*" -- would shut them out
+            // with everything else. Ignore patterns are first match wins, so
+            // the exception goes above the block, outside it: the picker
+            // keeps every line outside its block on a rewrite, and so does
+            // the tray, which adds the same line to folders held back before
+            // this existed (custom/tray/claims.go). Somebody's own line about
+            // the directory, either way round, is left to stand.
+            var catchAll = body.indexOf(STAR) >= 0 || body.indexOf(ROOT_CATCH_ALL) >= 0;
+            var mentioned = lines.some(function (l) { return String(l).indexOf(CLAIMS_DIR) >= 0; });
+            if (catchAll && !mentioned) {
+                lines.push(CLAIMS_COMMENT, CLAIMS_EXCEPTION);
             }
             lines.push(BEGIN);
             lines = lines.concat(body);
@@ -375,6 +396,12 @@ angular.module('syncthing.core')
             var nodes = [];
             var bytes = 0, files = 0;
             (entries || []).forEach(function (entry) {
+                // The claims are bookkeeping, always synced whatever is ticked
+                // (see joinIgnores), so offering them as a choice would be a
+                // box that does nothing.
+                if (!parentPath && entry.name === CLAIMS_DIR) {
+                    return;
+                }
                 if (unsafeName(entry.name || '')) {
                     st.unsafeNames.push((parentPath ? parentPath + '/' : '') +
                         showName(String(entry.name)));
@@ -631,6 +658,15 @@ angular.module('syncthing.core')
                     // root files are real and are in neither.
                     st.totalBytes = (r.data && r.data.bytes) || 0;
                     st.totalFiles = (r.data && r.data.files) || 0;
+                    // The claims directory is in the server's totals but was
+                    // left off the tree; take it out of the totals too, or
+                    // "everything" is never all of them.
+                    entries.forEach(function (e) {
+                        if (e.name === CLAIMS_DIR) {
+                            st.totalBytes = Math.max(0, st.totalBytes - (e.size || 0));
+                            st.totalFiles = Math.max(0, st.totalFiles - (e.files || 0));
+                        }
+                    });
                 } else {
                     built = buildSource(entries, '');
                     st.totalBytes = built.bytes;

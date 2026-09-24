@@ -42,6 +42,7 @@ type options struct {
 	noIcons  bool
 	clear    bool
 	stop     bool
+	claim    bool
 	interval time.Duration
 }
 
@@ -105,6 +106,8 @@ func main() {
 		"Remove the Explorer folder icons this has written, then exit. Works with Syncthing stopped")
 	flag.BoolVar(&opts.stop, "shutdown", false,
 		"Ask a running Syncthing to stop cleanly, wait for it to go, then exit. Used by the installer")
+	flag.BoolVar(&opts.claim, "claim", false,
+		"Mark the files named after the flags as being worked on here, or unmark them if they already are, then exit. Used by Send To")
 	flag.Parse()
 
 	// Log to the Syncthing home directory, where the support bundle and
@@ -142,6 +145,24 @@ func main() {
 	// installer calls this before replacing the binary. See installer.iss.
 	if opts.stop {
 		os.Exit(shutdownRunning(opts.home))
+	}
+
+	// The Send To one-shot (claims.go). Explorer appends the selected files
+	// after the shortcut's own arguments, so they arrive as flag.Args(). It
+	// talks to whatever Syncthing is running and never starts one, and like
+	// the two above it runs before the single-instance check: it is how a
+	// file gets marked while the tray is already up.
+	if opts.claim {
+		var n notifier = nopNotifier{}
+		if !opts.quiet {
+			n = newNotifier(toastAppID, appName)
+		}
+		code := runClaim(opts.home, flag.Args(), n)
+		// The toast is handed to the shell before Notify returns, but give
+		// it a moment before the process that raised it goes.
+		time.Sleep(time.Second)
+		n.Close()
+		os.Exit(code)
 	}
 
 	// Past here the process is long-lived and puts an icon on screen, so it
@@ -287,6 +308,7 @@ func (a *app) onReady() {
 	go a.alerts.watchVersions(a.ctx)
 	go a.alerts.watchConflicts(a.ctx)
 	go a.alerts.watchStale(a.ctx)
+	go a.alerts.watchClaims(a.ctx)
 	if !a.opts.noIcons {
 		go a.watchFolders(a.ctx)
 	}

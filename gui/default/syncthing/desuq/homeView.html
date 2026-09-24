@@ -114,6 +114,34 @@
         <div class="desuq-home-people-note">{{ f.peopleNote }}</div>
       </div>
 
+      <!-- Who is working on what (lib/api/api_claims.go). Somebody else's
+           mark first and loudest: it is what you need to know before opening
+           a file. Your own is a reminder with a way to take it off. -->
+      <ul class="desuq-home-claims" ng-if="f.claims.length">
+        <li class="desuq-home-claim" ng-repeat="c in f.claims track by c.device + c.path"
+            ng-class="{ 'claim-mine': c.mine, 'claim-stale': c.stale }">
+          <span class="fas fa-pencil-alt desuq-home-claim-icon" aria-hidden="true"></span>
+          <span class="desuq-home-claim-text">
+            <b>{{ c.mine ? 'You are' : c.name + ' is' }}</b> working on
+            <span class="desuq-home-claim-path" title="{{ c.path }}">{{ c.path }}</span>
+            <span class="desuq-home-claim-since">{{ claimSince(c.since, c.stale) }}</span>
+          </span>
+          <button type="button" class="btn btn-xs btn-default" ng-if="c.mine"
+                  ng-click="releaseClaim(f.id, c.path)" title="Take the mark off this file">
+            <span class="fas fa-check"></span>&nbsp;Done
+          </button>
+        </li>
+      </ul>
+      <div class="desuq-home-card-reveal-error" ng-if="claimError[f.id]">{{ claimError[f.id] }}</div>
+      <div class="desuq-home-claim-help" ng-if="claimHelp[f.id]">
+        <b>Let the others know before you open a file.</b>
+        In Explorer, right-click the file, choose <b>Send to</b>, then
+        <b>desuqcafe Syncthing - I'm working on this</b>. Everyone you share
+        this folder with sees your name on it, and is warned if they change it
+        too. Send it there again when you are done, or press <b>Done</b> here.
+        Nothing is locked: it is a note to the others, not a lock.
+      </div>
+
       <div class="desuq-home-card-path" title="{{ f.path }}">{{ f.path }}</div>
 
       <!-- The path above is a fact, not an affordance. A button is what a
@@ -263,6 +291,13 @@
         </button>
         <button type="button" class="btn btn-sm btn-default" ng-click="editFolderExisting(folders[f.id])">
           <span class="fas fa-pencil-alt"></span>&nbsp;<span>Settings</span>
+        </button>
+        <!-- Claims are made from Explorer, where the file is, not from here:
+             a browser cannot see the file somebody is about to open. So this
+             only says how. Shown where a mark would reach somebody. -->
+        <button type="button" class="btn btn-sm btn-default" ng-if="f.canClaim && f.people.length"
+                ng-click="claimHelp[f.id] = !claimHelp[f.id]" aria-expanded="{{ !!claimHelp[f.id] }}">
+          <span class="fas fa-bullhorn"></span>&nbsp;<span>Working on a file?</span>
         </button>
 
         <!-- Two capabilities that had no entry point outside upstream's

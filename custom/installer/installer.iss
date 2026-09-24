@@ -125,6 +125,21 @@ Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppBinary}-tray.exe"; \
     WorkingDir: "{app}"; Tasks: startupicon; \
     Comment: "Run {#MyAppName} in the notification area"
 
+; "I'm working on this" -- right-click a file in Explorer, Send to. The claim
+; is made from where the file is, because that is where a modeller is when they
+; decide to open it; a browser cannot see the file at all. Sending the same
+; file again takes the mark off, and the toast says which way it went. See
+; custom/tray/claims.go.
+;
+; A Send To entry is an ordinary shortcut in a per-user folder, not a shell
+; extension: no DLL is loaded into Explorer, which given the tray's history
+; with Defender (DEPLOYMENT-3D-TEAM.md section 20) is the point. Explorer
+; appends the selected files after the parameters below.
+Name: "{usersendto}\{#MyAppName} - I'm working on this"; Filename: "{app}\{#MyAppBinary}-tray.exe"; \
+    Parameters: "-home=""{localappdata}\{#MyDataDir}"" -claim"; \
+    WorkingDir: "{app}"; \
+    Comment: "Tell everyone you share this file with that you are working on it"
+
 [Run]
 ; Seed config.xml with the defaults this team needs -- staggered versioning, a
 ; 20 GB disk reserve, the Blender ignore set -- before Syncthing ever starts,

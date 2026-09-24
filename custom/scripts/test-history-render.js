@@ -85,6 +85,9 @@ const desuqBytes = window.desuqBytes;
 const world = {
     diskEvents: [],
     sinceEvents: {},
+    // The newest id in the buffer, for the restart check; null is empty.
+    newest: null,
+    newestAsked: 0,
     archive: {},
     fileVersions: {},
     conflicts: { total: 0, folders: [] },
@@ -119,6 +122,11 @@ angular.module('syncthing.core')
             }
             if (url === 'rest/events/disk') {
                 const p = (config && config.params) || {};
+                // "Where has the buffer got to": the newest one only.
+                if (p.limit === 1) {
+                    world.newestAsked++;
+                    return reply(world.newest === null ? [] : [{ id: world.newest }]);
+                }
                 if (p.since !== undefined) {
                     return reply(world.sinceEvents[p.since] || []);
                 }
@@ -388,6 +396,59 @@ function render() {
         text.indexOf('since this computer started') !== -1);
     check('and points at the tab that survives a restart',
         text.indexOf('Older versions') !== -1);
+}
+
+{
+    // Marking a file "I'm working on this" writes a claims file. That is not
+    // somebody's work and must not appear as a change.
+    world.diskEvents = [
+        ev(1, { data: { folder: 'assets', label: 'Shared Art', action: 'modified', type: 'file', path: '.desuq-claims\\ABC.json', modifiedBy: KAI_SHORT } })
+    ];
+    svc.close();
+    const el = render();
+    svc.open('', 'changes');
+    flush();
+    check('a claims file changing is not a row', el.text().indexOf('Nothing has changed') !== -1,
+        el.text().slice(0, 80));
+}
+
+{
+    // The restart the guard above cannot see. Asked for events after 4211, a
+    // restarted daemon answers NOTHING -- lib/events waits for its counter to
+    // pass 4211 first -- so resetIfRestarted never gets an event to look at
+    // and the feed silently stops. Found by reading lib/events/events.go
+    // Since(); the stub used to hand back ids from 1, which the server never
+    // does.
+    world.diskEvents = [
+        ev(4210, { data: { folder: 'assets', label: 'Shared Art', action: 'modified', type: 'file', path: 'a.blend', modifiedBy: KAI_SHORT } }),
+        ev(4211, { data: { folder: 'assets', label: 'Shared Art', action: 'modified', type: 'file', path: 'b.blend', modifiedBy: KAI_SHORT } })
+    ];
+    world.sinceEvents = {};
+    world.newest = 2;
+    world.newestAsked = 0;
+    svc.close();
+    const el = render();
+    svc.open('', 'changes');
+    flush();
+    check('the feed starts where the buffer is', svc._lastID() === 4211, String(svc._lastID()));
+
+    // The daemon restarts. Its buffer now holds ids 1 and 2.
+    world.diskEvents = [
+        ev(1, { data: { folder: 'assets', label: 'Shared Art', action: 'modified', type: 'file', path: 'after_restart.blend', modifiedBy: KAI_SHORT } }),
+        ev(2, { data: { folder: 'assets', label: 'Shared Art', action: 'modified', type: 'file', path: 'after_restart2.blend', modifiedBy: KAI_SHORT } })
+    ];
+    svc._pollChanges();
+    flush();
+    flush();
+    check('an empty poll asks where the buffer has got to', world.newestAsked === 1, String(world.newestAsked));
+    check('and a buffer behind us is a restart: the feed starts again', svc._lastID() === 2, String(svc._lastID()));
+    check('showing what happened after it', el.text().indexOf('after_restart') !== -1, el.text().slice(0, 120));
+
+    // A quiet afternoon is not a restart, and is not asked about every poll.
+    svc._pollChanges();
+    flush();
+    check('the check is throttled', world.newestAsked === 1, String(world.newestAsked));
+    svc.close();
 }
 
 

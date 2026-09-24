@@ -196,7 +196,13 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
   (`lib/syncthing/syncthing.go:143`) and 1000 events deep, so `since=` works
   and there is no mask to mismatch. What it does have is a **restart**: the
   buffer is memory only, and IDs begin again at 1, so a stored `since` must be
-  dropped the moment an ID goes backwards. Two more things it will not tell
+  dropped the moment an ID goes backwards. **And polling will never show you
+  that happen**: `Since()` in `lib/events` waits for its counter to pass the
+  cursor before returning anything, so `since=4211` against a restarted daemon
+  answers *empty*, every time, until 4211 more events exist. Ask for the
+  newest with `since=0&limit=1&timeout=0` and compare. The History feed froze
+  on exactly this until wave 15; `checkRestart` in `history.js` and
+  `checkCollisions` in `custom/tray/claims.go` are the two readers. Two more things it will not tell
   you: **the first scan emits one event per existing file** (verified — six
   files, six events, one timestamp), which overruns 1000 on a real asset
   folder; and **`action` is only ever `modified` or `deleted`**
@@ -221,6 +227,18 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
   to go" about exactly this. For a connected peer `unknown` means not
   accepted; for a disconnected one it means nothing, since the states are
   dropped on disconnect. `shareOf` in `home.js`.
+- **A peer's completion reads 100% while they hold almost everything back.**
+  An ignored file is not needed, so `/rest/db/completion` for a peer who took
+  one file of six is complete. Their index says otherwise: ignored files
+  arrive flagged `FlagLocalRemoteInvalid`, with `Size` blanked, so count them
+  and take sizes from the global entry -- `/rest/db/peerheldback`
+  (`lib/model/desuq_peerheldback.go`). Sixth instance of the local-state-lies
+  class, and the first seen from the sending side.
+- **`.desuq-claims/` is a directory of the fork's own inside synced
+  folders.** "I'm working on this", one file per device
+  (`lib/api/api_claims.go`). Anything new that lists, counts, versions or
+  ignores a folder's contents has to decide what to do about it -- see the
+  table in `DEPLOYMENT-3D-TEAM.md` §25 for what every existing view does.
 - **The page loads no Fancytree skin.** Upstream uses Fancytree only in table
   mode, so list mode -- the selective-sync picker -- rendered every row with a
   browser-default bullet and 40px indents until `selective.css` styled the

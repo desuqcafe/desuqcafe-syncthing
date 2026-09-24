@@ -78,6 +78,13 @@ angular.module('syncthing.core')
             // /rest/system/tray: whether the notification-area app is still
             // on disk. null until the first answer.
             tray: null,
+            // folder id -> { rows, canClaim, reason, files, bytes } from
+            // /rest/folder/claims: who is working on what, and how much of
+            // the folder's file count is the claims themselves.
+            claims: {},
+            // folder id -> device id -> { files, bytes } from
+            // /rest/db/peerheldback: what each peer is choosing not to keep.
+            peerHeld: {},
             // {tone, text, detail} -- tone drives colour and weight, nothing else.
             headline: { tone: 'busy', text: 'Checking…', detail: '' }
         };
@@ -175,8 +182,9 @@ angular.module('syncthing.core')
         // How one other person stands on one folder. `remoteState` is the field
         // that distinguishes "behind" from "has not accepted the share at all",
         // which look identical if you only read the percentage.
-        function shareOf(peer, completion) {
+        function shareOf(peer, completion, held) {
             var c = completion || {};
+            var h = held || {};
             var pct = typeof c.completion === 'number' ? c.completion : null;
             var kind;
             // 'unknown' from a *connected* peer is also "not accepted", and it
@@ -196,6 +204,13 @@ angular.module('syncthing.core')
                 kind = 'paused';
             } else if (pct === null) {
                 kind = 'unknown';
+            } else if (pct >= 100 && (h.files || 0) > 0) {
+                // Complete by completion's measure, and holding files back by
+                // their own index: an ignored file is not needed, so a peer
+                // who took one texture out of six reads 100%. Their index
+                // says which files they marked invalid, which is what
+                // ignoring does (lib/model/desuq_peerheldback.go).
+                kind = 'partial';
             } else if (pct >= 100) {
                 kind = 'complete';
             } else {
@@ -208,7 +223,9 @@ angular.module('syncthing.core')
                 connected: peer.connected,
                 kind: kind,
                 pct: pct === null ? null : Math.max(0, Math.min(100, Math.round(pct))),
-                needBytes: c.needBytes || 0
+                needBytes: c.needBytes || 0,
+                heldFiles: h.files || 0,
+                heldBytes: h.bytes || 0
             };
         }
 
@@ -224,17 +241,41 @@ angular.module('syncthing.core')
             // whole folder, this computer has the part somebody picked. Say
             // what is actually true instead, and in the direction that
             // matters -- their copy is the complete one.
-            if (heldBack > 0) {
-                var all = people.filter(function (s) { return s.kind === 'complete'; })
-                    .map(function (s) { return s.name; });
-                if (all.length === people.length) {
-                    // "Part of it" over nothing at all is the picker closed
-                    // without a choice; say that instead.
-                    return joinNames(all) + ' ' + plural(all.length, 'has', 'have') +
-                        ' the whole folder. ' + (localFiles === 0
-                            ? 'You have not picked anything from it yet.'
-                            : 'You have chosen part of it.');
-                }
+            // The same is true the other way round: a peer can hold files back
+            // too, and completion reads 100% for them all the same. Both
+            // directions are said, and neither is ever "the same files".
+            var whole = people.filter(function (s) { return s.kind === 'complete'; })
+                .map(function (s) { return s.name; });
+            var part = people.filter(function (s) { return s.kind === 'partial'; });
+            var partNames = part.map(function (s) { return s.name; });
+            var partSentence = '';
+            if (part.length === 1) {
+                partSentence = part[0].name + ' keeps only part of it — ' + part[0].heldFiles + ' ' +
+                    plural(part[0].heldFiles, 'file is', 'files are') + ' not on their computer (' +
+                    size(part[0].heldBytes) + ').';
+            } else if (part.length) {
+                partSentence = joinNames(partNames) + ' keep only part of it.';
+            }
+            var settledAll = whole.length + part.length === people.length;
+
+            if (heldBack > 0 && settledAll) {
+                // "Part of it" over nothing at all is the picker closed
+                // without a choice; say that instead.
+                var you = localFiles === 0
+                    ? 'You have not picked anything from it yet.'
+                    : 'You have chosen part of it.';
+                return [
+                    whole.length ? joinNames(whole) + ' ' + plural(whole.length, 'has', 'have') + ' the whole folder.' : '',
+                    partSentence,
+                    you
+                ].filter(Boolean).join(' ');
+            }
+            if (settledAll && part.length) {
+                return [
+                    partSentence,
+                    whole.length ? joinNames(whole) + ' ' + plural(whole.length, 'has', 'have') +
+                        ' the same files as you.' : ''
+                ].filter(Boolean).join(' ');
             }
             var by = function (k) {
                 return people.filter(function (s) { return s.kind === k; })
@@ -300,8 +341,15 @@ angular.module('syncthing.core')
                 return joinNames(paused) + ' ' + plural(paused.length, 'is', 'are') + ' paused on their computer.';
             }
             var has = pick('complete');
+            var part = pick('partial');
+            if (has.length && part.length) {
+                return 'Has ' + joinNames(has) + ', and part of ' + joinNames(part) + '.';
+            }
             if (has.length) {
                 return 'Has ' + joinNames(has) + '.';
+            }
+            if (part.length) {
+                return 'Has part of ' + joinNames(part) + '.';
             }
             return 'Sharing ' + joinNames(shares.map(function (s) { return s.label; })) + '.';
         }
@@ -309,6 +357,8 @@ angular.module('syncthing.core')
         function shareTitle(s) {
             switch (s.kind) {
                 case 'complete':    return s.name + ' has all of this folder.';
+                case 'partial':     return s.name + ' keeps part of this folder — ' + s.heldFiles + ' ' +
+                    plural(s.heldFiles, 'file', 'files') + ' (' + size(s.heldBytes) + ') are not on their computer.';
                 case 'behind':      return s.name + ' has ' + s.pct + '% — ' + size(s.needBytes) + ' still to reach them.';
                 case 'notaccepted': return s.name + ' has not accepted this folder yet.';
                 case 'paused':      return s.name + ' has this folder paused.';
@@ -524,12 +574,27 @@ angular.module('syncthing.core')
                 };
             }
 
+            // Somebody who keeps only part of a folder does not "have the
+            // same", however complete completion says they are.
+            var partly = [];
+            active.forEach(function (f) {
+                f.people.forEach(function (s) {
+                    if (s.kind === 'partial' && partly.indexOf(s.name) === -1) { partly.push(s.name); }
+                });
+            });
+            everyone = everyone.filter(function (n) { return partly.indexOf(n) === -1; });
+            var others = [];
+            if (everyone.length) {
+                others.push(joinNames(everyone) + ' ' + plural(everyone.length, 'has', 'have') + ' the same');
+            }
+            if (partly.length) {
+                others.push(joinNames(partly) + ' ' + plural(partly.length, 'keeps', 'keep') + ' only part of it');
+            }
             return {
                 tone: TONE.good,
                 text: 'Everything is here.',
                 detail: files + ' ' + plural(files, 'file', 'files') + ', ' + size(bytes) +
-                    (everyone.length ? ' — and ' + joinNames(everyone) + ' ' +
-                        plural(everyone.length, 'has', 'have') + ' the same' : '')
+                    (others.length ? ' — ' + others.join('; ') : '')
             };
         }
 
@@ -630,7 +695,8 @@ angular.module('syncthing.core')
                         var f = res.cfg;
                         var s = statuses[f.id] || {};
                         var people = res.sharedIDs.map(function (id) {
-                            return shareOf(peerByID[id], (completions[f.id] || {})[id]);
+                            return shareOf(peerByID[id], (completions[f.id] || {})[id],
+                                (st.peerHeld[f.id] || {})[id]);
                         });
                         people.forEach(function (p) {
                             p.title = shareTitle(p);
@@ -654,6 +720,18 @@ angular.module('syncthing.core')
                         var heldBackBytes = settled
                             ? Math.max(0, (s.globalBytes || 0) - (s.localBytes || 0)) : 0;
 
+                        // The claims files (lib/api/api_claims.go) are in the
+                        // folder like anything else, so Syncthing counts them.
+                        // They are bookkeeping, not somebody's work: "1 of 1
+                        // files chosen" about a folder where nothing was
+                        // picked and Yuki's claim arrived would be the local
+                        // state lying again. They are on both sides of the
+                        // count, so heldBack is unchanged.
+                        var fc = st.claims[f.id] || {};
+                        var claimFiles = fc.files || 0, claimBytes = fc.bytes || 0;
+                        var localFiles = Math.max(0, (s.localFiles || 0) - claimFiles);
+                        var localBytes = Math.max(0, (s.localBytes || 0) - claimBytes);
+
                         return {
                             id: f.id,
                             label: f.label || f.id,
@@ -663,10 +741,17 @@ angular.module('syncthing.core')
                             state: folderState(f, s),
                             needBytes: s.needBytes || 0,
                             needFiles: s.needFiles || 0,
-                            localBytes: s.localBytes || 0,
-                            localFiles: s.localFiles || 0,
-                            globalBytes: s.globalBytes || 0,
-                            globalFiles: s.globalFiles || 0,
+                            localBytes: localBytes,
+                            localFiles: localFiles,
+                            globalBytes: Math.max(0, (s.globalBytes || 0) - claimBytes),
+                            globalFiles: Math.max(0, (s.globalFiles || 0) - claimFiles),
+                            // Who is working on what here, others first:
+                            // theirs is what you need to know before opening
+                            // anything, yours is only a reminder.
+                            claims: (fc.rows || []).slice().sort(function (a, b) {
+                                return (a.mine === b.mine) ? 0 : (a.mine ? 1 : -1);
+                            }),
+                            canClaim: fc.canClaim !== false,
                             failedItems: s.errors || 0,
                             // Why a stopped folder stopped. Upstream puts the
                             // sentence in the summary and nothing showed it,
@@ -679,13 +764,15 @@ angular.module('syncthing.core')
                             // Who this folder is shared with, and where each of
                             // them has actually got to.
                             people: people,
-                            peopleNote: peopleNote(people, heldBack, s.localFiles || 0)
+                            peopleNote: peopleNote(people, heldBack, localFiles)
                         };
                     });
 
                     refreshReclaimable(st.folders);
                     refreshConflicts();
                     refreshTray();
+                    refreshClaims();
+                    refreshPeerHeld(st.folders);
 
                     peers.forEach(function (p) { p.note = peerNote(p.shares); });
                     st.peers = peers;
@@ -785,6 +872,114 @@ angular.module('syncthing.core')
             conflictsAsked = 0;
         }
 
+        // ------------------------------------------------- what peers keep
+        //
+        // Completion reads 100% for a peer who took one file of six, because
+        // an ignored file is not needed. /rest/db/peerheldback reads their own
+        // index instead, which walks it -- so only for people who look
+        // complete, at most once a minute, within the same cap as completion.
+        var PEER_HELD_MS = 60000;
+        var peerHeldAsked = 0;
+
+        function refreshPeerHeld(folders) {
+            var now = Date.now();
+            if (peerHeldAsked && now - peerHeldAsked < PEER_HELD_MS) {
+                return;
+            }
+            peerHeldAsked = now;
+            var budget = MAX_COMPLETION_REQUESTS;
+            folders.forEach(function (f) {
+                f.people.forEach(function (s) {
+                    if ((s.kind !== 'complete' && s.kind !== 'partial') || budget-- <= 0) {
+                        return;
+                    }
+                    $http.get(urlbase + '/db/peerheldback',
+                        { params: { folder: f.id, device: s.deviceID } })
+                        .then(function (r) {
+                            (st.peerHeld[f.id] || (st.peerHeld[f.id] = {}))[s.deviceID] = {
+                                files: (r.data && r.data.files) || 0,
+                                bytes: (r.data && r.data.bytes) || 0
+                            };
+                        }, angular.noop);
+                });
+            });
+        }
+
+        // ----------------------------------------------------------- claims
+        //
+        // "I'm working on this file" (lib/api/api_claims.go). Faster than the
+        // other probes: a claim is only worth anything if it is seen before
+        // the other person opens the file. Still a handful of small local
+        // reads per folder, not a walk.
+        var CLAIMS_MS = 10000;
+        var claimsAsked = 0;
+
+        function takeClaims(data) {
+            var next = {};
+            ((data && data.folders) || []).forEach(function (f) {
+                next[f.folder] = {
+                    rows: [], canClaim: f.canClaim, reason: f.reason || '',
+                    files: f.files || 0, bytes: f.bytes || 0
+                };
+            });
+            ((data && data.claims) || []).forEach(function (c) {
+                (next[c.folder] || (next[c.folder] = { rows: [], files: 0, bytes: 0 })).rows.push(c);
+            });
+            return next;
+        }
+
+        function refreshClaims() {
+            var now = Date.now();
+            if (claimsAsked && now - claimsAsked < CLAIMS_MS) {
+                return;
+            }
+            claimsAsked = now;
+            $http.get(urlbase + '/folder/claims')
+                .then(function (r) { st.claims = takeClaims(r.data); })
+                .catch(angular.noop);
+        }
+
+        // Done with a file. Answers '' on success and a sentence otherwise;
+        // the card is redrawn from the server's answer rather than guessed.
+        function releaseClaim(folderID, path) {
+            return $http.post(urlbase + '/folder/claim',
+                { folder: folderID, path: path, release: true })
+                .then(function (r) {
+                    var one = takeClaims(r.data)[folderID];
+                    if (one) {
+                        st.claims[folderID] = one;
+                    }
+                    claimsAsked = 0;
+                    return '';
+                }, function () {
+                    return 'Could not take that mark off. Try again in a moment.';
+                });
+        }
+
+        // How long ago, in the words a person would use. Coarse on purpose:
+        // "since 14:20" today, a weekday within the week, a date beyond.
+        function claimSince(iso, stale) {
+            var t = new Date(iso);
+            if (isNaN(t.getTime())) {
+                return '';
+            }
+            var now = new Date();
+            var days = Math.floor((now - t) / 86400000);
+            var hhmm = ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2);
+            var out;
+            if (t.toDateString() === now.toDateString()) {
+                out = 'since ' + hhmm;
+            } else if (days < 6) {
+                out = 'since ' + ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][t.getDay()];
+            } else {
+                out = 'since ' + t.toLocaleDateString();
+            }
+            if (stale) {
+                out += ' — ' + days + ' days, may have been forgotten';
+            }
+            return out;
+        }
+
         // ------------------------------------------------------------- tray
         //
         // Whether the notification-area app is still on disk. A stat on the
@@ -873,6 +1068,8 @@ angular.module('syncthing.core')
             reveal: reveal,
             reclaim: reclaim,
             repair: repair,
+            releaseClaim: releaseClaim,
+            claimSince: claimSince,
             markReclaimStale: markReclaimStale,
             markConflictsStale: markConflictsStale,
             pollMs: POLL_MS,
@@ -971,6 +1168,21 @@ angular.module('syncthing.core')
                 scope.reveal = function (folderID) {
                     desuqHome.reveal(folderID).then(function (msg) {
                         scope.revealError[folderID] = msg;
+                    });
+                };
+
+                // Who is working on what. Keyed by folder, like revealError.
+                scope.claimSince = desuqHome.claimSince;
+                scope.claimError = {};
+                scope.claimHelp = {};
+                scope.releaseClaim = function (folderID, path) {
+                    desuqHome.releaseClaim(folderID, path).then(function (msg) {
+                        scope.claimError[folderID] = msg;
+                        if (!msg) {
+                            // Redraw now rather than at the next poll, so the
+                            // row goes when the button is pressed.
+                            desuqHome.refresh();
+                        }
                     });
                 };
 
