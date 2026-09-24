@@ -101,7 +101,10 @@ jobs:
             throw "expected exactly one installer in custom/dist, found $($setup.Count)"
           }
           $h = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLower()
-          "$h  $($setup.Name)" | Set-Content custom/dist/SHA256SUMS.txt
+          # LF, not the CRLF Set-Content writes on Windows: `sha256sum -c`
+          # keeps the CR as part of the file name and reports the installer
+          # missing, which reads as a tampered download.
+          [IO.File]::WriteAllText("$PWD/custom/dist/SHA256SUMS.txt", "$h  $($setup.Name)`n")
           Get-Content custom/dist/SHA256SUMS.txt
 
       # The artifact keeps everything, including the bare binaries: it is for
