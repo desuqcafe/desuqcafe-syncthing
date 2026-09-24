@@ -208,9 +208,10 @@ func sendFailureReports(ctx context.Context, reports []contract.FailureReport, u
 
 	client := &http.Client{
 		Transport: &http.Transport{
-			DialContext:     dialer.DialContext,
-			Proxy:           http.ProxyFromEnvironment,
-			TLSClientConfig: tlsutil.SecureDefaultWithTLS12(),
+			DialContext:       dialer.DialContext,
+			Proxy:             http.ProxyFromEnvironment,
+			DisableKeepAlives: true, // a new client is used for each send, so don't keep the connection open
+			TLSClientConfig:   tlsutil.SecureDefaultWithTLS12(),
 		},
 	}
 
@@ -222,6 +223,7 @@ func sendFailureReports(ctx context.Context, reports []contract.FailureReport, u
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", build.UserAgent())
 
 	resp, err := client.Do(req)
 	if err != nil {
