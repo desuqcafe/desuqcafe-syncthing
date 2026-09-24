@@ -62,10 +62,24 @@ try {
     git log --oneline --no-decorate "HEAD..$Ref" | Select-Object -First 40
 
     # Warn when upstream touched a file the fork also modifies. These are the
-    # only places a conflict can realistically come from.
-    $ours = @('build.go')
+    # only places a conflict can realistically come from. The list is read
+    # from the register in CUSTOMIZATIONS.md rather than kept here, so it
+    # cannot fall behind it: every row of the "File | Change | Conflict risk"
+    # table whose first cell is a backticked path.
+    $register = Get-Content (Join-Path $RepoRoot 'custom\CUSTOMIZATIONS.md')
+    $inTable = $false
+    $ours = foreach ($line in $register) {
+        if ($line -match '^\|\s*File\s*\|\s*Change\s*\|') { $inTable = $true; continue }
+        if ($inTable -and $line -notmatch '^\|') { break }
+        if ($inTable -and $line -match '^\|\s*`([^`]+)`') { $Matches[1] }
+    }
+    $ours = @($ours | Sort-Object -Unique)
     $touched = git diff --name-only "HEAD...$Ref"
-    $overlap = $ours | Where-Object { $touched -contains $_ }
+    # A register entry ending in "/" is a directory (lib/versioner/) and
+    # matches anything beneath it.
+    $overlap = foreach ($t in $touched) {
+        if ($ours | Where-Object { $t -eq $_ -or ($_.EndsWith('/') -and $t.StartsWith($_)) }) { $t }
+    }
     if ($overlap) {
         Write-Host "`nHeads up - upstream changed file(s) this fork also patches:" -ForegroundColor Yellow
         $overlap | ForEach-Object { Write-Host "  $_" -ForegroundColor Yellow }
