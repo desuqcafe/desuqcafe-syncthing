@@ -202,6 +202,21 @@ console.log('\n-- holding files back on purpose is not "everything is here" eith
     check('gives the size of it', /29 MiB|30 MiB/.test(h.detail), h.detail);
     check('names the way to get them', /Choose files/.test(h.detail), h.detail);
 }
+// Nothing chosen at all: closing the picker holds everything back, and Resume
+// then runs a folder that fetches nothing. Seen on a live pair, where it read
+// "Everything you chose is here" over zero files nobody had chosen.
+{
+    const h = H([folder({
+        localFiles: 0, localBytes: 0, globalFiles: 9,
+        heldBack: 9, heldBackBytes: 14680064, people: [person()]
+    })], [peer()], []);
+    check('nothing picked asks for a pick', h.tone === 'attention', h.tone);
+    check('and says nothing is picked', /Nothing has been picked yet/.test(h.text), h.text);
+    check('never "everything you chose"', !/Everything you chose/.test(h.text));
+    check('counts what is waiting', /9 files are available \(14 MiB\) and none are/.test(h.detail), h.detail);
+    const one = H([folder({ localFiles: 0, localBytes: 0, globalFiles: 1, heldBack: 1, heldBackBytes: 1024 })], [peer()], []);
+    check('one file reads as one', /1 file is available \(1 KiB\) and it is not/.test(one.detail), one.detail);
+}
 
 console.log('\n-- a share nobody accepted is not "everything is here"');
 // This is the bug the first version of this screen shipped with: locally idle,
@@ -313,6 +328,14 @@ console.log('\n-- a share that was never accepted is not 0%');
     check('kind is notaccepted', s.kind === 'notaccepted', s.kind);
     const b = svc._shareOf(peer(), { completion: 0, remoteState: 'valid' });
     check('a real 0% is behind', b.kind === 'behind', b.kind);
+    // What the server actually answers when a folder is shared with somebody
+    // already connected: their last cluster config predates it, so 'unknown',
+    // with the whole folder as need. Seen on a live pair, where it read as
+    // "catching up -- 12 MiB to go" about a share nobody had accepted.
+    const u = svc._shareOf(peer(), { completion: 0, remoteState: 'unknown', needBytes: 12582912 });
+    check('unknown from a connected peer is notaccepted', u.kind === 'notaccepted', u.kind);
+    const d = svc._shareOf(peer({ connected: false }), { completion: 0, remoteState: 'unknown' });
+    check('but from a disconnected one it claims nothing', d.kind !== 'notaccepted', d.kind);
 }
 
 console.log('\n-- initials distinguish two people with the same first name');
@@ -366,6 +389,10 @@ console.log('\n-- the note under the strip says what the circles mean');
     check('never claims a match while holding files back',
         /whole folder/.test(N([person()], 22)) && !/same files as you/.test(N([person()], 22)),
         N([person()], 22));
+    check('says part of it when part was picked', /chosen part of it/.test(N([person()], 22, 1)), N([person()], 22, 1));
+    check('and not when nothing was',
+        /not picked anything/.test(N([person()], 9, 0)) && !/chosen part/.test(N([person()], 9, 0)),
+        N([person()], 9, 0));
 }
 
 

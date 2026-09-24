@@ -207,6 +207,20 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
   `lib/api/api_reclaim.go` compares the global index against a real `Lstat`
   rather than reading local state. Fourth instance of the same class as
   `dirsonly=1` reporting every directory as zero bytes.
+- **`/rest/db/completion`'s `remoteState` is `unknown`, not `notSharing`,
+  for the commonest unaccepted share.** A peer's folder states are recorded
+  only when their cluster config arrives -- at connect, and when *their*
+  config changes. Share a new folder with somebody already connected and
+  their last config predates it; a pending offer changes nothing on their
+  side, so nothing is resent, and it stays `unknown` (the map's zero value)
+  until they accept or reconnect. The main screen said "catching up -- 12 MiB
+  to go" about exactly this. For a connected peer `unknown` means not
+  accepted; for a disconnected one it means nothing, since the states are
+  dropped on disconnect. `shareOf` in `home.js`.
+- **The page loads no Fancytree skin.** Upstream uses Fancytree only in table
+  mode, so list mode -- the selective-sync picker -- rendered every row with a
+  browser-default bullet and 40px indents until `selective.css` styled the
+  `<ul>`/`<li>` itself. jsdom cannot see this; it was found in Chrome.
 - **`/rest/folder/versions` has no paging and no filter.** It answers with
   `map[filename][]FileVersion` — every version of every file, in one
   document. Staggered versioning at thirty days keeps roughly fifty copies per

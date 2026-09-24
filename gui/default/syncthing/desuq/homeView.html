@@ -54,7 +54,7 @@
         </div>
         <div class="desuq-home-chip" ng-class="'chip-' + f.state">
           <span ng-switch="f.state">
-            <span ng-switch-when="idle">Up to date</span>
+            <span ng-switch-when="idle">{{ f.heldBack > 0 && !f.localFiles ? 'Nothing picked' : 'Up to date' }}</span>
             <span ng-switch-when="syncing">Getting files</span>
             <span ng-switch-when="scanning">Checking</span>
             <span ng-switch-when="scan-waiting">Checking soon</span>

@@ -179,7 +179,18 @@ angular.module('syncthing.core')
             var c = completion || {};
             var pct = typeof c.completion === 'number' ? c.completion : null;
             var kind;
-            if (c.remoteState === 'notSharing') {
+            // 'unknown' from a *connected* peer is also "not accepted", and it
+            // is the common case. The server records a peer's folder states
+            // only when their cluster config arrives -- at connect, and when
+            // their config changes. Share a new folder with somebody already
+            // connected and their last config predates it; a pending offer
+            // changes nothing on their side, so nothing new is sent, and the
+            // state stays 'unknown' until they accept or reconnect. Accepting
+            // *does* send one, so while connected, 'unknown' cannot mean they
+            // have it. Disconnected, the states are dropped and it means
+            // nothing at all -- left to the percentage below.
+            if (c.remoteState === 'notSharing' ||
+                (c.remoteState === 'unknown' && peer.connected)) {
                 kind = 'notaccepted';
             } else if (c.remoteState === 'paused' || peer.paused) {
                 kind = 'paused';
@@ -204,7 +215,7 @@ angular.module('syncthing.core')
         // One sentence under the people strip. The strip says who; this says
         // what it means, because a row of coloured initials is a legend nobody
         // was given.
-        function peopleNote(people, heldBack) {
+        function peopleNote(people, heldBack, localFiles) {
             if (!people.length) {
                 return 'Not shared with anybody yet.';
             }
@@ -217,8 +228,12 @@ angular.module('syncthing.core')
                 var all = people.filter(function (s) { return s.kind === 'complete'; })
                     .map(function (s) { return s.name; });
                 if (all.length === people.length) {
+                    // "Part of it" over nothing at all is the picker closed
+                    // without a choice; say that instead.
                     return joinNames(all) + ' ' + plural(all.length, 'has', 'have') +
-                        ' the whole folder. You have chosen part of it.';
+                        ' the whole folder. ' + (localFiles === 0
+                            ? 'You have not picked anything from it yet.'
+                            : 'You have chosen part of it.');
                 }
             }
             var by = function (k) {
@@ -483,6 +498,22 @@ angular.module('syncthing.core')
             var held = active.reduce(function (a, f) { return a + f.heldBack; }, 0);
             if (held > 0) {
                 var heldBytes = active.reduce(function (a, f) { return a + f.heldBackBytes; }, 0);
+                // Nothing chosen at all. "Everything you chose is here" over
+                // zero files is true only in the way that misleads, and the
+                // way to get here is closing the picker without choosing:
+                // dismissed() holds everything back and pauses, and Resume
+                // then runs a folder that fetches nothing. Somebody meant to
+                // pick and has not, so it is their move -- attention, not the
+                // quiet line.
+                if (files === 0) {
+                    return {
+                        tone: TONE.attention,
+                        text: 'Nothing has been picked yet.',
+                        detail: held + ' ' + plural(held, 'file is', 'files are') + ' available (' +
+                            size(heldBytes) + ') and ' + (held === 1 ? 'it is not' : 'none are') +
+                            ' on this computer yet. Use Choose files to pick what you want here.'
+                    };
+                }
                 return {
                     tone: TONE.good,
                     text: 'Everything you chose is here.',
@@ -648,7 +679,7 @@ angular.module('syncthing.core')
                             // Who this folder is shared with, and where each of
                             // them has actually got to.
                             people: people,
-                            peopleNote: peopleNote(people, heldBack)
+                            peopleNote: peopleNote(people, heldBack, s.localFiles || 0)
                         };
                     });
 

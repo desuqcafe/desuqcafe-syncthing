@@ -177,6 +177,26 @@
     background: var(--v-surface-sunken, #fcfaff);
 }
 
+/* The list itself. Fancytree renders list mode as nested <ul>/<li> and leaves
+   their look to a skin stylesheet -- which this page does not load, because
+   upstream only ever uses Fancytree in table mode (the restore dialog). So
+   without these, every row carried a browser-default bullet and each level
+   indented by 40px. Seen only in a real browser; the render test cannot. */
+.desuq-pick-treewrap ul.fancytree-container,
+.desuq-pick-treewrap ul.fancytree-container ul,
+.desuq-pick-treewrap ul.fancytree-container li {
+    list-style: none;
+    margin: 0;
+}
+
+.desuq-pick-treewrap ul.fancytree-container {
+    padding: 0;
+}
+
+.desuq-pick-treewrap ul.fancytree-container ul {
+    padding: 0 0 0 16px;
+}
+
 /* Rows. Kept tight -- this list is routinely hundreds long and the density is
    what makes it scannable. */
 .desuq-pick-treewrap .fancytree-node {
