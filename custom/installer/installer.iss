@@ -85,6 +85,11 @@ Source: "..\dist\{#MyAppBinary}-tray.exe"; DestDir: "{app}"; Flags: ignoreversio
 ; Shipped rather than run from a temp dir so it can be re-run by hand later,
 ; e.g. with -Force after the recommended defaults change.
 Source: "..\scripts\seed-config.ps1"; DestDir: "{app}"; Flags: ignoreversion
+; The optional Blender add-on (custom/blender). Shipped, not installed: putting
+; it into Blender means writing into Blender's own settings, per Blender
+; version, and that is the modeller's choice to make -- Edit > Preferences >
+; Add-ons > Install from Disk. The main screen says where it is.
+Source: "..\dist\desuq_syncthing.zip"; DestDir: "{app}\blender"; Flags: ignoreversion
 
 [Icons]
 ; EVERY way in starts the tray, never the daemon directly.

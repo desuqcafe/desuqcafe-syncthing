@@ -194,8 +194,8 @@ Verified empirically against a running instance rather than assumed: a probe
 file placed at `gui/dark/syncthing/desuq/` was served under the dark theme and
 fell back to the `gui/default` copy under violet and light.
 
-Where the fork stands today: **672 inserted lines against 211 deleted**, across
-twenty files. The README is 157 of those insertions and 106 of the
+Where the fork stands today: **673 inserted lines against 211 deleted**, across
+twenty files. The README is 158 of those insertions and 106 of the
 deletions; take it out and the rest of the fork is 514 against 105.
 
 Pinned versions added the nineteenth and twentieth files, `lib/versioner/util.go`

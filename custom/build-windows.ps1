@@ -246,6 +246,29 @@ finally {
     Pop-Location
 }
 
+# --- Blender add-on -------------------------------------------------------
+# custom/blender/desuq_syncthing, zipped with the package folder at the top,
+# which is the shape both of Blender's "Install from Disk" paths accept: an
+# extension (4.2+, blender_manifest.toml) and a legacy add-on (bl_info).
+# Written entry by entry rather than with Compress-Archive so the names use
+# forward slashes and no __pycache__ from a test run gets in.
+Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+$addonSrc = Join-Path $PSScriptRoot 'blender\desuq_syncthing'
+$addonZip = Join-Path $DistDir 'desuq_syncthing.zip'
+if (-not (Test-Path $DistDir)) { New-Item -ItemType Directory -Path $DistDir | Out-Null }
+Remove-Item -LiteralPath $addonZip -Force -EA SilentlyContinue
+$zip = [System.IO.Compression.ZipFile]::Open($addonZip, 'Create')
+try {
+    Get-ChildItem -LiteralPath $addonSrc -File | Where-Object { $_.Extension -in '.py', '.toml' } | ForEach-Object {
+        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+            $zip, $_.FullName, "desuq_syncthing/$($_.Name)", 'Optimal')
+    }
+}
+finally {
+    $zip.Dispose()
+}
+Write-Host "Blender add-on: $addonZip" -ForegroundColor Green
+
 # --- Installer ------------------------------------------------------------
 if ($Installer) {
     $iscc = Find-ISCC

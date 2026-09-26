@@ -554,6 +554,16 @@ be filled with something. One column lets the page be as short as its content.
     color: var(--v-text-muted);
 }
 
+.desuq-home-claim-blender {
+    margin-top: 8px;
+}
+
+.desuq-home-claim-blender code {
+    background: transparent;
+    color: var(--v-text);
+    padding: 0;
+}
+
 /* ---------------------------------------------------------------- the notes
    "Why I changed this" (lib/api/api_notes.go). Quieter than a mark: a mark is
    something to act on before opening a file, a note is something to read. So

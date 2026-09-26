@@ -223,6 +223,17 @@
         this folder with sees your name on it, and is warned if they change it
         too. Send it there again when you are done, or press <b>Done</b> here.
         Nothing is locked: it is a note to the others, not a lock.
+        <!-- The optional add-on (custom/blender), when the installer shipped
+             it. Blender cannot be pointed at it from here, so this gives
+             the path to paste into its file browser. -->
+        <div class="desuq-home-claim-blender" ng-if="home.tray.blenderAddon">
+          <b>Using Blender?</b> The add-on does this for you: it tells you when
+          you open a file somebody else is working on, and otherwise marks it
+          as yours while you have it open. In Blender, choose <b>Edit &rsaquo;
+          Preferences &rsaquo; Add-ons</b>, then the small arrow at the top
+          right, <b>Install from Disk</b>, and pick
+          <code class="desuq-home-claim-path">{{ home.tray.blenderAddon }}</code>
+        </div>
       </div>
 
       <!-- Why files changed (lib/api/api_notes.go), in the words of whoever

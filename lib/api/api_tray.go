@@ -40,6 +40,10 @@ type trayStatus struct {
 	Present bool `json:"present"`
 	// Path is where the tray should be, for the technical details.
 	Path string `json:"path,omitempty"`
+	// BlenderAddon is the optional Blender add-on the installer ships beside
+	// the binaries (custom/blender), when it is there. The main screen tells
+	// modellers where to find it; Blender's "Install from Disk" needs a path.
+	BlenderAddon string `json:"blenderAddon,omitempty"`
 }
 
 // installMarker is shipped into the install directory by the installer and by
@@ -62,7 +66,11 @@ func resolveTrayStatus(exe, goos string, exists func(string) bool) trayStatus {
 	}
 	base := strings.TrimSuffix(filepath.Base(exe), filepath.Ext(exe))
 	tray := filepath.Join(dir, base+"-tray.exe")
-	return trayStatus{Expected: true, Present: exists(tray), Path: tray}
+	st := trayStatus{Expected: true, Present: exists(tray), Path: tray}
+	if addon := filepath.Join(dir, "blender", "desuq_syncthing.zip"); exists(addon) {
+		st.BlenderAddon = addon
+	}
+	return st
 }
 
 func (*service) getSystemTray(w http.ResponseWriter, _ *http.Request) {

@@ -1155,6 +1155,35 @@ console.log('\n-- who is around');
     check('and her own card', /Has never connected\./.test(text()));
 }
 
+console.log('\n-- the Blender add-on, where the installer shipped it');
+{
+    const refreshAt = (ms) => {
+        const realNow = window.Date.now;
+        window.Date.now = () => realNow() + ms;
+        svc.refresh();
+        flush();
+        flush();
+        svc.refresh();
+        flush();
+        flush();
+        window.Date.now = realNow;
+    };
+    world.tray = { expected: true, present: true, blenderAddon: 'C:\\Users\\yuki\\AppData\\Local\\Programs\\desuq-syncthing\\blender\\desuq_syncthing.zip' };
+    refreshAt(2400000);
+    const btn = [...el[0].querySelectorAll('button')].find(b => /Working on a file\?/.test(b.textContent));
+    btn.click();
+    flush();
+    const help = el[0].querySelector('.desuq-home-claim-help');
+    const t = help ? help.textContent.replace(/\s+/g, ' ') : '';
+    check('the help says the add-on exists', /Using Blender\?/.test(t), t);
+    check('and where it is, to paste into Blender', /Programs\\desuq-syncthing\\blender\\desuq_syncthing\.zip/.test(t));
+    world.tray = { expected: true, present: true };
+    refreshAt(2600000);
+    check('an install without it says nothing about it', !/Using Blender\?/.test(text()));
+    btn.click();
+    flush();
+}
+
 console.log('\n-- no green anywhere');
 // The palette rule, asserted where it can actually regress: the stylesheet.
 {

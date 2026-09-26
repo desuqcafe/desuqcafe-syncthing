@@ -2064,6 +2064,62 @@ whether the *person* is around and what they are doing -- the question behind
   shut down and A said *last seen* with the time; a device added and never
   connected read as never, not as fifty-six years ago.
 
+## 33. The Blender add-on (optional)
+
+Everything so far works from Explorer and the main screen. The add-on adds
+the two things neither can do: it knows when a file is **opened**, and it can
+ask why something changed where the change was made.
+
+**When you open a `.blend` in a synced folder:**
+
+- If somebody else has it marked, a popup says so -- *Kai is working on
+  cabin.blend. If you both save it, one of you ends up with a copy of your
+  own.* It does **not** mark the file over them.
+- If a newer version is still on its way to this computer, it says to wait:
+  otherwise you are editing an old copy, which ends as a conflict.
+- If the version you opened has somebody's note (§31), it shows it.
+- Otherwise it marks the file as yours, automatically, while you have it
+  open. Close it **without saving** and the mark comes off again; close it
+  after saving and the mark stays until the tray's quiet-hours rule takes it
+  off -- the others should hear that it changed, not that it was let go of a
+  second later. A mark made by hand is never taken off by the add-on. A
+  preference turns marking-on-open off.
+
+**File › desuqcafe Syncthing:** *I'm Working on This*, *I'm Done with This*,
+*Say Why I Changed This…* (refused while there are unsaved changes: a note is
+about a saved version, and the one on disk would be the previous save), and
+*Who Has This?*.
+
+- **Why an add-on, when the tray already marks on save?** The tray learns
+  about a file only when it is written, and deliberately does not watch which
+  programs are running -- process inspection is exactly the kind of code
+  Defender flags (§20). Blender telling us is the sanctioned way.
+- **It talks only to the Syncthing on this computer**, with the address and
+  API key from its own `config.xml` in `%LOCALAPPDATA%\desuqcafe-syncthing`,
+  exactly as the tray does -- including the certificate pin when the GUI is on
+  HTTPS (the pinning path is written but not exercised: GUI TLS is off by
+  default and not seeded on). Three-second timeouts, and a Syncthing that is
+  not running is a line in Blender's console, not a popup on every open.
+- **Installed by the modeller, not the installer.** The installer puts
+  `desuq_syncthing.zip` in the program folder's `blender\`; putting it into
+  Blender means writing Blender's own settings, per Blender version, and that
+  is their choice. In Blender: *Edit › Preferences › Add-ons*, the arrow at the
+  top right, *Install from Disk*. The main screen's **Working on a file?**
+  panel gives the exact path (`/rest/system/tray` reports it). The zip is both
+  an extension (Blender 4.2+, `blender_manifest.toml`) and a legacy add-on
+  (`bl_info`). Verified: Blender 5.2's own `extension install-file` installed
+  and enabled it in an isolated user directory, menu and operators
+  registered.
+- **Tested in a real Blender.** `custom/scripts/test-blender-live.ps1` runs it
+  headless (`--factory-startup`, so nobody's preferences are read or changed)
+  against a fresh pair: 30 checks, from the mark on open and its removal on
+  close to the popup about somebody else's mark, the note operator, the
+  refusal on a version still arriving, and -- checked after Blender has
+  exited -- the mark coming off on quit. By hand, because CI has no Blender;
+  `custom/scripts/test-blender-addon.py` checks the client's decisions with
+  plain Python and is suite 13. Only Blender 5.2 is installed on the
+  development machine, so that is the version covered.
+
 ## Recommended configuration
 
 Applied per machine, under *Actions → Advanced → Defaults*:

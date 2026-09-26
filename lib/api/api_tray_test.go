@@ -16,6 +16,7 @@ func TestResolveTrayStatus(t *testing.T) {
 	exe := filepath.Join(dir, "desuq-syncthing.exe")
 	tray := filepath.Join(dir, "desuq-syncthing-tray.exe")
 	marker := filepath.Join(dir, installMarker)
+	addon := filepath.Join(dir, "blender", "desuq_syncthing.zip")
 
 	on := func(files ...string) func(string) bool {
 		return func(p string) bool {
@@ -37,6 +38,9 @@ func TestResolveTrayStatus(t *testing.T) {
 	}{
 		{"installed, tray present", exe, "windows", []string{marker, tray},
 			trayStatus{Expected: true, Present: true, Path: tray}},
+		// The Blender add-on is named only when it is actually there.
+		{"installed, with the Blender add-on", exe, "windows", []string{marker, tray, addon},
+			trayStatus{Expected: true, Present: true, Path: tray, BlenderAddon: addon}},
 		// The case this exists for: Defender took the tray, the daemon is
 		// still running beside the marker.
 		{"installed, tray quarantined", exe, "windows", []string{marker},

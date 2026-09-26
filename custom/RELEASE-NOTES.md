@@ -84,6 +84,15 @@ Each folder now says, for each person, whether they are here now or when you
 last saw them, what they have marked as working on, and the last file they
 saved. An offline person's card says since when.
 
+## A Blender add-on, if you want it
+
+Opening a `.blend` now tells you if somebody else is working on it, or if a
+newer version is still on its way, before you change anything — and
+otherwise marks it as yours while it is open. **File › desuqcafe Syncthing**
+has the marks and **Say why I changed this**. It is optional and you install
+it yourself: the main screen's **Working on a file?** panel says where the
+file is and how.
+
 ## Still true
 
 Windows Defender may still quarantine the tray on install as

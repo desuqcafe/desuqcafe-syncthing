@@ -1,0 +1,16 @@
+schema_version = "1.0.0"
+
+id = "desuq_syncthing"
+version = "1.0.0"
+name = "desuqcafe Syncthing"
+tagline = "Says who is working on a file when you open it"
+maintainer = "desuqcafe"
+type = "add-on"
+
+blender_version_min = "4.2.0"
+
+license = ["SPDX:MPL-2.0"]
+
+[permissions]
+network = "Talks to desuqcafe Syncthing on this computer only"
+files = "Reads desuqcafe Syncthing's settings file for its address and key"

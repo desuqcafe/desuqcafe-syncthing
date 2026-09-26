@@ -3,7 +3,7 @@
     Runs every test suite this fork has, and says which ones it skipped.
 
 .DESCRIPTION
-    There are twelve suites in three languages, six of them need jsdom and one
+    There are thirteen suites in four languages, six of them need jsdom and one
     needs two live Syncthing instances, so until this existed the only way to
     run them all was to remember twelve command lines. Nothing did, which is why
     nothing ran them.
@@ -22,6 +22,7 @@
      10. test-history-render.js        history        Node + jsdom
      11. test-seed-naming.ps1          seeding        the built binary
      12. test-selective-render.js      picker         jsdom + a live test pair
+     13. test-blender-addon.py         Blender add-on Python (no Blender needed)
 
     A missing prerequisite is reported as SKIP rather than as failure, and the
     exit code is non-zero only if something actually failed. But a run that
@@ -257,6 +258,33 @@ if (-not $node) {
         Invoke-Suite 'test-home-render'      { & $node (Join-Path $ScriptDir 'test-home-render.js') }
         Invoke-Suite 'test-history-render'   { & $node (Join-Path $ScriptDir 'test-history-render.js') }
     }
+}
+
+# --- the Blender add-on's client, in plain Python ---------------------------
+# custom/blender/desuq_syncthing/client.py imports no bpy, so what it decides
+# is checked with any Python. The part only Blender can show -- the handlers
+# on open, save and quit -- is test-blender-live.ps1, by hand: CI has no
+# Blender.
+Section 'Python'
+$python = $null
+$candidates = @('python.exe', 'py.exe', 'python3.exe' | ForEach-Object {
+        (Get-Command $_ -EA SilentlyContinue).Source })
+# Blender carries its own Python, and a machine with Blender and nothing
+# else is exactly where the add-on is used.
+$candidates += @(Get-ChildItem "$env:ProgramFiles\Blender Foundation\*\*\python\bin\python.exe" -EA SilentlyContinue |
+        ForEach-Object FullName)
+foreach ($c in $candidates) {
+    if (-not $c) { continue }
+    # Asked, not trusted by path: without Python installed, Windows puts a
+    # python.exe stub on PATH that prints where to get it and exits 9009 --
+    # and a real Store install lives at the same WindowsApps path.
+    $v = & $c -c 'import sys; print(sys.version_info[0])' 2>$null
+    if ($LASTEXITCODE -eq 0 -and "$v".Trim() -eq '3') { $python = $c; break }
+}
+if (-not $python) {
+    Record 'test-blender-addon' 'SKIP' 'python not found'
+} else {
+    Invoke-Suite 'test-blender-addon' { & $python (Join-Path $ScriptDir 'test-blender-addon.py') }
 }
 
 # --- 10. seeding, against the real binary -----------------------------------

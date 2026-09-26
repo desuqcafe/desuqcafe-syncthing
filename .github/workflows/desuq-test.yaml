@@ -53,6 +53,12 @@ jobs:
         with:
           node-version: "22"
 
+      # test-blender-addon.py: the Blender add-on's client, which imports no
+      # bpy. 3.11+ so the manifest check has tomllib.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
       # jsdom is a test-only dependency of three scripts and is deliberately
       # not in any package.json, so run-tests.ps1 caches it in TEMP. Cache that
       # directory rather than reinstalling 30 MB of transitive dependencies on

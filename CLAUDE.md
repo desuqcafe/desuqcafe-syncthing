@@ -32,7 +32,7 @@ future `git merge upstream/main` is work you can plan rather than a surprise:
   A line in the root `go.mod`/`go.sum` is a conflict on every upstream
   dependency bump: a recurring tax for a one-off convenience.
 
-Twenty upstream files carry fork edits today, 672 insertions against 211
+Twenty upstream files carry fork edits today, 673 insertions against 211
 deletions. Stripping the telemetry is what changed the character of that: it
 is the first work that had to *delete* upstream behaviour rather than sit
 beside it, because there is no additive way to remove a consent nag or a
@@ -75,16 +75,19 @@ Everything else still resolves by keeping both sides.
 | `custom/build-windows.ps1` | Builds the branded binary + installer |
 | `custom/installer/installer.iss` | Inno Setup script (per-user, no admin) |
 | `custom/tray/` | Notification-area app, desktop notifications, the Explorer folder icons and their live hover text, and the one-shots behind Send To and the `.blend` right-click menu. **Its own Go module** |
+| `custom/blender/desuq_syncthing/` | The optional Blender add-on: warns on open, marks while open, notes from the File menu. Zipped by the build, shipped by the installer, **installed by the modeller** |
 | `custom/scripts/seed-config.ps1` | Writes first-run `config.xml` defaults |
 | `custom/scripts/sync-upstream.ps1` | Merge upstream and verify the build |
 | `custom/scripts/start-test-pair.ps1` | Two throwaway instances sharing a folder, for two-device testing |
-| `custom/scripts/run-tests.ps1` | **Runs all twelve suites.** `-Quick` skips the two needing a binary or a live pair. What the build and CI both call |
+| `custom/scripts/run-tests.ps1` | **Runs all thirteen suites.** `-Quick` skips the two needing a binary or a live pair. What the build and CI both call |
 | `custom/scripts/check-handshake-words.ps1` | Asserts the verification wordlists stay distinct. Run by the build even with `-SkipTests` |
 | `custom/scripts/test-selective-render.js` | Drives the selective-sync picker through real Angular and a live instance. Needs jsdom and a running test pair |
 | `custom/scripts/test-lanlimit-render.js` | Renders the LAN rate-limit note through real Angular. Needs jsdom; no instance required |
 | `custom/scripts/test-wizard-render.js` | Drives the first-run setup guide through real Angular against canned REST. Needs jsdom; no instance required |
 | `custom/scripts/test-home-render.js` | Drives the main screen the same way, and asserts the headline rules directly as a pure function. Needs jsdom; no instance required |
 | `custom/scripts/test-history-render.js` | Drives the history screen. The restart guard and the run collapse are what it tries to break. Needs jsdom; no instance required |
+| `custom/scripts/test-blender-addon.py` | The Blender add-on's client, in plain Python -- it imports no `bpy`. Suite 13 |
+| `custom/scripts/test-blender-live.ps1` | The add-on inside a real headless Blender against a fresh pair: open, close, save, menu, quit. **By hand** -- CI has no Blender |
 | `custom/scripts/test-seed-naming.ps1` | Asserts a re-seed never takes a device name somebody chose |
 | `custom/scripts/disable-inherited-ci.ps1` | Turn off upstream's workflows |
 | `custom/FILE-BROWSER-OPTIONS.md` | Our own Explorer-like browser: seven options with pros and cons, and a recommendation. **Undecided; nothing built** |
@@ -99,7 +102,7 @@ Everything else is upstream Syncthing, unmodified.
 ## Common commands
 
 ```powershell
-.\custom\scripts\run-tests.ps1                 # all twelve suites; -Quick for the fast ten
+.\custom\scripts\run-tests.ps1                 # all thirteen suites; -Quick for the fast eleven
 .\custom\build-windows.ps1 -Installer          # build binary + installer (runs -Quick first)
 .\custom\scripts\sync-upstream.ps1 -DryRun     # preview upstream changes
 git tag v2.1.6-desuq.8; git push origin v2.1.6-desuq.8   # cut a release
