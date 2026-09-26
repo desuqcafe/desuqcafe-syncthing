@@ -38,9 +38,13 @@
   <div class="desuq-hist-filters">
     <label class="desuq-hist-field">
       <span class="desuq-hist-field-label">Folder</span>
-      <select ng-model="hist.folder" ng-change="history.setFolder(hist.folder)">
+      <!-- ng-options, not <option ng-repeat>: the folder list arrives after
+           the screen is opened on a folder, and repeated options do not
+           re-select the model when they appear -- the select sat on "All
+           folders" while showing one folder's history. -->
+      <select ng-model="hist.folder" ng-change="history.setFolder(hist.folder)"
+              ng-options="f.id as f.label for f in hist.folders">
         <option value="">All folders</option>
-        <option ng-repeat="f in hist.folders" value="{{ f.id }}">{{ f.label }}</option>
       </select>
     </label>
     <label class="desuq-hist-field desuq-hist-field-grow">

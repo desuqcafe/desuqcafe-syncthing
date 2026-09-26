@@ -101,6 +101,12 @@ type claimsFile struct {
 type claimEntry struct {
 	Path  string    `json:"path"`
 	Since time.Time `json:"since"`
+	// Auto is a mark the tray made because the file was saved here, rather
+	// than one somebody asked for. The tray takes these off again once the
+	// file has been left alone for a while; a mark somebody made by hand is
+	// only ever taken off by hand. Omitted when false, so a file written by
+	// an older build reads exactly as it did.
+	Auto bool `json:"auto,omitempty"`
 }
 
 // claimRow is one claim as the API reports it.
@@ -113,6 +119,20 @@ type claimRow struct {
 	Mine   bool      `json:"mine"`
 	Since  time.Time `json:"since"`
 	Stale  bool      `json:"stale"`
+	Auto   bool      `json:"auto"`
+	// Unseen is, on this device's own marks, everybody the folder is shared
+	// with whose copy does not have them yet. Empty means everybody has.
+	Unseen []claimPeer `json:"unseen,omitempty"`
+}
+
+// claimPeer is one person a mark has not reached, and why. The why is what
+// makes it worth saying: "Kai is offline" is something to phone about,
+// "on its way" is a second's wait, and "not taking it" will never fix itself.
+type claimPeer struct {
+	Device string `json:"device"`
+	Name   string `json:"name"`
+	// State is "offline", "sending" or "heldBack".
+	State string `json:"state"`
 }
 
 // claimsFolder says, per folder, whether this computer can mark files there
@@ -136,6 +156,8 @@ type claimRequest struct {
 	Folder  string `json:"folder"`
 	Path    string `json:"path"`
 	Release bool   `json:"release"`
+	// Auto marks the claim as made by the tray on a save. See claimEntry.
+	Auto bool `json:"auto"`
 }
 
 // cleanClaimPath turns what a caller sent into the slash-separated,
@@ -161,14 +183,23 @@ func cleanClaimPath(p string) (string, bool) {
 // applyClaim adds or removes one path. Adding a path already held keeps the
 // original time: re-marking a file you have had open since Monday should not
 // make it look like you only just started.
-func applyClaim(list []claimEntry, p string, release bool, now time.Time) ([]claimEntry, bool, error) {
+//
+// Marking by hand a file the tray marked automatically makes it a hand-made
+// mark, which the tray will then leave alone. The other way round changes
+// nothing: a save does not demote somebody's deliberate mark to one that
+// clears itself.
+func applyClaim(list []claimEntry, p string, release, auto bool, now time.Time) ([]claimEntry, bool, error) {
 	out := make([]claimEntry, 0, len(list)+1)
-	found := false
+	found, changed := false, false
 	for _, c := range list {
 		if c.Path == p {
 			found = true
 			if release {
 				continue
+			}
+			if c.Auto && !auto {
+				c.Auto = false
+				changed = true
 			}
 		}
 		out = append(out, c)
@@ -177,12 +208,12 @@ func applyClaim(list []claimEntry, p string, release bool, now time.Time) ([]cla
 		return out, found, nil
 	}
 	if found {
-		return out, false, nil
+		return out, changed, nil
 	}
 	if len(out) >= claimsMaxPerDevice {
 		return list, false, errClaimTooMany
 	}
-	return append(out, claimEntry{Path: p, Since: now.UTC()}), true, nil
+	return append(out, claimEntry{Path: p, Since: now.UTC(), Auto: auto}), true, nil
 }
 
 // parseClaimsFile reads one device's file. It is strict about the things that
@@ -204,7 +235,7 @@ func parseClaimsFile(data []byte, want protocol.DeviceID) ([]claimEntry, bool) {
 		if !ok || c.Since.IsZero() {
 			continue
 		}
-		out = append(out, claimEntry{Path: p, Since: c.Since})
+		out = append(out, claimEntry{Path: p, Since: c.Since, Auto: c.Auto})
 		if len(out) == claimsMaxPerDevice {
 			break
 		}
@@ -275,6 +306,8 @@ func (s *service) claimsIn(cfg config.FolderConfiguration, now time.Time) ([]cla
 
 	devices := s.cfg.Devices()
 	var rows []claimRow
+	var unseen []claimPeer
+	unseenAsked := false
 	for _, n := range names {
 		if !strings.HasSuffix(n, ".json") || fs.IsTemporary(n) {
 			continue
@@ -318,6 +351,9 @@ func (s *service) claimsIn(cfg config.FolderConfiguration, now time.Time) ([]cla
 		} else if devCfg.Name != "" {
 			name = devCfg.Name
 		}
+		if mine && !unseenAsked {
+			unseen, unseenAsked = s.claimsUnseenBy(cfg, rel), true
+		}
 		for _, c := range entries {
 			rows = append(rows, claimRow{
 				Folder: cfg.ID,
@@ -328,11 +364,66 @@ func (s *service) claimsIn(cfg config.FolderConfiguration, now time.Time) ([]cla
 				Mine:   mine,
 				Since:  c.Since,
 				Stale:  now.Sub(c.Since) > claimStaleAfter,
+				Auto:   c.Auto,
 			})
+			if mine {
+				rows[len(rows)-1].Unseen = unseen
+			}
 		}
 	}
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Since.After(rows[j].Since) })
 	return rows, info
+}
+
+// claimDelivery is satisfied by the real model; see
+// lib/model/desuq_claimdelivery.go. Optional for the same reason as
+// peerHeldBacker: a model without it reports nobody as unreached, which is
+// what this API said before it could tell.
+type claimDelivery interface {
+	DesuqPeerHasLocal(folder string, device protocol.DeviceID, name string) (has, heldBack bool, err error)
+}
+
+// claimsUnseenBy is everybody the folder is shared with whose index does not
+// yet hold this device's current claims file.
+//
+// Asked of the index rather than of the connection, because "connected" is
+// not "has it": this is the whole difference between a mark that was made
+// and a mark that was seen. canClaim used to be the only check, and it
+// refused paused and receive-only folders but said nothing about a peer who
+// was simply switched off -- so a mark made while they were away toasted
+// success and reached nobody.
+func (s *service) claimsUnseenBy(cfg config.FolderConfiguration, rel string) []claimPeer {
+	cd, ok := s.model.(claimDelivery)
+	if !ok {
+		return nil
+	}
+	devices := s.cfg.Devices()
+	var out []claimPeer
+	for _, fd := range cfg.Devices {
+		if fd.DeviceID == s.id {
+			continue
+		}
+		has, heldBack, err := cd.DesuqPeerHasLocal(cfg.ID, fd.DeviceID, rel)
+		if err != nil || has {
+			continue
+		}
+		p := claimPeer{Device: fd.DeviceID.String(), Name: fd.DeviceID.Short().String()}
+		if d, ok := devices[fd.DeviceID]; ok && d.Name != "" {
+			p.Name = d.Name
+		}
+		connected := s.model.ConnectedTo(fd.DeviceID)
+		switch {
+		case !connected:
+			p.State = "offline"
+		case heldBack:
+			p.State = "heldBack"
+		default:
+			p.State = "sending"
+		}
+		out = append(out, p)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
 }
 
 // claimAuthoredBy is whether the index says dev last wrote this claims file.
@@ -401,7 +492,7 @@ func (s *service) postFolderClaim(w http.ResponseWriter, r *http.Request) {
 	}
 
 	claimsMut.Lock()
-	err := s.writeOwnClaim(cfg, p, req.Release)
+	err := s.writeOwnClaim(cfg, p, req.Release, req.Auto)
 	claimsMut.Unlock()
 	if errors.Is(err, errClaimTooMany) {
 		http.Error(w, err.Error(), http.StatusConflict)
@@ -438,7 +529,7 @@ func (s *service) claimTargetExists(cfg config.FolderConfiguration, p string) bo
 // writeOwnClaim does the read-modify-write on this device's file. An empty
 // list removes the file rather than leaving "claims: []" behind, so a folder
 // where nobody is working on anything carries nothing extra at all.
-func (s *service) writeOwnClaim(cfg config.FolderConfiguration, p string, release bool) error {
+func (s *service) writeOwnClaim(cfg config.FolderConfiguration, p string, release, auto bool) error {
 	ffs := cfg.Filesystem()
 	rel := claimFileName(s.id)
 
@@ -455,7 +546,7 @@ func (s *service) writeOwnClaim(cfg config.FolderConfiguration, p string, releas
 		}
 	}
 
-	next, changed, err := applyClaim(list, p, release, time.Now())
+	next, changed, err := applyClaim(list, p, release, auto, time.Now())
 	if err != nil {
 		return err
 	}

@@ -43,6 +43,8 @@ type options struct {
 	clear    bool
 	stop     bool
 	claim    bool
+	history  bool
+	who      bool
 	interval time.Duration
 }
 
@@ -61,6 +63,9 @@ type app struct {
 	notify notifier
 	alerts *alerter
 	marker *folderMarker
+	// markNow asks the folder marker for an early pass, so Explorer's hover
+	// text follows the claims within seconds rather than minutes.
+	markNow chan struct{}
 
 	refresh chan struct{}
 	ctx     context.Context
@@ -108,6 +113,10 @@ func main() {
 		"Ask a running Syncthing to stop cleanly, wait for it to go, then exit. Used by the installer")
 	flag.BoolVar(&opts.claim, "claim", false,
 		"Mark the files named after the flags as being worked on here, or unmark them if they already are, then exit. Used by Send To")
+	flag.BoolVar(&opts.history, "history", false,
+		"Open the history screen on the file named after the flags, then exit. Used by the .blend right-click menu")
+	flag.BoolVar(&opts.who, "who", false,
+		"Say who is working on the file named after the flags and who has it, then exit. Used by the .blend right-click menu")
 	flag.Parse()
 
 	// Log to the Syncthing home directory, where the support bundle and
@@ -152,12 +161,23 @@ func main() {
 	// talks to whatever Syncthing is running and never starts one, and like
 	// the two above it runs before the single-instance check: it is how a
 	// file gets marked while the tray is already up.
-	if opts.claim {
+	//
+	// -history and -who are the same shape, from the .blend right-click menu
+	// (explorer.go).
+	if opts.claim || opts.history || opts.who {
 		var n notifier = nopNotifier{}
 		if !opts.quiet {
 			n = newNotifier(toastAppID, appName)
 		}
-		code := runClaim(opts.home, flag.Args(), n)
+		var code int
+		switch {
+		case opts.claim:
+			code = runClaim(opts.home, flag.Args(), n)
+		case opts.history:
+			code = runHistory(opts.home, flag.Args(), n)
+		default:
+			code = runWho(opts.home, flag.Args(), n)
+		}
 		// The toast is handed to the shell before Notify returns, but give
 		// it a moment before the process that raised it goes.
 		time.Sleep(time.Second)
@@ -190,6 +210,14 @@ func main() {
 	}
 	a.alerts = newAlerter(a.notify, a.guiURL, a.client)
 	a.marker = newFolderMarker(opts.home)
+	a.markNow = make(chan struct{}, 1)
+	a.alerts.deleted = loadDeletedMemo(opts.home)
+	a.alerts.claimsChanged = func() {
+		select {
+		case a.markNow <- struct{}{}:
+		default:
+		}
+	}
 
 	if !opts.attach {
 		a.sup = newSupervisor(opts.binary, opts.home, a.connected)
@@ -332,8 +360,17 @@ func (a *app) watchFolders(ctx context.Context) {
 	}
 	for {
 		a.marker.reconcile(a.client())
-		if !sleepCtx(ctx, folderMarkInterval) {
+		// A claims pass runs every twenty seconds and pokes this after each
+		// one; reconcile only writes a desktop.ini whose text has changed, so
+		// being asked often costs a few local requests and no disk.
+		t := time.NewTimer(folderMarkInterval)
+		select {
+		case <-ctx.Done():
+			t.Stop()
 			return
+		case <-a.markNow:
+			t.Stop()
+		case <-t.C:
 		}
 	}
 }
@@ -420,6 +457,25 @@ func (a *app) togglePause() {
 		return
 	}
 	a.pokeRefresh()
+	if !paused {
+		go a.warnHeldClaims(cl)
+	}
+}
+
+// warnHeldClaims says so when syncing is paused while this computer has files
+// marked. The mark stays up for everybody else, and taking it off while
+// paused reaches nobody: the claims file changes here and goes nowhere. Said
+// after the pause rather than asked before it, because a tray menu has no
+// way to ask anything -- and the pause is still the right call more often
+// than not; this is so the person knows what the others are seeing.
+func (a *app) warnHeldClaims(cl *client) {
+	reply, err := cl.claims()
+	if err != nil {
+		return
+	}
+	if title, body := pausedClaimsMessage(reply.Claims); title != "" {
+		a.notify.Notify(Notification{Title: title, Body: body, Launch: a.guiURL()})
+	}
 }
 
 // watchPauseChoice waits on one entry of the "Pause for a while" submenu.
@@ -456,7 +512,9 @@ func (a *app) pauseFor(d time.Duration) {
 	a.mPause.SetTitle(pauseHoldTitle(a.hold.deadline()))
 	a.pokeRefresh()
 	slog.Info("syncing paused", "until", a.hold.deadline().Format(time.Kitchen))
+	go a.warnHeldClaims(cl)
 }
+
 
 // expirePause runs when the hold's timer fires.
 func (a *app) expirePause() {

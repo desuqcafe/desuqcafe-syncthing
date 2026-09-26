@@ -26,8 +26,18 @@ package main
 //
 // Not "not seen before": the tray restarts at every sign-in, and a modeller
 // with a fortnight-old conflict they have decided to live with should not be
-// told about it every morning. New means the file was written after this tray
-// started, which is the same question and needs no state on disk to answer.
+// told about it every morning. New means the conflict happened after this
+// tray started, which is the same question and needs no state on disk to
+// answer.
+//
+// "Happened" is read from the timestamp Syncthing writes into the copy's
+// name, not from the file's modification time. The copy keeps the mtime of
+// the *edit*, and the whole point of the offline case is that the edit is
+// old: somebody changes a file on Monday with the other computer off, the
+// tray restarts on Tuesday, the two meet on Tuesday afternoon -- and a
+// Monday mtime is before Tuesday's start, so the conflict was never
+// announced. Verified on a pair, 2026-09-26: the copy made at 15:02:11 held
+// the 15:01:42 mtime of the edit it preserved.
 //
 // The grace period exists because Syncthing is started by this process and
 // pulls immediately: a conflict produced in the first seconds is genuinely new
@@ -71,7 +81,30 @@ const (
 	// counting instead. Two fits in a toast; ten is a wall of text nobody
 	// reads, on a notification whose only job is to be read.
 	conflictMaxNames = 2
+
+	// conflictStampLayout is the time Syncthing writes into a conflict copy's
+	// name, in local time: name.sync-conflict-20260926-150211-OHQN3WH.ext.
+	conflictStampLayout = "20060102-150405"
 )
+
+// conflictTime reads when the conflict happened out of the copy's name. False
+// when the name does not carry a stamp it can read, and the caller falls back
+// to the file's modification time.
+func conflictTime(name string) (time.Time, bool) {
+	i := strings.Index(name, conflictMarker)
+	if i < 0 {
+		return time.Time{}, false
+	}
+	rest := name[i+len(conflictMarker):]
+	if len(rest) < len(conflictStampLayout) {
+		return time.Time{}, false
+	}
+	t, err := time.ParseInLocation(conflictStampLayout, rest[:len(conflictStampLayout)], time.Local)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t, true
+}
 
 // watchConflicts is the second alert with no event behind it. See the note at
 // the top of this file for why the event stream cannot answer this.
@@ -94,16 +127,47 @@ type conflictFile struct {
 	folder string // the folder's display name
 	path   string // full path on disk
 	name   string // base name, with the conflict suffix still on it
+	// gone is the original name no longer existing beside the copy: one side
+	// deleted the file while the other changed it. The delete keeps the name
+	// and the change survives only as the copy -- not the other way round,
+	// which is what this setup was believed to do until it was tried on a
+	// pair (DEPLOYMENT-3D-TEAM.md section 26). Worth its own sentence,
+	// because "a second copy" of a file that is no longer there sends the
+	// reader looking for a first one.
+	gone bool
 }
 
-func (a *alerter) checkConflicts() {
+// checkConflicts announces any new conflicts, and reports whether it did.
+//
+// Every five minutes on its own, and also straight after a folder finishes
+// syncing -- which is the moment a conflict is made. Five minutes on its own
+// meant the first thing said after two people's edits met was "Sync
+// complete, up to date", with the conflict toast following up to five
+// minutes later.
+func (a *alerter) checkConflicts() bool {
+	// Left for the reunion toast to say, when one is being prepared. Taking
+	// them here would mark them seen and leave it nothing to report.
+	if a.briefingActive() {
+		return false
+	}
+	fresh := a.collectConflicts()
+	if len(fresh) == 0 {
+		return false
+	}
+	a.notify.Notify(conflictNotification(fresh, a.guiURL()))
+	return true
+}
+
+// collectConflicts is checkConflicts without the toast, for a caller that
+// wants to say it in its own words (reconnect.go).
+func (a *alerter) collectConflicts() []conflictFile {
 	cl := a.current()
 	if cl == nil {
-		return
+		return nil
 	}
 	cfg, err := cl.config()
 	if err != nil {
-		return
+		return nil
 	}
 
 	var found []conflictFile
@@ -113,12 +177,7 @@ func (a *alerter) checkConflicts() {
 		}
 		found = append(found, conflictsIn(f.Path, f.name())...)
 	}
-
-	fresh := a.freshConflicts(found)
-	if len(fresh) == 0 {
-		return
-	}
-	a.notify.Notify(conflictNotification(fresh, a.guiURL()))
+	return a.freshConflicts(found)
 }
 
 // freshConflicts narrows everything on disk to what is worth saying out loud,
@@ -142,10 +201,17 @@ func (a *alerter) freshConflicts(found []conflictFile) []conflictFile {
 		}
 		a.seenConflicts[c.path] = true
 
-		// Anything already on disk when this tray started is somebody's
-		// existing situation, not news.
-		info, err := os.Stat(c.path)
-		if err != nil || !info.ModTime().After(a.conflictsSince) {
+		// Anything that happened before this tray started is somebody's
+		// existing situation, not news. See WHAT COUNTS AS NEW.
+		when, ok := conflictTime(c.name)
+		if !ok {
+			info, err := os.Stat(c.path)
+			if err != nil {
+				continue
+			}
+			when = info.ModTime()
+		}
+		if !when.After(a.conflictsSince) {
 			continue
 		}
 		fresh = append(fresh, c)
@@ -177,10 +243,43 @@ func conflictNotification(fresh []conflictFile, launch string) Notification {
 
 	folders := map[string]bool{}
 	names := make([]string, 0, len(fresh))
+	gone := 0
 	for _, c := range fresh {
 		folders[c.folder] = true
 		if len(names) < conflictMaxNames {
 			names = append(names, originalName(c.name))
+		}
+		if c.gone {
+			gone++
+		}
+	}
+	where := ""
+	if len(folders) == 1 {
+		for f := range folders {
+			where = " in " + f
+		}
+	}
+
+	// Every one of them deleted on one side and changed on the other. The
+	// usual wording would be wrong twice over: nobody "changed the same file"
+	// in the sense the reader will picture, and there is no first copy for
+	// the second one to sit beside.
+	if gone == len(fresh) {
+		title := "A deleted file was changed somewhere else"
+		subject := names[0] + " was deleted on one computer and changed on another"
+		if len(fresh) > 1 {
+			title = "Deleted files were changed somewhere else"
+			subject = strings.Join(names, " and ") + " were deleted on one computer and changed on another"
+			if len(fresh) > len(names) {
+				subject = strings.Join(names, ", ") + " and " + plural(len(fresh)-len(names), "other file") +
+					" were deleted on one computer and changed on another"
+			}
+		}
+		return Notification{
+			Title: title,
+			Body: subject + where + ". The deletion kept the name; the changes were kept as a copy " +
+				"with \"sync-conflict\" in its name. Rename it back if the file was still needed.",
+			Launch: launch,
 		}
 	}
 
@@ -203,14 +302,15 @@ func conflictNotification(fresh []conflictFile, launch string) Notification {
 			plural(len(fresh)-len(names), "other file") + " now have second copies"
 	}
 
-	body := "Both versions were kept. " + subject
-	if len(folders) == 1 {
-		for f := range folders {
-			body += " in " + f
+	body := "Both versions were kept. " + subject + where + ". Open the folder, look for files " +
+		"with \"sync-conflict\" in the name, and keep the one you want."
+	if gone > 0 {
+		lead := "One of them was"
+		if gone > 1 {
+			lead = fmt.Sprintf("%d of them were", gone)
 		}
+		body += " " + lead + " deleted on one side; there the copy is all that is left."
 	}
-	body += ". Open the folder, look for files with \"sync-conflict\" in the name, " +
-		"and keep the one you want."
 
 	return Notification{
 		Title:  title,
@@ -283,8 +383,13 @@ func conflictsIn(root, folderName string) []conflictFile {
 			return nil
 		}
 		if strings.Contains(d.Name(), conflictMarker) {
-			out = append(out, conflictFile{folder: folderName, path: path, name: d.Name()})
+			_, err := os.Lstat(filepath.Join(filepath.Dir(path), originalName(d.Name())))
+			out = append(out, conflictFile{
+				folder: folderName, path: path, name: d.Name(),
+				gone: os.IsNotExist(err),
+			})
 		}
+
 		return nil
 	})
 	if err != nil {

@@ -27,6 +27,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"unicode/utf16"
 )
@@ -78,19 +79,87 @@ func oneLine(s string) string {
 }
 
 func desktopIniFor(iconPath, label string) string {
+	return desktopIniWithTip(iconPath, baseTip(label))
+}
+
+// baseTip is the hover text with nothing live in it.
+func baseTip(label string) string {
 	label = oneLine(label)
-	iconPath = oneLine(iconPath)
-	tip := "Synced by " + appName
-	if label != "" {
-		tip = label + " -- synced by " + appName
+	if label == "" {
+		return "Synced by " + appName
 	}
+	return label + " -- synced by " + appName
+}
+
+// desktopIniWithTip renders the file with a hover text already composed. The
+// tip goes through oneLine here, whatever built it: it carries a folder
+// label and file names, both chosen by other people.
+func desktopIniWithTip(iconPath, tip string) string {
+	iconPath = oneLine(iconPath)
 	// CRLF: this is read by GetPrivateProfileString, not by Go.
 	return strings.Join([]string{
 		"[.ShellClassInfo]",
 		"IconResource=" + iconPath + ",0",
-		"InfoTip=" + tip,
+		"InfoTip=" + oneLine(tip),
 		"",
 	}, "\r\n")
+}
+
+// folderTip is the live hover text: who is working on what in this folder,
+// and whether it is up to date. Hovering over the folder in Explorer is the
+// cheapest possible way to ask "can I open this now", and it is asked from
+// exactly where the answer is needed.
+//
+// Other people's marks come before your own, because they are the ones that
+// change what you should do. Status is nil when it could not be read, and is
+// then left out rather than guessed.
+func folderTip(label string, rows []claimRow, st *folderStatus) string {
+	parts := []string{baseTip(label)}
+
+	byName := map[string][]string{}
+	var who, mine []string
+	for _, r := range rows {
+		base := filepath.Base(r.Path)
+		if r.Mine {
+			mine = append(mine, base)
+			continue
+		}
+		if _, ok := byName[r.Name]; !ok {
+			who = append(who, r.Name)
+		}
+		byName[r.Name] = append(byName[r.Name], base)
+	}
+	sort.Strings(who)
+	for _, n := range who {
+		parts = append(parts, n+" is working on "+tipFiles(byName[n]))
+	}
+	if len(mine) > 0 {
+		parts = append(parts, "You are working on "+tipFiles(mine))
+	}
+
+	switch {
+	case st == nil:
+	case st.State == "error":
+		parts = append(parts, "Syncing has stopped -- open the app to see why")
+	case st.NeedItems > 0:
+		parts = append(parts, plural(int(st.NeedItems), "change")+" still to come")
+	case st.State == "idle":
+		parts = append(parts, "Up to date")
+	}
+	return strings.Join(parts, ". ")
+}
+
+// tipFiles names one or two files and counts the rest, because a hover text
+// that runs to a paragraph is cut off by the shell anyway.
+func tipFiles(names []string) string {
+	sort.Strings(names)
+	switch len(names) {
+	case 1:
+		return names[0]
+	case 2:
+		return names[0] + " and " + names[1]
+	}
+	return plural(len(names), "file") + " (" + names[0] + ", " + names[1] + ", ...)"
 }
 
 // utf16LE encodes with the byte-order mark that makes the shell read a
@@ -149,17 +218,22 @@ func wantsIgnored(lines []string) bool {
 type folderMarker struct {
 	home     string
 	iconPath string
-	// Keyed by folder path. A folder only needs marking once per session; a
-	// path that disappears and comes back is re-marked because the stat fails
-	// in between and it is never recorded as done.
-	done map[string]bool
+	// Keyed by folder path, the desktop.ini last written there. The file is
+	// rewritten only when the hover text changes; a path that disappears and
+	// comes back is re-marked because the stat fails in between and it is
+	// never recorded as done.
+	done map[string]string
+	// ignored is the folders whose ignore patterns are already known to keep
+	// desktop.ini out of sync, so a changed hover text does not re-read them.
+	ignored map[string]bool
 }
 
 func newFolderMarker(home string) *folderMarker {
 	return &folderMarker{
 		home:     home,
 		iconPath: filepath.Join(home, iconFileName),
-		done:     map[string]bool{},
+		done:     map[string]string{},
+		ignored:  map[string]bool{},
 	}
 }
 
@@ -183,7 +257,7 @@ func (m *folderMarker) ensureIcon() error {
 // The order matters. Writing the file first would give Syncthing a window in
 // which to index it, and in a receive-only folder that window is enough to
 // leave a "local addition" someone then has to go and revert.
-func (m *folderMarker) mark(cl *client, f restFolder) error {
+func (m *folderMarker) mark(cl *client, f restFolder, content string) error {
 	if f.Path == "" {
 		return nil
 	}
@@ -192,6 +266,9 @@ func (m *folderMarker) mark(cl *client, f restFolder) error {
 		// Not there yet, or on a drive that is not plugged in. Try again on
 		// the next pass rather than recording it as done.
 		return err
+	}
+	if m.ignored[f.Path] {
+		return writeFolderMarker(f.Path, content)
 	}
 
 	ign, err := cl.ignores(f.ID)
@@ -218,7 +295,8 @@ func (m *folderMarker) mark(cl *client, f restFolder) error {
 		return nil
 	}
 
-	return writeFolderMarker(f.Path, desktopIniFor(m.iconPath, f.Label))
+	m.ignored[f.Path] = true
+	return writeFolderMarker(f.Path, content)
 }
 
 // clear undoes what mark did: the marker file goes, and with it the folder
@@ -263,14 +341,28 @@ func (m *folderMarker) reconcile(cl *client) {
 	if err != nil {
 		return
 	}
+	// Best effort: without the claims, or on a build older than them, the
+	// hover text is what it always was.
+	byFolder := map[string][]claimRow{}
+	if reply, err := cl.claims(); err == nil {
+		for _, r := range reply.Claims {
+			byFolder[r.Folder] = append(byFolder[r.Folder], r)
+		}
+	}
 	for _, f := range cfg.Folders {
-		if m.done[f.Path] {
+		var st *folderStatus
+		if s, err := cl.folderStatus(f.ID); err == nil && !f.Paused {
+			st = &s
+		}
+		content := desktopIniWithTip(m.iconPath, folderTip(f.Label, byFolder[f.ID], st))
+		if m.done[f.Path] == content {
 			continue
 		}
-		if err := m.mark(cl, f); err != nil {
+		if err := m.mark(cl, f, content); err != nil {
 			slog.Debug("could not mark folder", "folder", f.ID, "path", f.Path, "err", err)
 			continue
 		}
-		m.done[f.Path] = true
+		m.done[f.Path] = content
 	}
 }
+

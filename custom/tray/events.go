@@ -218,7 +218,7 @@ type folderSummary struct {
 	Summary struct {
 		State     string `json:"state"`
 		NeedBytes int64  `json:"needBytes"`
-		NeedItems int64  `json:"needItems"`
+		NeedItems int64  `json:"needTotalItems"`
 		Errors    int    `json:"errors"`
 	} `json:"summary"`
 }

@@ -653,6 +653,40 @@ angular.module('syncthing.core')
         // than a second service or an event.
         $rootScope.desuqHistoryState = st;
 
+        // Explorer's "Show history" on a .blend (custom/tray/explorer.go)
+        // opens the GUI at ?desuq-history=<folder>&file=<path>. That lands on
+        // the versions tab, searched for the file's name: the name rather
+        // than the path because disk events carry backslashes and the search
+        // is a plain substring match, and a same-named file elsewhere in the
+        // folder is a small price for never showing nothing.
+        //
+        // The parameters are taken off the address afterwards, so reloading
+        // the page does not throw the screen open again over whatever the
+        // person has moved on to.
+        function openFromURL() {
+            var q = {};
+            String($window.location.search || '').replace(/^\?/, '').split('&').forEach(function (kv) {
+                var i = kv.indexOf('=');
+                if (i > 0) {
+                    try {
+                        q[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(kv.slice(i + 1).replace(/\+/g, ' '));
+                    } catch (e) { /* a malformed escape is not ours */ }
+                }
+            });
+            if (!q['desuq-history']) {
+                return false;
+            }
+            open(q['desuq-history'], 'versions');
+            // After open(), which clears the search; its first load is
+            // asynchronous and reads st.search when it runs.
+            st.search = pretty(q.file || '');
+            if ($window.history && $window.history.replaceState) {
+                $window.history.replaceState(null, '', $window.location.pathname);
+            }
+            return true;
+        }
+        openFromURL();
+
         return {
             state: st,
             open: open,
@@ -670,6 +704,7 @@ angular.module('syncthing.core')
             // Exported for custom/scripts/test-history-render.js, which
             // asserts them directly rather than through the DOM.
             _collapse: collapse,
+            _openFromURL: openFromURL,
             _intoDays: intoDays,
             _pollChanges: function () { return pollChanges(); },
             _lastID: function () { return lastID; },

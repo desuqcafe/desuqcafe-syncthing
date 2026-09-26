@@ -140,6 +140,47 @@ Name: "{usersendto}\{#MyAppName} - I'm working on this"; Filename: "{app}\{#MyAp
     WorkingDir: "{app}"; \
     Comment: "Tell everyone you share this file with that you are working on it"
 
+[Registry]
+; Right-click a .blend in Explorer: a "desuqcafe Syncthing" submenu with I'm
+; working on this, Show history, and Who has this? See custom/tray/explorer.go
+; and DEPLOYMENT-3D-TEAM.md section 27.
+;
+; Static verbs under SystemFileAssociations, per user: every one is a command
+; line that runs the tray with the file's path, and nothing is loaded into
+; Explorer -- the same reasoning as the Send To entry above, and the reason
+; overlay icons and property handlers were turned down. SystemFileAssociations
+; rather than the .blend ProgID, so Blender's own association is not touched
+; and it does not matter whether Blender is installed yet.
+;
+; On Windows 11 these appear under "Show more options", like Send To. The
+; compact menu only shows verbs from a packaged app's IExplorerCommand, which
+; is a COM server in Explorer by another name.
+;
+; SubCommands="" plus a nested shell key is how a static verb becomes a
+; cascading menu without a DLL. The numeric prefixes fix the order, which is
+; otherwise alphabetical by key name.
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.blend\shell\desuqcafe"; \
+    ValueType: string; ValueName: "MUIVerb"; ValueData: "{#MyAppName}"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.blend\shell\desuqcafe"; \
+    ValueType: string; ValueName: "SubCommands"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.blend\shell\desuqcafe"; \
+    ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppBinary}-tray.exe"",0"
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.blend\shell\desuqcafe\shell\1claim"; \
+    ValueType: string; ValueName: "MUIVerb"; ValueData: "I'm working on this (or done with it)"
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.blend\shell\desuqcafe\shell\1claim\command"; \
+    ValueType: string; ValueName: ""; \
+    ValueData: """{app}\{#MyAppBinary}-tray.exe"" -home=""{localappdata}\{#MyDataDir}"" -claim ""%1"""
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.blend\shell\desuqcafe\shell\2history"; \
+    ValueType: string; ValueName: "MUIVerb"; ValueData: "Show history"
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.blend\shell\desuqcafe\shell\2history\command"; \
+    ValueType: string; ValueName: ""; \
+    ValueData: """{app}\{#MyAppBinary}-tray.exe"" -home=""{localappdata}\{#MyDataDir}"" -history ""%1"""
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.blend\shell\desuqcafe\shell\3who"; \
+    ValueType: string; ValueName: "MUIVerb"; ValueData: "Who has this?"
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.blend\shell\desuqcafe\shell\3who\command"; \
+    ValueType: string; ValueName: ""; \
+    ValueData: """{app}\{#MyAppBinary}-tray.exe"" -home=""{localappdata}\{#MyDataDir}"" -who ""%1"""
+
 [Run]
 ; Seed config.xml with the defaults this team needs -- staggered versioning, a
 ; 20 GB disk reserve, the Blender ignore set -- before Syncthing ever starts,

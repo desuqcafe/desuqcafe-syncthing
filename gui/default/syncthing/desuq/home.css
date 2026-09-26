@@ -433,6 +433,21 @@ be filled with something. One column lets the page be as short as its content.
     flex: none;
 }
 
+/* An automatic mark says so, quietly: it is the tray's doing, not a choice. */
+.desuq-home-claim-note {
+    display: block;
+    color: var(--v-text-muted);
+    font-size: 0.92em;
+}
+
+/* A mark that has not reached somebody. Warning, not danger: nothing is
+   broken, but the person it was for does not know yet. */
+.desuq-home-claim-unseen {
+    display: block;
+    color: var(--v-warning-bright);
+    font-size: 0.92em;
+}
+
 .desuq-home-claim-help {
     margin-top: 10px;
     padding: 8px 10px;

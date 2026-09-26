@@ -161,3 +161,30 @@ func TestFolderIconUsesPngAtLargeSizes(t *testing.T) {
 		t.Errorf("checked %d entries at 128px or above; expected 2 (128 and 256)", checked)
 	}
 }
+
+// The hover text is read by somebody deciding whether to open a file, so
+// other people's marks come first, and it must never break the ini: file
+// names are chosen by other people and pass through oneLine like the label.
+func TestFolderTipIsLive(t *testing.T) {
+	rows := []claimRow{
+		{Name: "Kai", Path: "scenes/cabin.blend"},
+		{Name: "Kai", Path: "rig.blend"},
+		{Mine: true, Path: "tree.blend"},
+	}
+	tip := folderTip("Project Assets", rows, &folderStatus{State: "idle"})
+	want := "Project Assets -- synced by " + appName +
+		". Kai is working on cabin.blend and rig.blend. You are working on tree.blend. Up to date"
+	if tip != want {
+		t.Errorf("tip =\n%q\nwant\n%q", tip, want)
+	}
+	if tip := folderTip("X", nil, &folderStatus{State: "syncing", NeedItems: 3}); !strings.HasSuffix(tip, "3 changes still to come") {
+		t.Errorf("busy tip = %q", tip)
+	}
+	if tip := folderTip("X", nil, nil); tip != baseTip("X") {
+		t.Errorf("unknown status was guessed at: %q", tip)
+	}
+	ini := desktopIniWithTip(`C:\i.ico`, folderTip("X", []claimRow{{Name: "Eve", Path: "a\r\nCLSID={x}.blend"}}, nil))
+	if strings.Count(ini, "\r\n") != 3 {
+		t.Errorf("a file name broke the ini onto a new line:\n%q", ini)
+	}
+}

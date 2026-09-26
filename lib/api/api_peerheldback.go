@@ -26,11 +26,19 @@ type peerHeldBacker interface {
 	DesuqPeerHeldBack(folder string, device protocol.DeviceID) (int, int64, error)
 }
 
+// peerChangedThere is the second optional method: files the peer changed on
+// their own computer and is not sending, because the folder only receives
+// there. A model without it reports zero, which is the old behaviour.
+type peerChangedThere interface {
+	DesuqPeerChangedThere(folder string, device protocol.DeviceID) (int, error)
+}
+
 type peerHeldBackResponse struct {
-	Folder string `json:"folder"`
-	Device string `json:"device"`
-	Files  int    `json:"files"`
-	Bytes  int64  `json:"bytes"`
+	Folder  string `json:"folder"`
+	Device  string `json:"device"`
+	Files   int    `json:"files"`
+	Bytes   int64  `json:"bytes"`
+	Changed int    `json:"changed"`
 }
 
 func (s *service) getDBPeerHeldBack(w http.ResponseWriter, r *http.Request) {
@@ -55,5 +63,12 @@ func (s *service) getDBPeerHeldBack(w http.ResponseWriter, r *http.Request) {
 		httpError(w, err)
 		return
 	}
-	sendJSON(w, peerHeldBackResponse{Folder: folder, Device: device.String(), Files: files, Bytes: bytes})
+	res := peerHeldBackResponse{Folder: folder, Device: device.String(), Files: files, Bytes: bytes}
+	if ct, ok := s.model.(peerChangedThere); ok {
+		if res.Changed, err = ct.DesuqPeerChangedThere(folder, device); err != nil {
+			httpError(w, err)
+			return
+		}
+	}
+	sendJSON(w, res)
 }

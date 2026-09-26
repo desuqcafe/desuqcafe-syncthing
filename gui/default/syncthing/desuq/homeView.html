@@ -125,6 +125,11 @@
             <b>{{ c.mine ? 'You are' : c.name + ' is' }}</b> working on
             <span class="desuq-home-claim-path" title="{{ c.path }}">{{ c.path }}</span>
             <span class="desuq-home-claim-since">{{ claimSince(c.since, c.stale) }}</span>
+            <span class="desuq-home-claim-note" ng-if="c.mine && c.auto">marked when you saved it; it comes off after a few quiet hours</span>
+            <!-- A mark is a file in the folder, and a file does not reach a
+                 computer that is switched off. Said here because the moment
+                 you mark a file is when you might phone instead. -->
+            <span class="desuq-home-claim-unseen" ng-if="c.mine && claimUnseen(c.unseen)">{{ claimUnseen(c.unseen) }}</span>
           </span>
           <button type="button" class="btn btn-xs btn-default" ng-if="c.mine"
                   ng-click="releaseClaim(f.id, c.path)" title="Take the mark off this file">

@@ -1580,7 +1580,20 @@ forgotten; it is never removed on its own, because a file still open after a
 long weekend is still somebody's.
 
 **Nothing is locked.** A marked file can be opened, saved and synced by anyone.
-This is a note to the others, not a lock, and it says so.
+This is a note to the others, not a lock, and it says so. §26 has why it
+cannot be a lock, tried on a pair.
+
+**A mark says when it has not arrived.** It is a file in the folder, and a
+file does not reach a computer that is switched off. Until §26 a mark made
+while Kai was offline toasted *Everyone you share it with can see that
+now* and reached nobody. Now the toast says *Kai is offline and will not
+see it until they reconnect*, and the card carries the same line in amber
+until Kai's own index has the file.
+
+**Saving a `.blend` marks it.** The tray makes the mark itself the first
+time a `.blend` is saved, says so in a toast, and takes it off after four
+hours without another save (§26). Also from Explorer: right-click a
+`.blend` → **desuqcafe Syncthing** → **I'm working on this** (§27).
 
 ### How it works, and why that way
 
@@ -1623,6 +1636,133 @@ so `GET /rest/db/peerheldback` counts those, with sizes from the global entry
 because the peer's entry has its size blanked. The card now says *Yuki keeps
 only part of it -- 5 files are not on their computer (10 MiB)* and the headline
 stops saying "has the same".
+
+## 26. Two people editing while apart
+
+One on a train, one with the machine asleep, either of them paused: every
+conflict this setup produces starts with two computers apart. Measured on a
+test pair (2026-09-26) before anything was built on it, by disconnecting the
+pair, editing on both sides and reconnecting.
+
+### What Syncthing does
+
+| Both sides... | What happens | Seen as |
+| --- | --- | --- |
+| changed the same file | Conflict. The later edit keeps the name; the earlier one is renamed `name.sync-conflict-<when>-<ID>.ext` on both machines | A conflict (§22) |
+| one deleted it, the other changed it **later** | The change wins. The file **comes back** on the machine that deleted it, silently: no copy, no conflict, no event that says so | Nothing at all, until now |
+| one changed it, the other deleted it **later** | The deletion keeps the name. The change survives **only** as a `sync-conflict` copy; the original name is gone everywhere | A conflict with no original beside it |
+| a receive-only copy changed or deleted something | It never leaves. When the file then changes elsewhere, the local edit is renamed aside as a conflict copy **on that machine only** | On the sender: "catching up", which it is not |
+| a receive-only copy is switched to Send & Receive | **Everything it was holding is sent, deletions included.** Verified: a file deleted on the receive-only side was deleted for everybody the moment the type changed | Nothing |
+
+Edit against delete is decided by *which happened later*, not by which kind
+of change it was. The plan this wave started from assumed "the edit wins",
+which is half of it; both outcomes were produced on the pair by changing
+only the order.
+
+### What the product said, and what it says now
+
+| Moment | Before | Now |
+| --- | --- | --- |
+| Reconnecting with conflicts | *Sync complete -- up to date*, then the conflict toast up to five minutes later | The conflict toast, within seconds of the folder finishing (the walk runs when a sync completes, and "Sync complete" stands aside) |
+| An offline edit, conflict found after a tray restart | **Never announced**: "new" was judged by the copy's mtime, which is the *edit's* time | New is judged by the timestamp in the copy's name, which is when the conflict happened |
+| Delete kept the name, edit is the copy | *Both versions were kept... a second copy* of a file that no longer exists | *texture3.png was deleted on one computer and changed on another. The deletion kept the name; the changes were kept as a copy... Rename it back if the file was still needed* |
+| A deleted file came back | Nothing | *texture2.png came back -- You deleted it, but Yuki had changed it while you were apart, and the later change wins.* The tray remembers local deletions in `tray-deleted.json` beside the config, so a restart in between does not lose it |
+| A peer changed files in a receive-only copy | *Sending 2 MiB to Yuki. Theirs is catching up* | *Yuki changed 2 files on their own computer. Their copy only receives, so those changes stay with them* -- from their index, where those entries are invalid but keep their size, unlike ignored ones |
+| This computer has receive-only changes | *Nobody else can see these* | The same, plus: do not switch the folder to Send & Receive to share them -- that sends every one, deletions included |
+
+### "Back in touch with Kai"
+
+When a peer connects after being away -- ten minutes or more by a disconnect
+the tray saw, or the first connection after the tray starts, which is signing
+in in the morning -- the tray waits for the shared folders to settle and says
+in **one** toast what happened: what they changed and deleted, what you both
+changed, and what came back. Quiet if nothing did. The sync-complete, conflict
+and came-back toasts hold off meanwhile, so a reunion is one notification,
+not four. Verified on the pair across a tray restart:
+
+> *texture6.png came back: you had deleted it, but they changed it while you
+> were apart, and the later change wins. You both changed texture3.png and
+> texture5.png while apart. Both versions were kept... They also changed
+> cabin.blend and tree.blend, and deleted burst1.blend.*
+
+Syncthing 2 opens several connections per peer and logs `DeviceConnected` for
+each, while `DeviceDisconnected` fires only when the last one closes. The
+first version briefed on the *second* connection of a two-minute blip -- after
+the pull had finished, so it had nothing of theirs to report. The tray now
+tracks who is connected, and for a connection it never saw start, asks the
+link its age.
+
+**Pausing from the tray while you hold marks** now says so: the others keep
+seeing the mark, and taking it off while paused reaches nobody.
+
+### Marks made by saving
+
+The first save of a `.blend` marks it (`custom/tray/autoclaim.go`), from the
+same disk-change feed the collision warning reads. The mark is flagged
+automatic, the card says *marked when you saved it*, and the tray takes it off
+once the file's modification time is four hours old, or the file is gone.
+Marking the file by hand makes it a hand-made mark, which only a person takes
+off. Not auto-marked: a file somebody else has marked (the collision warning
+has already fired), conflict copies and `.blend1` backups, a folder shared
+with nobody, and any folder reporting more than five `.blend` files in one
+twenty-second pass -- that is a folder's first scan, which reports every file.
+Verified: a six-file burst marked nothing.
+
+**Opening a file is the better moment, and it is deliberately not used.**
+Seeing it means inspecting Blender's process -- command lines or open handles
+-- which is the behaviour a classifier dislikes, on a binary Defender already
+quarantines (§20). A Blender add-on that marks on open is the right way to get
+it, and is on the later list.
+
+### The soft lock, tried and dropped
+
+The idea: when Kai marks a file, the tray sets it read-only on everybody
+else's machine, so a save over it fails. Tried on the pair before building:
+A (not the claimer) set `texture6.png` read-only and rescanned. **The bit was
+sent.** A's index took a new version, B -- the person who made the mark --
+received the read-only attribute, and B's own save then failed with *Access
+denied*. The lock lands on exactly the wrong person. It could be kept local
+with `ignorePerms` on every machine, but one machine without it -- such as a
+peer still on an old build -- locks the claimer out of their own file. Not
+built.
+
+## 27. Explorer: right-click a .blend, and hover over the folder
+
+**Right-click a `.blend` → desuqcafe Syncthing →**
+
+- **I'm working on this (or done with it)** -- the same toggle as Send To.
+- **Show history** -- opens the History screen on that file's older versions
+  (`/?desuq-history=<folder>&file=<path>`; the GUI takes the parameters off the
+  address once it has opened, so a reload does not reopen it).
+- **Who has this?** -- a toast: who is working on it, whether each person has
+  your version -- offline people included, from their index
+  (`GET /rest/db/whohas`; upstream's `availability` lists only connected
+  devices) -- and who changed it last. If *you* are the one behind, it says a
+  newer version is on its way instead.
+
+Written by the installer under
+`HKCU\Software\Classes\SystemFileAssociations\.blend\shell\desuqcafe` and
+removed by the uninstaller: static verbs that run the tray with the file's
+path, **no shell extension** -- the same reasoning as Send To, and as turning
+down overlay icons and property handlers. `SystemFileAssociations`, so
+Blender's own association is untouched and it does not matter whether Blender
+is installed. **On Windows 11 they are under "Show more options"**, as Send To
+is: the compact menu shows only a packaged app's `IExplorerCommand`, which is
+a COM server in Explorer by another name.
+
+Verified: a flat verb at that key is offered by the shell on a `.blend` and
+not on a `.png`, and the three command lines work when run. The *cascading*
+menu itself is not enumerated by `Shell.Application`'s `Verbs()` -- neither is
+Send To -- so it still wants one real right-click after installing.
+
+**Hover over a synced folder** and the tooltip is live: *Project Assets --
+synced by desuqcafe Syncthing. Kai is working on cabin.blend. You are
+working on tree.blend. Up to date.* It is the `InfoTip` line of the
+`desktop.ini` the tray already writes for the folder icon (§10), rewritten
+only when the text changes, and within seconds of a mark arriving: the claims
+pass pokes the folder marker. File names and labels go through the same
+one-line filter as the label always did, because both are chosen by other
+people and `desktop.ini` is obeyed by the shell.
 
 ## Recommended configuration
 

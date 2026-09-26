@@ -244,6 +244,11 @@ type restFolder struct {
 	Label  string `json:"label"`
 	Path   string `json:"path"`
 	Paused bool   `json:"paused"`
+	// Devices includes this device itself, so "shared with somebody" is
+	// more than one entry.
+	Devices []struct {
+		DeviceID string `json:"deviceID"`
+	} `json:"devices"`
 	// MinDiskFree is the reserve Syncthing refuses to pull below. The unit is
 	// one of "%", "kB", "MB", "GB", "TB"; an empty unit means bytes.
 	MinDiskFree struct {
@@ -264,7 +269,7 @@ func (f restFolder) name() string {
 type folderStatus struct {
 	State     string `json:"state"`
 	NeedBytes int64  `json:"needBytes"`
-	NeedItems int64  `json:"needItems"`
+	NeedItems int64  `json:"needTotalItems"`
 	Errors    int    `json:"errors"`
 }
 
@@ -277,6 +282,9 @@ type connections struct {
 		// "somebody you sync with is ahead of you" check. Empty for a device
 		// that has never connected.
 		ClientVersion string `json:"clientVersion"`
+		// StartedAt is when the oldest live connection to the device was
+		// made; reconnect.go uses it to tell a reunion from a sibling link.
+		StartedAt time.Time `json:"startedAt"`
 	} `json:"connections"`
 }
 

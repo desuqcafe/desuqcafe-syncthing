@@ -656,6 +656,51 @@ world.claims = {
     check('nonsense reads as nothing', S('not a date', false) === '');
 }
 
+console.log('\n-- a peer whose copy only receives, and who changed things in it');
+// Verified on a pair, 2026-09-26: one edit and one deletion on a receive-only
+// B read on A as 60%, two items needed, remote state valid -- and the screen
+// said "Sending 2 MiB to Yuki. Theirs is catching up" about a copy that will
+// never catch up on its own.
+{
+    const s = svc._shareOf(peer(), { completion: 60, remoteState: 'valid', needBytes: 2097152 },
+        { files: 0, bytes: 0, changed: 2 });
+    check('changed there is its own kind, not behind', s.kind === 'changedthere', s.kind);
+    check('and carries the count', s.changedFiles === 2, s.changedFiles);
+    check('paused still outranks it',
+        svc._shareOf(peer({ paused: true }), { completion: 60, remoteState: 'valid' }, { changed: 2 }).kind === 'paused');
+
+    const p = person({ kind: 'changedthere', changedFiles: 2, pct: 60, needBytes: 2097152 });
+    const N = svc._peopleNote;
+    check('the note says the changes stay with them',
+        /Yuki changed 2 files on their own computer\. Their copy only receives/.test(N([p], 0, 6)), N([p], 0, 6));
+    check('and never that they are catching up', !/catching up/.test(N([p], 0, 6)));
+    check('the card note says so too',
+        /Has changes in Project Assets that stay on their computer/.test(
+            svc._peerNote([{ label: 'Project Assets', kind: 'changedthere' }])));
+
+    const h = H([folder({ people: [p] })], [peer()], []);
+    check('the headline does not claim to be sending to them', !/Sending/.test(h.text), h.text);
+    check('and says they have changes of their own', /changes that stay on their computer/.test(h.detail), h.detail);
+}
+
+console.log('\n-- a local-only folder warns what switching it would do');
+{
+    const h = H([folder({ state: 'localadditions' })], [peer()], []);
+    check('the headline names the trap', /deletions included/.test(h.detail), h.detail);
+}
+
+console.log('\n-- one of your marks that has not reached somebody');
+{
+    const U = svc.claimUnseen;
+    check('reached everybody says nothing', U([]) === '' && U(undefined) === '');
+    check('on its way to a connected peer says nothing',
+        U([{ name: 'Yuki', state: 'sending' }]) === '', U([{ name: 'Yuki', state: 'sending' }]));
+    check('offline is said, with what happens next',
+        /Yuki is offline and will see this when they reconnect/.test(U([{ name: 'Yuki', state: 'offline' }])));
+    check('a copy that cannot take marks is said',
+        /Ana cannot see marks until their copy is updated/.test(U([{ name: 'Ana', state: 'heldBack' }])));
+}
+
 console.log('\n-- no green anywhere');
 // The palette rule, asserted where it can actually regress: the stylesheet.
 {

@@ -202,6 +202,14 @@ angular.module('syncthing.core')
                 kind = 'notaccepted';
             } else if (c.remoteState === 'paused' || peer.paused) {
                 kind = 'paused';
+            } else if ((h.changed || 0) > 0) {
+                // Changed on their own computer, in a folder that only
+                // receives there. Completion calls this "behind" -- they need
+                // the shared version of every file they changed -- and it
+                // is not: nothing is on its way, and nothing will be until
+                // they undo it. Verified on a pair: one edit and one deletion
+                // read as 60%, two items needed, remote state valid.
+                kind = 'changedthere';
             } else if (pct === null) {
                 kind = 'unknown';
             } else if (pct >= 100 && (h.files || 0) > 0) {
@@ -225,7 +233,8 @@ angular.module('syncthing.core')
                 pct: pct === null ? null : Math.max(0, Math.min(100, Math.round(pct))),
                 needBytes: c.needBytes || 0,
                 heldFiles: h.files || 0,
-                heldBytes: h.bytes || 0
+                heldBytes: h.bytes || 0,
+                changedFiles: h.changed || 0
             };
         }
 
@@ -286,6 +295,13 @@ angular.module('syncthing.core')
                 return joinNames(notAccepted) + ' ' + plural(notAccepted.length, 'has', 'have') +
                     ' not accepted this folder yet.';
             }
+            var own = people.filter(function (s) { return s.kind === 'changedthere'; });
+            if (own.length) {
+                return own.map(function (s) {
+                    return s.name + ' changed ' + s.changedFiles + ' ' + plural(s.changedFiles, 'file', 'files') +
+                        ' on their own computer. Their copy only receives, so those changes stay with them.';
+                }).join(' ');
+            }
             var behind = people.filter(function (s) { return s.kind === 'behind'; });
             if (behind.length) {
                 var pending = behind.reduce(function (a, s) { return a + s.needBytes; }, 0);
@@ -332,6 +348,10 @@ angular.module('syncthing.core')
             if (offered.length) {
                 return 'Offered ' + joinNames(offered) + ' — not accepted yet.';
             }
+            var own = pick('changedthere');
+            if (own.length) {
+                return 'Has changes in ' + joinNames(own) + ' that stay on their computer.';
+            }
             var behind = pick('behind');
             if (behind.length) {
                 return 'Receiving ' + joinNames(behind) + '.';
@@ -360,6 +380,8 @@ angular.module('syncthing.core')
                 case 'partial':     return s.name + ' keeps part of this folder — ' + s.heldFiles + ' ' +
                     plural(s.heldFiles, 'file', 'files') + ' (' + size(s.heldBytes) + ') are not on their computer.';
                 case 'behind':      return s.name + ' has ' + s.pct + '% — ' + size(s.needBytes) + ' still to reach them.';
+                case 'changedthere': return s.name + ' changed ' + s.changedFiles + ' ' + plural(s.changedFiles, 'file', 'files') +
+                    ' on their computer. Their copy only receives, so the changes stay there.';
                 case 'notaccepted': return s.name + ' has not accepted this folder yet.';
                 case 'paused':      return s.name + ' has this folder paused.';
                 default:            return s.name + ': not known yet.';
@@ -425,10 +447,17 @@ angular.module('syncthing.core')
                 return f.state === 'localadditions' || f.state === 'localunencrypted';
             });
             if (localOnly.length) {
+                // The second sentence is the trap. Switching a receive-only
+                // folder to send-and-receive publishes everything it was
+                // holding -- deletions included. Verified on a pair: a file
+                // deleted on the receive-only side was deleted for everybody
+                // the moment the folder type changed.
                 return {
                     tone: TONE.attention,
                     text: localOnly[0].label + ' has changes that are only on this computer.',
-                    detail: 'This folder receives changes; it does not send them. Nobody else can see these.'
+                    detail: 'This folder receives changes; it does not send them. Nobody else can see these. ' +
+                        'Do not switch it to Send & Receive to share them: that sends every one, ' +
+                        'deletions included. Undo my changes here puts back the shared version.'
                 };
             }
 
@@ -576,10 +605,11 @@ angular.module('syncthing.core')
 
             // Somebody who keeps only part of a folder does not "have the
             // same", however complete completion says they are.
-            var partly = [];
+            var partly = [], ownChanges = [];
             active.forEach(function (f) {
                 f.people.forEach(function (s) {
                     if (s.kind === 'partial' && partly.indexOf(s.name) === -1) { partly.push(s.name); }
+                    if (s.kind === 'changedthere' && ownChanges.indexOf(s.name) === -1) { ownChanges.push(s.name); }
                 });
             });
             everyone = everyone.filter(function (n) { return partly.indexOf(n) === -1; });
@@ -589,6 +619,10 @@ angular.module('syncthing.core')
             }
             if (partly.length) {
                 others.push(joinNames(partly) + ' ' + plural(partly.length, 'keeps', 'keep') + ' only part of it');
+            }
+            if (ownChanges.length) {
+                others.push(joinNames(ownChanges) + ' ' + plural(ownChanges.length, 'has', 'have') +
+                    ' changes that stay on their computer');
             }
             return {
                 tone: TONE.good,
@@ -890,7 +924,12 @@ angular.module('syncthing.core')
             var budget = MAX_COMPLETION_REQUESTS;
             folders.forEach(function (f) {
                 f.people.forEach(function (s) {
-                    if ((s.kind !== 'complete' && s.kind !== 'partial') || budget-- <= 0) {
+                    // 'behind' too, and only while connected: a peer changing
+                    // files in a receive-only copy reads as behind, and their
+                    // index is the one place that says otherwise.
+                    var worth = s.kind === 'complete' || s.kind === 'partial' ||
+                        s.kind === 'changedthere' || (s.kind === 'behind' && s.connected);
+                    if (!worth || budget-- <= 0) {
                         return;
                     }
                     $http.get(urlbase + '/db/peerheldback',
@@ -898,7 +937,8 @@ angular.module('syncthing.core')
                         .then(function (r) {
                             (st.peerHeld[f.id] || (st.peerHeld[f.id] = {}))[s.deviceID] = {
                                 files: (r.data && r.data.files) || 0,
-                                bytes: (r.data && r.data.bytes) || 0
+                                bytes: (r.data && r.data.bytes) || 0,
+                                changed: (r.data && r.data.changed) || 0
                             };
                         }, angular.noop);
                 });
@@ -978,6 +1018,28 @@ angular.module('syncthing.core')
                 out += ' — ' + days + ' days, may have been forgotten';
             }
             return out;
+        }
+
+        // Who one of your own marks has not reached, as a sentence, or ''.
+        // A connected peer still pulling it is left out: that is a second's
+        // wait and would flash on and off with every mark. Offline is the
+        // case the mark was made for -- it used to toast success and reach
+        // nobody -- and "not taking marks" never fixes itself.
+        function claimUnseen(unseen) {
+            var offline = [], held = [];
+            (unseen || []).forEach(function (p) {
+                if (p.state === 'offline') { offline.push(p.name); }
+                if (p.state === 'heldBack') { held.push(p.name); }
+            });
+            var out = [];
+            if (offline.length) {
+                out.push(joinNames(offline) + ' ' + plural(offline.length, 'is', 'are') +
+                    ' offline and will see this when they reconnect.');
+            }
+            if (held.length) {
+                out.push(joinNames(held) + ' cannot see marks until their copy is updated.');
+            }
+            return out.join(' ');
         }
 
         // ------------------------------------------------------------- tray
@@ -1070,6 +1132,7 @@ angular.module('syncthing.core')
             repair: repair,
             releaseClaim: releaseClaim,
             claimSince: claimSince,
+            claimUnseen: claimUnseen,
             markReclaimStale: markReclaimStale,
             markConflictsStale: markConflictsStale,
             pollMs: POLL_MS,
@@ -1173,6 +1236,8 @@ angular.module('syncthing.core')
 
                 // Who is working on what. Keyed by folder, like revealError.
                 scope.claimSince = desuqHome.claimSince;
+                scope.claimUnseen = desuqHome.claimUnseen;
+
                 scope.claimError = {};
                 scope.claimHelp = {};
                 scope.releaseClaim = function (folderID, path) {

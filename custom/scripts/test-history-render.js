@@ -725,6 +725,23 @@ console.log('\n-- the conflicts tab');
         el.text().indexOf('before their computers can talk') !== -1);
 }
 
+console.log('\n-- Explorer\'s "Show history" opens straight onto one file');
+// custom/tray/explorer.go opens /?desuq-history=<folder>&file=<path>.
+{
+    svc.close();
+    check('with no parameters it does nothing', svc._openFromURL() === false && !svc.state.open);
+    window.history.pushState(null, '', '/?desuq-history=assets&file=scenes%2Fcabin.blend');
+    const opened = svc._openFromURL();
+    check('with them it opens', opened === true && svc.state.open);
+    check('on the versions tab of that folder',
+        svc.state.tab === 'versions' && svc.state.folder === 'assets', svc.state.tab + ' ' + svc.state.folder);
+    check('searched for the file by name', svc.state.search === 'cabin.blend', svc.state.search);
+    check('and takes the parameters off the address, so a reload does not reopen it',
+        window.location.search === '', window.location.search);
+    flush();
+    svc.close();
+}
+
 console.log('\n-- no green anywhere');
 {
     const css = fs.readFileSync(path.join(desuq, 'history.css'), 'utf8');

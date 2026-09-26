@@ -79,6 +79,17 @@ type claimRow struct {
 	Mine   bool      `json:"mine"`
 	Since  time.Time `json:"since"`
 	Stale  bool      `json:"stale"`
+	Auto   bool      `json:"auto"`
+	// Unseen is, on this device's own claims, who does not have them yet.
+	Unseen []claimPeer `json:"unseen"`
+}
+
+// claimPeer is one person a claim has not reached. State is "offline",
+// "sending" or "heldBack"; see claimPeer in lib/api/api_claims.go.
+type claimPeer struct {
+	Device string `json:"device"`
+	Name   string `json:"name"`
+	State  string `json:"state"`
 }
 
 type claimsFolderInfo struct {
@@ -98,11 +109,69 @@ func (c *client) claims() (claimsReply, error) {
 	return out, err
 }
 
-// claim marks or unmarks one file. The error carries the server's sentence
-// for the refusals a person can do something about.
-func (c *client) claim(folder, path string, release bool) error {
-	body := map[string]any{"folder": folder, "path": path, "release": release}
-	return c.do(http.MethodPost, "/rest/folder/claim", nil, body, nil)
+// claim marks or unmarks one file, and answers with that folder's claims
+// afterwards -- which is where "who has not seen it yet" comes from. The
+// error carries the server's sentence for the refusals a person can do
+// something about. auto is a mark made because the file was saved; see
+// autoclaim.go.
+func (c *client) claim(folder, path string, release, auto bool) (claimsReply, error) {
+	var out claimsReply
+	body := map[string]any{"folder": folder, "path": path, "release": release, "auto": auto}
+	err := c.do(http.MethodPost, "/rest/folder/claim", nil, body, &out)
+	return out, err
+}
+
+// unseenFor finds who has not received this device's claims in one folder.
+// Every claim of ours in a folder lives in the same file, so they all share
+// one answer; the first row found is as good as any.
+func unseenFor(reply claimsReply, folder string) []claimPeer {
+	for _, r := range reply.Claims {
+		if r.Mine && r.Folder == folder {
+			return r.Unseen
+		}
+	}
+	return nil
+}
+
+// reachSentence says who a mark has not reached, or "" when it has reached
+// everybody or is on its way. "sending" is left out on purpose: it is a
+// second's wait on a connected peer, and a toast that says "not yet" about
+// something that will be true before it is read is only noise. Offline and
+// held back are the two a person may need to do something about.
+func reachSentence(unseen []claimPeer) string {
+	var offline, held []string
+	for _, p := range unseen {
+		switch p.State {
+		case "offline":
+			offline = append(offline, p.Name)
+		case "heldBack":
+			held = append(held, p.Name)
+		}
+	}
+	var parts []string
+	if len(offline) > 0 {
+		verb := " is offline"
+		if len(offline) > 1 {
+			verb = " are offline"
+		}
+		parts = append(parts, listNames(offline)+verb+" and will not see it until they reconnect.")
+	}
+	if len(held) > 0 {
+		parts = append(parts, listNames(held)+" cannot see marks yet: their copy needs updating.")
+	}
+	return strings.Join(parts, " ")
+}
+
+// listNames joins every name, where joinNames counts past the second: a
+// sentence about who has not seen something has to say who.
+func listNames(names []string) string {
+	switch len(names) {
+	case 0:
+		return ""
+	case 1:
+		return names[0]
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
 }
 
 // diskEvent is one entry from /rest/events/disk.
@@ -116,6 +185,9 @@ type diskEvent struct {
 		Action string `json:"action"`
 		Type   string `json:"type"`
 		Path   string `json:"path"`
+		// ModifiedBy is the short ID of the device that made the change, which
+		// is how reconnect.go tells what a particular peer did.
+		ModifiedBy string `json:"modifiedBy"`
 	} `json:"data"`
 }
 
@@ -304,13 +376,20 @@ func (a *alerter) checkClaims(w *claimWatch) {
 		a.notify.Notify(Notification{Title: title, Body: body, Launch: a.guiURL()})
 	}
 
-	a.checkCollisions(cl, w, reply.Claims)
+	evs := a.checkCollisions(cl, w, reply.Claims)
+	a.autoClaim(cl, w, evs, reply.Claims)
+	a.autoRelease(cl, reply.Claims, time.Now())
+	a.checkResurrections(cl, evs)
 	ensureClaimsFolders(cl)
+	if a.claimsChanged != nil {
+		a.claimsChanged()
+	}
 }
 
 // checkCollisions reads the disk-change feed and warns about any file that
-// somebody else has marked and that just changed here.
-func (a *alerter) checkCollisions(cl *client, w *claimWatch, rows []claimRow) {
+// somebody else has marked and that just changed here. It hands back the
+// events it read, which is also what the automatic marks are made from.
+func (a *alerter) checkCollisions(cl *client, w *claimWatch, rows []claimRow) []diskEvent {
 	// Where "now" is, every pass. A restarted Syncthing numbers from 1 again,
 	// and asking it for events after an old, higher cursor returns nothing at
 	// all -- silently, for ever. The newest ID going below the cursor is the
@@ -318,22 +397,22 @@ func (a *alerter) checkCollisions(cl *client, w *claimWatch, rows []claimRow) {
 	latest, err := cl.latestDiskEventID()
 	if err != nil {
 		slog.Debug("could not read disk events", "err", err)
-		return
+		return nil
 	}
 	if w.diskCursor < 0 || latest < w.diskCursor {
 		// First pass, or a restart. Either way, changes from before now are
 		// not something anybody can still do anything about -- and after a
 		// restart they are the initial scan, which reports every file.
 		w.diskCursor = latest
-		return
+		return nil
 	}
 	if latest == w.diskCursor {
-		return
+		return nil
 	}
 	evs, err := cl.diskEvents(w.diskCursor)
 	if err != nil {
 		slog.Debug("could not read disk events", "err", err)
-		return
+		return nil
 	}
 	for _, ev := range evs {
 		if ev.ID > w.diskCursor {
@@ -353,6 +432,7 @@ func (a *alerter) checkCollisions(cl *client, w *claimWatch, rows []claimRow) {
 			"folder", r.Folder, "path", r.Path, "who", r.Name)
 		a.notify.Notify(Notification{Title: title, Body: body, Launch: a.guiURL()})
 	}
+	return evs
 }
 
 // ensureClaimsFolders keeps each folder's claims directory hidden, and makes
@@ -508,7 +588,7 @@ func runClaim(home string, paths []string, n notifier) int {
 	}
 
 	var marked, released, refused []string
-	reason := ""
+	reason, reach := "", ""
 	for _, p := range paths {
 		if st, err := os.Stat(p); err == nil && st.IsDir() {
 			refused = append(refused, filepath.Base(p))
@@ -522,7 +602,8 @@ func runClaim(home string, paths []string, n notifier) int {
 			continue
 		}
 		release := held[f.ID+"\x00"+rel]
-		if err := cl.claim(f.ID, rel, release); err != nil {
+		reply, err := cl.claim(f.ID, rel, release, false)
+		if err != nil {
 			refused = append(refused, filepath.Base(p))
 			reason = claimRefusal(err)
 			continue
@@ -531,13 +612,22 @@ func runClaim(home string, paths []string, n notifier) int {
 			released = append(released, filepath.Base(p))
 		} else {
 			marked = append(marked, filepath.Base(p))
+			if r := reachSentence(unseenFor(reply, f.ID)); r != "" {
+				reach = r
+			}
 		}
 	}
 
 	switch {
 	case len(marked) > 0 && len(released) == 0 && len(refused) == 0:
-		say(truncate("You are working on "+joinNames(marked), 60),
-			"Everyone you share it with can see that now. Send it here again when you are done.")
+		// Only "everyone can see that now" when it is true. A mark made
+		// while the other person's computer is off reaches nobody, and this
+		// toast used to say it had.
+		body := "Everyone you share it with can see that now. Mark it again when you are done."
+		if reach != "" {
+			body = reach + " Mark it again when you are done."
+		}
+		say(truncate("You are working on "+joinNames(marked), 60), body)
 	case len(released) > 0 && len(marked) == 0 && len(refused) == 0:
 		say(truncate("Done with "+joinNames(released), 60),
 			"You are no longer marked as working on it.")
@@ -548,7 +638,11 @@ func runClaim(home string, paths []string, n notifier) int {
 		var parts []string
 		if len(marked) > 0 {
 			parts = append(parts, "Marked: "+joinNames(marked)+".")
+			if reach != "" {
+				parts = append(parts, reach)
+			}
 		}
+
 		if len(released) > 0 {
 			parts = append(parts, "Done with: "+joinNames(released)+".")
 		}
@@ -571,4 +665,26 @@ func claimRefusal(err error) string {
 		return "Syncthing does not know that file yet. Wait for it to finish checking the folder, then try again."
 	}
 	return "Something went wrong. Open desuqcafe Syncthing and try again."
+}
+
+// pausedClaimsMessage words the warning for pausing while holding marks, or
+// returns empty strings when this computer holds none.
+func pausedClaimsMessage(rows []claimRow) (title, body string) {
+	var mine []string
+	for _, r := range rows {
+		if r.Mine {
+			mine = append(mine, filepath.Base(r.Path))
+		}
+	}
+	if len(mine) == 0 {
+		return "", ""
+	}
+	sort.Strings(mine)
+	what, it := mine[0], "it"
+	if len(mine) > 1 {
+		what, it = fmt.Sprintf("%d files", len(mine)), "them"
+	}
+	return truncate("Paused while you are working on "+what, 60),
+		"The others still see your mark, so they will leave " + it + " alone -- but they will not see " +
+			"it come off until you resume. If you are done with " + it + ", resume, take the mark off, then pause."
 }

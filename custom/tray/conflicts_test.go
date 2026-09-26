@@ -25,6 +25,12 @@ func touch(t *testing.T, path string, age time.Duration) string {
 	return path
 }
 
+// stamped names a conflict copy the way Syncthing would have, age ago. The
+// stamp, not the file's mtime, is what says when a conflict happened.
+func stamped(stem string, age time.Duration) string {
+	return stem + conflictMarker + time.Now().Add(-age).Format(conflictStampLayout) + "-K3PLM9Q.blend"
+}
+
 func TestOriginalNameStripsTheGeneratedPart(t *testing.T) {
 	cases := map[string]string{
 		"scene.sync-conflict-20260824-142233-K3PLM9Q.blend": "scene.blend",
@@ -72,8 +78,8 @@ func TestConflictsInSurvivesAMissingFolder(t *testing.T) {
 // about it at every sign-in is how people learn to ignore notifications.
 func TestOldConflictsAreNotAnnounced(t *testing.T) {
 	root := t.TempDir()
-	old := touch(t, filepath.Join(root, "old.sync-conflict-20260101-000000-AAAAAAA.blend"), 48*time.Hour)
-	fresh := touch(t, filepath.Join(root, "new.sync-conflict-20260824-142233-K3PLM9Q.blend"), 0)
+	old := touch(t, filepath.Join(root, stamped("old", 48*time.Hour)), 48*time.Hour)
+	fresh := touch(t, filepath.Join(root, stamped("new", 0)), 0)
 
 	a, _ := testAlerter()
 	got := a.freshConflicts([]conflictFile{
@@ -89,8 +95,7 @@ func TestOldConflictsAreNotAnnounced(t *testing.T) {
 // started by this process and pulls straight away.
 func TestConflictInsideTheGracePeriodIsAnnounced(t *testing.T) {
 	root := t.TempDir()
-	p := touch(t, filepath.Join(root, "x.sync-conflict-20260824-142233-K3PLM9Q.blend"),
-		conflictGrace/2)
+	p := touch(t, filepath.Join(root, stamped("x", conflictGrace/2)), conflictGrace/2)
 
 	a, _ := testAlerter()
 	if got := a.freshConflicts([]conflictFile{{folder: "M", path: p, name: filepath.Base(p)}}); len(got) != 1 {
@@ -100,7 +105,7 @@ func TestConflictInsideTheGracePeriodIsAnnounced(t *testing.T) {
 
 func TestEachConflictIsAnnouncedOnce(t *testing.T) {
 	root := t.TempDir()
-	p := touch(t, filepath.Join(root, "x.sync-conflict-20260824-142233-K3PLM9Q.blend"), 0)
+	p := touch(t, filepath.Join(root, stamped("x", 0)), 0)
 	list := []conflictFile{{folder: "M", path: p, name: filepath.Base(p)}}
 
 	a, _ := testAlerter()
@@ -118,7 +123,7 @@ func TestEachConflictIsAnnouncedOnce(t *testing.T) {
 // not a repeat of the first.
 func TestAResolvedConflictCanNotifyAgain(t *testing.T) {
 	root := t.TempDir()
-	p := touch(t, filepath.Join(root, "x.sync-conflict-20260824-142233-K3PLM9Q.blend"), 0)
+	p := touch(t, filepath.Join(root, stamped("x", 0)), 0)
 	list := []conflictFile{{folder: "M", path: p, name: filepath.Base(p)}}
 
 	a, _ := testAlerter()
@@ -132,6 +137,70 @@ func TestAResolvedConflictCanNotifyAgain(t *testing.T) {
 	touch(t, p, 0)
 	if got := a.freshConflicts(list); len(got) != 1 {
 		t.Fatalf("the second conflict was swallowed")
+	}
+}
+
+// The offline case. The edit was made on Monday with the other computer off,
+// the tray restarted on Tuesday, and the two met on Tuesday afternoon: the
+// copy keeps Monday's mtime, but the conflict is new. Judged by mtime, as it
+// was until 2026-09-26, this was never announced.
+func TestAConflictOverAnOldEditIsStillNews(t *testing.T) {
+	root := t.TempDir()
+	p := touch(t, filepath.Join(root, stamped("scene", 0)), 30*time.Hour)
+
+	a, _ := testAlerter()
+	if got := a.freshConflicts([]conflictFile{{folder: "M", path: p, name: filepath.Base(p)}}); len(got) != 1 {
+		t.Fatalf("a conflict made just now over a day-old edit was not announced")
+	}
+}
+
+// And the other way round: a new mtime does not make an old conflict news.
+// Touching a conflict copy -- opening it to compare -- must not re-announce it
+// at the next sign-in.
+func TestATouchedOldConflictIsNotNews(t *testing.T) {
+	root := t.TempDir()
+	p := touch(t, filepath.Join(root, stamped("scene", 48*time.Hour)), 0)
+
+	a, _ := testAlerter()
+	if got := a.freshConflicts([]conflictFile{{folder: "M", path: p, name: filepath.Base(p)}}); len(got) != 0 {
+		t.Fatalf("a two-day-old conflict was announced because its file was touched")
+	}
+}
+
+func TestConflictTimeReadsTheStamp(t *testing.T) {
+	got, ok := conflictTime("scene.sync-conflict-20260926-150211-OHQN3WH.blend")
+	want := time.Date(2026, 9, 26, 15, 2, 11, 0, time.Local)
+	if !ok || !got.Equal(want) {
+		t.Errorf("conflictTime = %v, %v; want %v", got, ok, want)
+	}
+	for _, bad := range []string{"scene.blend", "scene.sync-conflict-2026.blend", "scene.sync-conflict-garbage-xx-K.blend"} {
+		if _, ok := conflictTime(bad); ok {
+			t.Errorf("conflictTime(%q) claimed a stamp", bad)
+		}
+	}
+}
+
+// Edit against delete: the delete keeps the name and the edit survives only
+// as the copy (verified on a pair, 2026-09-26). The toast must not talk about
+// "a second copy" of a file that is no longer there.
+func TestConflictNotificationForADeletedOriginal(t *testing.T) {
+	root := t.TempDir()
+	p := touch(t, filepath.Join(root, stamped("texture2", 0)), 0)
+	found := conflictsIn(root, "Project Assets")
+	if len(found) != 1 || !found[0].gone {
+		t.Fatalf("a copy with no original beside it was not seen as gone: %+v", found)
+	}
+	touch(t, filepath.Join(root, "texture2.blend"), 0)
+	if again := conflictsIn(root, "Project Assets"); again[0].gone {
+		t.Fatalf("a copy with its original beside it was seen as gone")
+	}
+
+	n := conflictNotification([]conflictFile{{folder: "Project Assets", path: p, name: filepath.Base(p), gone: true}}, "")
+	if !strings.Contains(n.Title, "deleted") || strings.Contains(n.Body, "second cop") {
+		t.Errorf("deleted-original toast reads wrong: %q / %q", n.Title, n.Body)
+	}
+	if !strings.Contains(n.Body, "texture2.blend") || !strings.Contains(n.Body, "Rename it back") {
+		t.Errorf("deleted-original toast does not say what to do: %q", n.Body)
 	}
 }
 

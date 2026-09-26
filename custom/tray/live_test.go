@@ -153,7 +153,9 @@ func TestMarkFoldersForExplorer(t *testing.T) {
 		}
 		first[f.ID] = ign.Ignore
 	}
-	m.done = map[string]bool{}
+	// Forget everything, so the second pass really does re-read the patterns.
+	m.done = map[string]string{}
+	m.ignored = map[string]bool{}
 	m.reconcile(c)
 
 	marked := 0

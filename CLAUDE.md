@@ -32,7 +32,7 @@ future `git merge upstream/main` is work you can plan rather than a surprise:
   A line in the root `go.mod`/`go.sum` is a conflict on every upstream
   dependency bump: a recurring tax for a one-off convenience.
 
-Seventeen upstream files carry fork edits today, 632 insertions against 207
+Seventeen upstream files carry fork edits today, 642 insertions against 207
 deletions. Stripping the telemetry is what changed the character of that: it
 is the first work that had to *delete* upstream behaviour rather than sit
 beside it, because there is no additive way to remove a consent nag or a
@@ -74,7 +74,7 @@ Everything else still resolves by keeping both sides.
 | `custom/branding.ps1` | Single source of truth for all naming |
 | `custom/build-windows.ps1` | Builds the branded binary + installer |
 | `custom/installer/installer.iss` | Inno Setup script (per-user, no admin) |
-| `custom/tray/` | Notification-area app, desktop notifications, and the Explorer folder icons. **Its own Go module** |
+| `custom/tray/` | Notification-area app, desktop notifications, the Explorer folder icons and their live hover text, and the one-shots behind Send To and the `.blend` right-click menu. **Its own Go module** |
 | `custom/scripts/seed-config.ps1` | Writes first-run `config.xml` defaults |
 | `custom/scripts/sync-upstream.ps1` | Merge upstream and verify the build |
 | `custom/scripts/start-test-pair.ps1` | Two throwaway instances sharing a folder, for two-device testing |
@@ -336,6 +336,37 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
   `rundll32 url.dll,FileProtocolHandler` was removed for exactly this reason --
   but **removing it did not clear the detection** (desuq.5 was quarantined
   identically to desuq.4), so do not treat source-level tidying as a fix.
+- **Edit against delete is decided by which happened later.** Change later
+  and the file silently comes back on the machine that deleted it -- no
+  copy, no conflict, no event; delete later and the change survives only as
+  a `sync-conflict` copy with no original beside it. Both reproduced on a
+  pair by swapping the order. The tray remembers local deletions on disk
+  (`custom/tray/resurrect.go`) because nothing in the index does.
+  `DEPLOYMENT-3D-TEAM.md` §26.
+- **A conflict copy keeps the mtime of the edit it preserved**, not the time
+  of the conflict. Anything asking "is this conflict new" must read the stamp
+  in the name (`sync-conflict-20260926-150211-`); by mtime, an offline edit
+  followed by a tray restart was never announced.
+- **The read-only attribute is synced.** Setting it on one machine makes a
+  new version and every peer receives it -- including the person you meant
+  to protect. That is why there is no "soft lock"; see §26 before retrying.
+- **Switching a receive-only folder to Send & Receive publishes every local
+  change it was holding, deletions included.** Verified on a pair. The main
+  screen now says so where it reports local-only changes.
+- **`DeviceConnected` fires once per connection, and Syncthing 2 opens
+  several per peer.** `DeviceDisconnected` fires only when the last closes.
+  Treat a second `DeviceConnected` without a disconnect between as nothing
+  (`custom/tray/reconnect.go`).
+- **`/rest/db/file`'s `availability` lists connected devices only.** An
+  offline peer who has the file is indistinguishable from one who does not.
+  `/rest/db/whohas` reads each peer's index instead.
+- **The folder summary field is `needTotalItems`, not `needItems`.**
+  `/rest/db/completion` says `needItems`; `/rest/db/status` and the
+  `FolderSummary` event do not. The tray decoded the wrong one for as long as
+  it existed, so a deletions-only pull was never "behind".
+- **`<select>` with `<option ng-repeat>` does not re-select when the options
+  arrive after the model is set.** The History folder picker sat on "All
+  folders" while showing one folder. Use `ng-options`.
 - The device-verification wordlists in `gui/default/syncthing/desuq/` are data,
   not prose: a word's *index* is its meaning. Re-ordering a list or inserting
   into the middle of one silently invalidates every verification anyone has

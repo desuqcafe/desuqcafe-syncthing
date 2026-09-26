@@ -52,29 +52,29 @@ func TestApplyClaim(t *testing.T) {
 	monday := time.Date(2026, 9, 21, 9, 0, 0, 0, time.UTC)
 	later := monday.Add(26 * time.Hour)
 
-	list, changed, err := applyClaim(nil, "a.blend", false, monday)
+	list, changed, err := applyClaim(nil, "a.blend", false, false, monday)
 	if err != nil || !changed || len(list) != 1 || !list[0].Since.Equal(monday) {
 		t.Fatalf("first claim: %+v %v %v", list, changed, err)
 	}
 
 	// Marking again keeps the original time.
-	again, changed, _ := applyClaim(list, "a.blend", false, later)
+	again, changed, _ := applyClaim(list, "a.blend", false, false, later)
 	if changed || len(again) != 1 || !again[0].Since.Equal(monday) {
 		t.Errorf("re-claim changed the claim: %+v %v", again, changed)
 	}
 
-	two, _, _ := applyClaim(list, "b.blend", false, later)
+	two, _, _ := applyClaim(list, "b.blend", false, false, later)
 	if len(two) != 2 {
 		t.Fatalf("second file: %+v", two)
 	}
 
-	one, changed, _ := applyClaim(two, "a.blend", true, later)
+	one, changed, _ := applyClaim(two, "a.blend", true, false, later)
 	if !changed || len(one) != 1 || one[0].Path != "b.blend" {
 		t.Errorf("release: %+v %v", one, changed)
 	}
 
 	// Releasing something not held is not a change, and not an error.
-	same, changed, err := applyClaim(one, "zzz.blend", true, later)
+	same, changed, err := applyClaim(one, "zzz.blend", true, false, later)
 	if changed || err != nil || len(same) != 1 {
 		t.Errorf("release of unheld: %+v %v %v", same, changed, err)
 	}
@@ -83,12 +83,44 @@ func TestApplyClaim(t *testing.T) {
 	for i := 0; i < claimsMaxPerDevice; i++ {
 		full = append(full, claimEntry{Path: string(rune('a'+i%26)) + time.Duration(i).String(), Since: monday})
 	}
-	if _, _, err := applyClaim(full, "one-too-many.blend", false, later); err != errClaimTooMany {
+	if _, _, err := applyClaim(full, "one-too-many.blend", false, false, later); err != errClaimTooMany {
 		t.Errorf("cap: got %v, want errClaimTooMany", err)
 	}
 	// ...but releasing from a full list still works.
-	if _, changed, err := applyClaim(full, full[0].Path, true, later); err != nil || !changed {
+	if _, changed, err := applyClaim(full, full[0].Path, true, false, later); err != nil || !changed {
 		t.Errorf("release from a full list: %v %v", changed, err)
+	}
+}
+
+// A save makes an automatic mark; marking by hand afterwards makes it a
+// deliberate one, which the tray must then never take off by itself. A later
+// save must not turn it back.
+func TestApplyClaimAuto(t *testing.T) {
+	monday := time.Date(2026, 9, 21, 9, 0, 0, 0, time.UTC)
+	later := monday.Add(time.Hour)
+
+	list, changed, _ := applyClaim(nil, "a.blend", false, true, monday)
+	if !changed || !list[0].Auto {
+		t.Fatalf("auto claim: %+v %v", list, changed)
+	}
+	again, changed, _ := applyClaim(list, "a.blend", false, true, later)
+	if changed || !again[0].Auto {
+		t.Errorf("second save changed the auto claim: %+v %v", again, changed)
+	}
+	manual, changed, _ := applyClaim(list, "a.blend", false, false, later)
+	if !changed || manual[0].Auto || !manual[0].Since.Equal(monday) {
+		t.Errorf("hand mark over auto: %+v %v", manual, changed)
+	}
+	still, changed, _ := applyClaim(manual, "a.blend", false, true, later)
+	if changed || still[0].Auto {
+		t.Errorf("a save demoted a hand mark: %+v %v", still, changed)
+	}
+
+	// And the flag survives the round trip through the file.
+	data, _ := json.Marshal(claimsFile{Version: 1, Device: protocol.LocalDeviceID.String(), Claims: list})
+	back, ok := parseClaimsFile(data, protocol.LocalDeviceID)
+	if !ok || len(back) != 1 || !back[0].Auto {
+		t.Errorf("auto lost in the file: %+v %v", back, ok)
 	}
 }
 

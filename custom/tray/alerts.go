@@ -122,6 +122,25 @@ type alerter struct {
 	// while the same one does not repeat on every reconnect.
 	naggedVersion string
 	lastNag       time.Time
+
+	// started is when this tray began, apart is when each peer was last seen
+	// to disconnect, and briefing is the peers whose "back in touch" toast is
+	// being prepared. See reconnect.go.
+	started   time.Time
+	apart     map[string]time.Time
+	connected map[string]bool
+	briefing  map[string]bool
+	// backStash is files deleted here that came back while a briefing was
+	// being prepared; the briefing says them. See resurrect.go.
+	backStash []resurrected
+	// deleted remembers this computer's deletions across restarts. Set by
+	// the app; nil in tests, where observe is a no-op.
+	deleted *deletedMemo
+
+	// claimsChanged is called after every claims pass, so the Explorer hover
+	// text can follow the claims without a second poll. Set by the app; nil
+	// in tests.
+	claimsChanged func()
 }
 
 func newAlerter(n notifier, guiURL func() string, current func() *client) *alerter {
@@ -138,6 +157,10 @@ func newAlerter(n notifier, guiURL func() string, current func() *client) *alert
 		lastDisk:         map[string]time.Time{},
 		seenConflicts:    map[string]bool{},
 		staleNagged:      map[string]time.Time{},
+		started:          time.Now(),
+		apart:            map[string]time.Time{},
+		connected:        map[string]bool{},
+		briefing:         map[string]bool{},
 	}
 }
 
@@ -167,6 +190,14 @@ func (a *alerter) handle(ev event) {
 		// checkPendingDevices does: one small local request beats tracking a
 		// payload shape across upstream versions.
 		a.checkPeerVersions()
+		// The ID, though, is only in the payload.
+		if d, err := decodeEvent[deviceEvent](ev); err == nil && d.ID != "" {
+			a.peerConnected(d.ID, ev.Time)
+		}
+	case "DeviceDisconnected":
+		if d, err := decodeEvent[deviceEvent](ev); err == nil && d.ID != "" {
+			a.peerDisconnected(d.ID, ev.Time)
+		}
 	}
 }
 
@@ -367,9 +398,19 @@ func (a *alerter) announceFinished() {
 	}
 	a.mu.Unlock()
 
+	// A folder finishing is the moment a conflict is made, so look now
+	// rather than at the next five-minute pass. If there is one, it is the
+	// only thing worth saying: "up to date" over two people's clashing edits
+	// is true in the way that misleads. And while a peer who has been away is
+	// being caught up with, the briefing says all of it (reconnect.go).
+	if a.briefingActive() || a.checkConflicts() {
+		return
+	}
+
 	sort.Strings(names)
 
 	body := joinNames(names) + " is up to date."
+
 	if len(names) > 1 {
 		body = joinNames(names) + " are up to date."
 	}
