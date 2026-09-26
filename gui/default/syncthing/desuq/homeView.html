@@ -214,6 +214,73 @@
         Nothing is locked: it is a note to the others, not a lock.
       </div>
 
+      <!-- Why files changed (lib/api/api_notes.go), in the words of whoever
+           changed them. Only notes about files as they are now: a note about
+           a version that has since been replaced is shown in History, beside
+           that version. -->
+      <ul class="desuq-home-notes" ng-if="f.notes.length">
+        <li class="desuq-home-note" ng-repeat="n in f.notes track by n.device + n.path + n.modified"
+            ng-class="{ 'note-mine': n.mine }">
+          <span class="fa fa-comment-o desuq-home-note-icon" aria-hidden="true"></span>
+          <span class="desuq-home-note-text">
+            <span class="desuq-home-note-head">
+              <b>{{ n.mine ? 'You' : n.name }}</b> changed
+              <span class="desuq-home-claim-path" title="{{ n.path }}">{{ n.path }}</span>
+              <span class="desuq-home-claim-since">{{ noteWhen(n.at) }}</span>
+            </span>
+            <span class="desuq-home-note-body">{{ n.text }}</span>
+            <!-- The note is a few hundred bytes and the file it explains may
+                 be a gigabyte, so the note usually arrives first. -->
+            <span class="desuq-home-claim-note" ng-if="!n.here">this version is still on its way to you</span>
+          </span>
+          <span class="desuq-home-claim-actions" ng-if="n.mine">
+            <button type="button" class="btn btn-xs btn-default" ng-click="editNote(f.id, n)" title="Change what this note says">
+              <span class="fas fa-pencil-alt"></span>&nbsp;Edit
+            </button>
+            <button type="button" class="btn btn-xs btn-default" ng-click="removeNote(f.id, n)" title="Take this note away from everybody">
+              Remove
+            </button>
+          </span>
+        </li>
+        <li class="desuq-home-note-more" ng-if="f.notes.more">
+          {{ f.notes.more }} more {{ f.notes.more == 1 ? 'note' : 'notes' }} &mdash;
+          <button type="button" class="desuq-home-linkbtn" ng-click="openHistory(f.id, 'versions')">see History</button>
+        </li>
+      </ul>
+
+      <div class="desuq-home-noteform" ng-if="noteForm[f.id]">
+        <div ng-if="noteForm[f.id].loading" class="desuq-home-claim-note">Looking for your recent changes&hellip;</div>
+        <div ng-if="!noteForm[f.id].loading">
+          <div class="desuq-home-noteform-q">
+            <span ng-if="noteForm[f.id].afterDone">You are done with <b>{{ noteForm[f.id].path }}</b>. What did you change?</span>
+            <span ng-if="!noteForm[f.id].afterDone && noteForm[f.id].version">Your note on <b>{{ noteForm[f.id].path }}</b></span>
+            <span ng-if="!noteForm[f.id].afterDone && !noteForm[f.id].version && noteForm[f.id].choices.length">Why did you change</span>
+            <select ng-if="!noteForm[f.id].afterDone && !noteForm[f.id].version && noteForm[f.id].choices.length"
+                    class="form-control input-sm" ng-model="noteForm[f.id].path" ng-change="notePicked(f.id)"
+                    ng-options="c.path as (c.path + (c.noted ? ' (has a note)' : '')) for c in noteForm[f.id].choices"></select>
+          </div>
+          <div class="desuq-home-claim-note" ng-if="!noteForm[f.id].choices.length">
+            Nothing you saved here in the last two weeks is still the latest
+            version, so there is nothing of yours to explain. A note is about
+            your own save, and only until somebody saves over it.
+          </div>
+          <textarea ng-if="noteForm[f.id].choices.length" class="form-control input-sm" rows="2" maxlength="500"
+                    ng-model="noteForm[f.id].text"
+                    placeholder="For example: moved the camera, lighting untouched"></textarea>
+          <div class="desuq-home-noteform-actions">
+            <button type="button" class="btn btn-xs btn-primary" ng-if="noteForm[f.id].choices.length" ng-click="submitNote(f.id)"
+                    ng-disabled="noteForm[f.id].busy || !noteForm[f.id].path || !noteForm[f.id].text.trim()">
+              Save note
+            </button>
+            <button type="button" class="btn btn-xs btn-default" ng-click="closeNote(f.id)">
+              {{ noteForm[f.id].afterDone ? 'Not now' : 'Cancel' }}
+            </button>
+            <span class="desuq-home-claim-note">Everyone you share this folder with sees it, next to this version of the file.</span>
+          </div>
+          <div class="desuq-home-card-reveal-error" ng-if="noteForm[f.id].error">{{ noteForm[f.id].error }}</div>
+        </div>
+      </div>
+
       <div class="desuq-home-card-path" title="{{ f.path }}">{{ f.path }}</div>
 
       <!-- The path above is a fact, not an affordance. A button is what a
@@ -370,6 +437,13 @@
         <button type="button" class="btn btn-sm btn-default" ng-if="f.canClaim && f.people.length"
                 ng-click="claimHelp[f.id] = !claimHelp[f.id]" aria-expanded="{{ !!claimHelp[f.id] }}">
           <span class="fas fa-bullhorn"></span>&nbsp;<span>Working on a file?</span>
+        </button>
+        <!-- Notes are written here, unlike marks: a note is about a save
+             that has already happened, so the server can list your recent
+             ones to choose from. Shown where a note would reach somebody. -->
+        <button type="button" class="btn btn-sm btn-default" ng-if="f.canNote && f.people.length && !noteForm[f.id]"
+                ng-click="openNote(f.id)">
+          <span class="fa fa-comment-o"></span>&nbsp;<span>Say why you changed a file</span>
         </button>
 
         <!-- Two capabilities that had no entry point outside upstream's

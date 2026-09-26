@@ -69,6 +69,15 @@ Older copies are cleaned up after thirty days. Now any one of them can be
 restoring it does not use it up. Pins are kept on the computer where you
 made them: each computer keeps its own older copies.
 
+## Say why you changed it
+
+After saving a file you can add a sentence — *moved the camera, lighting
+untouched* — with **Say why you changed a file** on the folder, when you
+press **Done** on your mark, or by right-clicking a `.blend`. Everyone you
+share with sees it on the main screen and gets a notification. History shows
+each note beside the exact version it was written about, so an older copy
+says why it was saved. Only the person who saved a version can write its note.
+
 ## Still true
 
 Windows Defender may still quarantine the tray on install as

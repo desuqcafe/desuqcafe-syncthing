@@ -32,7 +32,7 @@ future `git merge upstream/main` is work you can plan rather than a surprise:
   A line in the root `go.mod`/`go.sum` is a conflict on every upstream
   dependency bump: a recurring tax for a one-off convenience.
 
-Twenty upstream files carry fork edits today, 664 insertions against 210
+Twenty upstream files carry fork edits today, 670 insertions against 211
 deletions. Stripping the telemetry is what changed the character of that: it
 is the first work that had to *delete* upstream behaviour rather than sit
 beside it, because there is no additive way to remove a consent nag or a
@@ -258,6 +258,9 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
   A device's file there can outlive its marks: it keeps `accepted`
   hand-overs until the giver's side is gone (`lib/api/api_handoff.go`,
   §30), so "no marks" does not mean "no file".
+  **Notes live there too**, as `<device>.notes.json` (`lib/api/api_notes.go`,
+  §31) -- deliberately, so every exemption above covers them. Anything that
+  reads that directory as "the marks" must skip the `.notes.json` names.
 - **The page loads no Fancytree skin.** Upstream uses Fancytree only in table
   mode, so list mode -- the selective-sync picker -- rendered every row with a
   browser-default bullet and 40px indents until `selective.css` styled the

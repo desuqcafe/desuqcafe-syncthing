@@ -45,6 +45,7 @@ type options struct {
 	claim    bool
 	history  bool
 	who      bool
+	note     bool
 	interval time.Duration
 }
 
@@ -117,6 +118,8 @@ func main() {
 		"Open the history screen on the file named after the flags, then exit. Used by the .blend right-click menu")
 	flag.BoolVar(&opts.who, "who", false,
 		"Say who is working on the file named after the flags and who has it, then exit. Used by the .blend right-click menu")
+	flag.BoolVar(&opts.note, "note", false,
+		"Open the main screen to write a note on why the file named after the flags was changed, then exit. Used by the .blend right-click menu")
 	flag.Parse()
 
 	// Log to the Syncthing home directory, where the support bundle and
@@ -162,9 +165,9 @@ func main() {
 	// the two above it runs before the single-instance check: it is how a
 	// file gets marked while the tray is already up.
 	//
-	// -history and -who are the same shape, from the .blend right-click menu
-	// (explorer.go).
-	if opts.claim || opts.history || opts.who {
+	// -history, -who and -note are the same shape, from the .blend right-click
+	// menu (explorer.go, notes.go).
+	if opts.claim || opts.history || opts.who || opts.note {
 		var n notifier = nopNotifier{}
 		if !opts.quiet {
 			n = newNotifier(toastAppID, appName)
@@ -175,6 +178,8 @@ func main() {
 			code = runClaim(opts.home, flag.Args(), n)
 		case opts.history:
 			code = runHistory(opts.home, flag.Args(), n)
+		case opts.note:
+			code = runNote(opts.home, flag.Args(), n)
 		default:
 			code = runWho(opts.home, flag.Args(), n)
 		}
@@ -212,6 +217,7 @@ func main() {
 	a.marker = newFolderMarker(opts.home)
 	a.markNow = make(chan struct{}, 1)
 	a.alerts.deleted = loadDeletedMemo(opts.home)
+	a.alerts.notesSeen = loadNotesMemo(opts.home, time.Now())
 	a.alerts.claimsChanged = func() {
 		select {
 		case a.markNow <- struct{}{}:

@@ -421,6 +421,8 @@ angular.module('syncthing.core')
                 params: { folder: row.folder, file: row.name }
             }).then(function (r) {
                 st.expanded[key].versions = (r.data && r.data.versions) || [];
+                // Notes about the version in the folder now (api_notes.go).
+                st.expanded[key].current = (r.data && r.data.current) || [];
                 st.expanded[key].loading = false;
             }).catch(function () {
                 st.expanded[key].error = 'Could not read the older copies of this file.';

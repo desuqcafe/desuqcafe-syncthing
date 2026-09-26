@@ -416,6 +416,39 @@ reads as "no longer here" rather than "alarm".
     font-variant-numeric: tabular-nums;
 }
 
+/* "Why I changed this" beside the version it is about. Under the size rather
+   than beside it, so a sentence does not push the buttons off the row. */
+.desuq-hist-version-why,
+.desuq-hist-version-now {
+    display: block;
+    margin-top: 3px;
+    font-size: 13px;
+    color: var(--v-text);
+    overflow-wrap: anywhere;
+}
+
+/* Line breaks the writer typed, kept -- on the words only. On the whole row,
+   pre-line turns the template's own indentation into blank lines. */
+.desuq-hist-note-text {
+    white-space: pre-line;
+}
+
+.desuq-hist-version-why .fa,
+.desuq-hist-version-now .fa {
+    color: var(--v-accent);
+    margin-right: 3px;
+}
+
+.desuq-hist-version-now {
+    padding: 7px 0;
+    border-bottom: 1px solid var(--v-border);
+    color: var(--v-text-dim);
+}
+
+.desuq-hist-version-now b {
+    color: var(--v-text);
+}
+
 .desuq-hist-pin {
     flex: 0 0 auto;
     display: inline-flex;

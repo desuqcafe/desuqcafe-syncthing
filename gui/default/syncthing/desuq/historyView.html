@@ -198,13 +198,28 @@
              frightening: restoring archives the current file first, so the
              thing you are about to overwrite becomes the newest entry here
              and the action undoes itself. -->
+        <!-- The version in the folder now is not in the archive, so it has
+             no row of its own; its note is said once, above the older ones. -->
+        <div class="desuq-hist-version-now" ng-repeat="n in history.expandedFor(row).current track by n.device">
+          <span class="fa fa-comment-o" aria-hidden="true"></span>
+          The version in the folder now &mdash; <b>{{ n.mine ? 'You' : n.name }}:</b> <span class="desuq-hist-note-text">{{ n.text }}</span>
+        </div>
         <div class="desuq-hist-version" ng-repeat="v in history.expandedFor(row).versions">
           <!-- A timestamp does not answer "which one is the one I want", and
                for a texture library the picture does. See api_preview.go. -->
           <desuq-thumb ng-if="previewable(row.name)"
                        src="{{ previewURL(row.folder, row.name, v.versionTime) }}"></desuq-thumb>
           <span class="desuq-hist-version-when">{{ v.versionTime | date:'d MMM yyyy HH:mm' }}</span>
-          <span class="desuq-hist-version-size">{{ bytes(v.size) }}</span>
+          <span class="desuq-hist-version-size">
+            {{ bytes(v.size) }}
+            <!-- Why this version was saved, by whoever saved it
+                 (lib/api/api_notes.go). Matched on the save's own time and
+                 size, which the archive keeps, so it is never a guess. -->
+            <span class="desuq-hist-version-why" ng-repeat="n in v.notes track by n.device">
+              <span class="fa fa-comment-o" aria-hidden="true"></span>
+              <b>{{ n.mine ? 'You' : n.name }}:</b> <span class="desuq-hist-note-text">{{ n.text }}</span>
+            </span>
+          </span>
           <!-- Pinned copies survive the thirty-day cleanup. A toggle, so the
                same button says what state the copy is in. -->
           <button type="button" class="desuq-hist-pin"

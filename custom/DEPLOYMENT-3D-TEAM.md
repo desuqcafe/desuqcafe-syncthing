@@ -1624,6 +1624,7 @@ It has to survive the rest of the fork:
 | History, Conflicts, the activity feed | Listed every mark and unmark as somebody's work | Left out |
 | Explorer | A stray dot-folder in the modellers' asset folder | Hidden, on both sides: attributes do not sync, so the tray hides it where claims arrive |
 | A receive-only copy | A mark that never leaves the machine | Not offered; marks from others still arrive and show |
+| Notes (§31) | A second bookkeeping directory, and a new row in every line above | Kept in this directory as `<device>.notes.json`, so every exemption above covers them too; the file count subtracts every file here, not only marks |
 
 ### Found on the way: a peer who keeps part of the folder "had the same files"
 
@@ -1739,6 +1740,10 @@ built.
   (`GET /rest/db/whohas`; upstream's `availability` lists only connected
   devices) -- and who changed it last. If *you* are the one behind, it says a
   newer version is on its way instead.
+  It ends with the note on the current version, if there is one (§31).
+- **Say why I changed this** -- opens the main screen with the note box on
+  that file (`/?desuq-note=<folder>&file=<path>`, taken off the address like
+  the history one). A browser, because a note is typed.
 
 Written by the installer under
 `HKCU\Software\Classes\SystemFileAssociations\.blend\shell\desuqcafe` and
@@ -1751,7 +1756,7 @@ is: the compact menu shows only a packaged app's `IExplorerCommand`, which is
 a COM server in Explorer by another name.
 
 Verified: a flat verb at that key is offered by the shell on a `.blend` and
-not on a `.png`, and the three command lines work when run. The *cascading*
+not on a `.png`, and the command lines work when run. The *cascading*
 menu itself is not enumerated by `Shell.Application`'s `Verbs()` -- neither is
 Send To -- so it still wants one real right-click after installing.
 
@@ -1950,6 +1955,80 @@ handing cabin.blend to Kai*, with **Keep it** to change your mind.
 - **Older builds** ignore `to`, `from` and `accepted` as unknown fields. To
   them a mark in transit is simply the giver's mark, and a taken one is the
   taker's.
+
+## 31. "Why I changed this"
+
+History could already say *that* cabin.blend changed and who changed it. Now
+the person who saved it can say *why*, in a sentence: *moved the camera,
+lighting untouched*. Everybody the folder is shared with sees it:
+
+- **On the main screen**, under the folder, for files as they are now: who,
+  which file, when, and the words. Your own have **Edit** and **Remove**. A
+  note usually arrives before the file it explains -- a few hundred bytes
+  against a gigabyte -- and says *this version is still on its way to you*
+  until it has.
+- **In a notification** when somebody else's note arrives: *Kai changed
+  cabin.blend -- "put the lighting back"*.
+- **In History, beside the exact version it was written about**, for as long
+  as that copy is kept -- which is the moment the question is actually asked:
+  "which one still had the good lighting?" The note on the version in the
+  folder now is shown above the older copies.
+- **In *Who has this?*** on the right-click menu, as the last sentence.
+
+**Writing one.** **Say why you changed a file** on the folder card lists your
+own saves from the last two weeks that nobody has saved over since, and
+starts on one without a note. Pressing **Done** on your own mark offers it
+for that file, if you changed it and have not said why yet. Right-click a
+`.blend` → **Say why I changed this** opens the same box on that file.
+
+- **A note is about one version, not the file.** Stored with the save's
+  modification time (to the second) and size, because those survive
+  everywhere the version goes: the index, every peer's disk (the puller sets
+  the mtime), and the archive, where a replaced copy is renamed into
+  `.stversions` with its mtime intact. Verified on a pair: A's note stayed on
+  A's copy in B's archive after B saved over it, and B's note became the
+  current one. A note is never shown against a version it was not written
+  about.
+- **Only the person who saved a version can explain it.** Anybody else's note
+  about your work would be a guess dressed as an explanation, so the server
+  refuses (409) a note on a file whose latest version somebody else saved,
+  and one on a file a newer version of which is still on its way to you. The
+  author is the index's `ModifiedBy`, as everywhere else.
+- **A save the scanner has not reached yet still counts.** Straight after
+  pressing Ctrl+S the index still has the previous version. The disk is this
+  computer's own work by definition, so the note is written against what is
+  on disk and a scan of that one file is started. Verified: a note written
+  before the scan was current at once, and still current after it.
+- **Stored like the marks, and beside them**: `.desuq-claims/<device
+  ID>.notes.json`, one writer per file, authorship from the index, a forged
+  file ignored. **The same directory on purpose**: the picker's
+  `!/.desuq-claims` line is already written into ignore files on machines in
+  the field, and History, Conflicts, the activity feed and the tray's
+  auto-mark all already leave that directory alone -- a `.desuq-notes/` would
+  have been a new row in each, and held back on every machine that had used
+  the picker until somebody reopened it. The main screen's file count now
+  subtracts every file in that directory, not only the marks. Verified on a
+  pair: B writing a notes file in A's name was believed by neither side, and
+  A's next note replaced it rather than extending it. (A's earlier notes are
+  lost when that happens, exactly as its marks would be.)
+- **Bounds**: 500 characters a note, 200 notes per computer, the oldest going
+  first, and nothing older than about thirteen months -- well past the
+  archive, so a pinned copy (§29) keeps its reason. Removing your last note
+  removes the file rather than leaving an empty list behind.
+- **The tray remembers what it has announced**, on disk (`tray-notes.json`,
+  beside `tray.log`), per author. A note is news whenever it arrives, and it
+  typically arrives the morning after, when it is older than the tray -- so
+  the marks' "newer than when the tray started" rule would have dropped
+  exactly those. One high-water mark per author, so a machine with a slow
+  clock cannot hide another's notes. A note about a version already replaced
+  is recorded as seen without a toast. Verified: announced once, not again
+  after a restart.
+- **Toasts are cut by characters, not bytes** now. A note in Japanese reaches
+  a multi-byte character within a dozen letters, and `truncate` used to cut
+  it in half.
+- **Older builds** do not know the file: to them it is one more file in a
+  folder they already keep hidden and uncounted -- except the count, which
+  they still include, as they would any unknown file there.
 
 ## Recommended configuration
 

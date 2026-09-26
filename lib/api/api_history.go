@@ -105,12 +105,17 @@ type historyVersionsResponse struct {
 	Name     string           `json:"name"`
 	Deleted  bool             `json:"deleted"`
 	Versions []historyVersion `json:"versions"`
+	// Current is the notes about the version in the folder now, which is
+	// not in the archive and so has no row of its own (api_notes.go).
+	Current []noteRow `json:"current"`
 }
 
-// historyVersion is one archived copy, and whether it is pinned.
+// historyVersion is one archived copy, whether it is pinned, and what the
+// person who saved it said about it.
 type historyVersion struct {
 	versioner.FileVersion
-	Pinned bool `json:"pinned"`
+	Pinned bool      `json:"pinned"`
+	Notes  []noteRow `json:"notes,omitempty"`
 }
 
 // historyPageCap bounds a summary page. The browser asks for more by paging;
@@ -156,15 +161,27 @@ func (s *service) getFolderHistory(w http.ResponseWriter, r *http.Request) {
 		sort.Slice(list, func(i, j int) bool {
 			return list[i].VersionTime.After(list[j].VersionTime)
 		})
+		var notes []noteRow
+		if p, ok := cleanClaimPath(name); ok {
+			notes = s.notesIn(s.cfg.Folders()[folder], p)
+		}
 		out := make([]historyVersion, len(list))
 		for i, v := range list {
-			out[i] = historyVersion{FileVersion: v, Pinned: pinned.Has(name, v.VersionTime)}
+			out[i] = historyVersion{FileVersion: v, Pinned: pinned.Has(name, v.VersionTime),
+				Notes: historyNotesFor(notes, v.ModTime, v.Size)}
+		}
+		current := []noteRow{}
+		for _, n := range notes {
+			if n.Current {
+				current = append(current, n)
+			}
 		}
 		sendJSON(w, historyVersionsResponse{
 			Folder:   folder,
 			Name:     name,
 			Deleted:  s.historyFileIsGone(folder, name),
 			Versions: out,
+			Current:  current,
 		})
 		return
 	}

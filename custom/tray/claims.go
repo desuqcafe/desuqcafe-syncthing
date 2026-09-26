@@ -464,6 +464,7 @@ func (a *alerter) checkClaims(w *claimWatch) {
 	a.autoClaim(cl, w, evs, reply.Claims)
 	a.autoRelease(cl, reply.Claims, time.Now())
 	a.checkResurrections(cl, evs)
+	a.checkNotes(cl)
 	ensureClaimsFolders(cl)
 	if a.claimsChanged != nil {
 		a.claimsChanged()

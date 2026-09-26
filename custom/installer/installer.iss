@@ -142,8 +142,9 @@ Name: "{usersendto}\{#MyAppName} - I'm working on this"; Filename: "{app}\{#MyAp
 
 [Registry]
 ; Right-click a .blend in Explorer: a "desuqcafe Syncthing" submenu with I'm
-; working on this, Show history, and Who has this? See custom/tray/explorer.go
-; and DEPLOYMENT-3D-TEAM.md section 27.
+; working on this, Show history, Who has this? and Say why I changed this. See
+; custom/tray/explorer.go, custom/tray/notes.go and DEPLOYMENT-3D-TEAM.md
+; sections 27 and 31.
 ;
 ; Static verbs under SystemFileAssociations, per user: every one is a command
 ; line that runs the tray with the file's path, and nothing is loaded into
@@ -180,6 +181,11 @@ Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.blend\shell\desuqc
 Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.blend\shell\desuqcafe\shell\3who\command"; \
     ValueType: string; ValueName: ""; \
     ValueData: """{app}\{#MyAppBinary}-tray.exe"" -home=""{localappdata}\{#MyDataDir}"" -who ""%1"""
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.blend\shell\desuqcafe\shell\4note"; \
+    ValueType: string; ValueName: "MUIVerb"; ValueData: "Say why I changed this"
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.blend\shell\desuqcafe\shell\4note\command"; \
+    ValueType: string; ValueName: ""; \
+    ValueData: """{app}\{#MyAppBinary}-tray.exe"" -home=""{localappdata}\{#MyDataDir}"" -note ""%1"""
 
 [Run]
 ; Seed config.xml with the defaults this team needs -- staggered versioning, a

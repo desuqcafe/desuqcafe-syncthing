@@ -450,11 +450,7 @@ func (s *service) readClaimDocs(cfg config.FolderConfiguration) claimDocs {
 
 	devices := s.cfg.Devices()
 	for _, n := range names {
-		if !strings.HasSuffix(n, ".json") || fs.IsTemporary(n) {
-			continue
-		}
-		dev, err := protocol.DeviceIDFromString(strings.TrimSuffix(n, ".json"))
-		if err != nil {
+		if fs.IsTemporary(n) {
 			continue
 		}
 		rel := claimsDir + "/" + n
@@ -462,8 +458,18 @@ func (s *service) readClaimDocs(cfg config.FolderConfiguration) claimDocs {
 		if err != nil || !st.IsRegular() {
 			continue
 		}
+		// Every file here is bookkeeping, and all of it comes off the main
+		// screen's totals -- notes files (api_notes.go) included, or a folder
+		// where only a note arrived would read "1 of 1 files chosen".
 		docs.files++
 		docs.bytes += st.Size()
+		if !strings.HasSuffix(n, ".json") || isNotesName(n) {
+			continue
+		}
+		dev, err := protocol.DeviceIDFromString(strings.TrimSuffix(n, ".json"))
+		if err != nil {
+			continue
+		}
 		docs.present[dev] = true
 
 		mine := dev == s.id

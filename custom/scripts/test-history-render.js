@@ -140,7 +140,8 @@ angular.module('syncthing.core')
                     return reply({
                         folder: p.folder, name: p.file,
                         deleted: false,
-                        versions: world.fileVersions[p.file] || []
+                        versions: world.fileVersions[p.file] || [],
+                        current: (world.currentNotes || {})[p.file] || []
                     });
                 }
                 return reply(world.archive[p.folder] ||
@@ -574,6 +575,38 @@ console.log('\n-- pinning a copy');
         svc.state.notice.indexOf('no longer in the archive') !== -1, svc.state.notice);
     check('and the buttons are usable again', svc.state.busy === false);
     world.pin = null;
+}
+
+console.log('\n-- why each version was saved');
+// lib/api/api_notes.go. The server matches a note to an archived copy by the
+// save's own time and size; the screen only has to show it beside that copy,
+// and the note on the version in the folder now above the list.
+{
+    world.archive['assets'] = {
+        folder: 'assets', versioning: true, files: 1, versions: 2, bytes: 3072, total: 1,
+        rows: [{ name: 'cabin.blend', versions: 2, bytes: 3072, newest: '2026-08-26T09:14:00+09:00', oldest: '2026-08-25T17:02:00+09:00', deleted: false }]
+    };
+    world.fileVersions['cabin.blend'] = [
+        { versionTime: '2026-08-26T09:14:00+09:00', modTime: '2026-08-26T09:10:00+09:00', size: 2048,
+            notes: [{ device: 'YUKI', name: 'Yuki', mine: false, text: 'broke the lighting, sorry' }] },
+        { versionTime: '2026-08-25T17:02:00+09:00', modTime: '2026-08-25T17:00:00+09:00', size: 1024,
+            notes: [{ device: 'ME', name: 'You', mine: true, text: 'good lighting' }] }
+    ];
+    world.currentNotes = { 'cabin.blend': [{ device: 'YUKI', name: 'Yuki', mine: false, text: 'put the lighting back' }] };
+    svc.close();
+    const el = render();
+    svc.open('assets', 'versions');
+    flush();
+    svc.toggle(svc.state.archive.rows[0]);
+    flush();
+    const why = [...el[0].querySelectorAll('.desuq-hist-version-why')].map(n => n.textContent.replace(/\s+/g, ' ').trim());
+    check('each copy shows why it was saved, and by whom',
+        why.length === 2 && why[0] === 'Yuki: broke the lighting, sorry' && why[1] === 'You: good lighting', JSON.stringify(why));
+    const now = el[0].querySelector('.desuq-hist-version-now');
+    check('the version in the folder now has its note above the list',
+        now && /The version in the folder now .* Yuki: put the lighting back/.test(now.textContent.replace(/\s+/g, ' ')),
+        now && now.textContent);
+    world.currentNotes = {};
 }
 
 {

@@ -104,6 +104,11 @@ func runWho(home string, paths []string, n notifier) int {
 		return 1
 	}
 	t, b := whoMessage(filepath.Base(rel), claims, wh, time.Now())
+	if reply, err := cl.notes(f.ID, rel); err == nil {
+		if nt, ok := latestNote(reply.Notes); ok {
+			b += " " + noteWhy(nt)
+		}
+	}
 	n.Notify(Notification{Title: t, Body: b})
 	return 0
 }

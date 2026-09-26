@@ -82,6 +82,9 @@ angular.module('syncthing.core')
             // /rest/folder/claims: who is working on what, and how much of
             // the folder's file count is the claims themselves.
             claims: {},
+            // folder id -> { rows, canNote, reason } from /rest/folder/notes:
+            // why files changed, in the words of whoever changed them.
+            notes: {},
             // folder id -> device id -> { files, bytes } from
             // /rest/db/peerheldback: what each peer is choosing not to keep.
             peerHeld: {},
@@ -882,6 +885,12 @@ angular.module('syncthing.core')
                             }),
                             canClaim: fc.canClaim !== false,
                             claimReason: fc.reason || '',
+                            // Why files changed (lib/api/api_notes.go): only
+                            // notes about files as they are now, and recent.
+                            // A note about a version since replaced belongs
+                            // to History, where that version has a row.
+                            notes: cardNotes((st.notes[f.id] || {}).rows, Date.now()),
+                            canNote: (st.notes[f.id] || {}).canNote !== false,
                             failedItems: s.errors || 0,
                             // Why a stopped folder stopped. Upstream puts the
                             // sentence in the summary and nothing showed it,
@@ -903,6 +912,7 @@ angular.module('syncthing.core')
                     refreshConflicts();
                     refreshTray();
                     refreshClaims();
+                    refreshNotes();
                     refreshPeerHeld(st.folders);
                     refreshDelivery(st.folders);
                     refreshHub(st.folders);
@@ -1283,6 +1293,116 @@ angular.module('syncthing.core')
             return out.join(' ');
         }
 
+        // ------------------------------------------------------------ notes
+        //
+        // "Why I changed this" (lib/api/api_notes.go). Slower than the marks:
+        // a mark is only useful if it is seen before somebody opens the file,
+        // a note is read afterwards.
+        var NOTES_MS = 30000;
+        var NOTES_CARD_DAYS = 14;
+        var NOTES_CARD_MAX = 5;
+        var notesAsked = 0;
+
+        function takeNotes(data) {
+            var next = {};
+            ((data && data.folders) || []).forEach(function (f) {
+                next[f.folder] = { rows: [], canNote: f.canNote, reason: f.reason || '' };
+            });
+            ((data && data.notes) || []).forEach(function (n) {
+                (next[n.folder] || (next[n.folder] = { rows: [] })).rows.push(n);
+            });
+            return next;
+        }
+
+        function refreshNotes() {
+            var now = Date.now();
+            if (notesAsked && now - notesAsked < NOTES_MS) {
+                return;
+            }
+            notesAsked = now;
+            $http.get(urlbase + '/folder/notes')
+                .then(function (r) { st.notes = takeNotes(r.data); })
+                .catch(angular.noop);
+        }
+
+        // What the card shows: current notes from the last two weeks, newest
+        // first, capped. `more` counts what the cap left out, so the card can
+        // say so rather than quietly showing five of twelve.
+        function cardNotes(rows, now) {
+            var cutoff = now - NOTES_CARD_DAYS * 86400000;
+            var list = (rows || []).filter(function (n) {
+                return n.current && new Date(n.at).getTime() >= cutoff;
+            });
+            list.sort(function (a, b) { return new Date(b.at) - new Date(a.at); });
+            var shown = list.slice(0, NOTES_CARD_MAX);
+            shown.more = list.length - shown.length;
+            return shown;
+        }
+
+        // Your own recent saves in one folder, for the "say why" form.
+        function noteChoices(folderID) {
+            return $http.get(urlbase + '/folder/notes', { params: { folder: folderID, yours: 1 } })
+                .then(function (r) {
+                    var one = takeNotes(r.data)[folderID];
+                    if (one) {
+                        st.notes[folderID] = one;
+                    }
+                    return (r.data && r.data.yours) || [];
+                }, function () { return []; });
+        }
+
+        // Write, change or (with empty text) remove a note. Answers '' or a
+        // sentence, like postClaim. version is { modified, size } to change a
+        // note about an older version; omitted, the note is about the file as
+        // it is now.
+        function saveNote(folderID, path, text, version) {
+            var body = { folder: folderID, path: path, text: text || '' };
+            if (version) {
+                body.modified = version.modified;
+                body.size = version.size;
+            }
+            return $http.post(urlbase + '/folder/note', body)
+                .then(function (r) {
+                    var one = takeNotes(r.data)[folderID];
+                    if (one) {
+                        st.notes[folderID] = one;
+                    }
+                    notesAsked = 0;
+                    return '';
+                }, function (r) {
+                    var why = r && r.status >= 400 && r.status < 500 &&
+                        typeof r.data === 'string' && r.data.trim();
+                    return why ? 'Could not save that note. ' +
+                        why.charAt(0).toUpperCase() + why.slice(1) + '.'
+                        : 'Could not save that note. Try again in a moment.';
+                });
+        }
+
+        // "2 h ago", "yesterday", a date: when a note was written.
+        function noteWhen(iso, now) {
+            var t = new Date(iso);
+            if (isNaN(t.getTime())) {
+                return '';
+            }
+            now = now || new Date();
+            var mins = Math.floor((now - t) / 60000);
+            if (mins < 1) {
+                return 'just now';
+            }
+            if (mins < 60) {
+                return mins + ' min ago';
+            }
+            if (mins < 24 * 60) {
+                return Math.floor(mins / 60) + ' h ago';
+            }
+            var y = new Date(now.getTime());
+            y.setDate(y.getDate() - 1);
+            if (t.toDateString() === y.toDateString()) {
+                return 'yesterday';
+            }
+            return t.toLocaleDateString();
+        }
+
         // ------------------------------------------------------------- tray
         //
         // Whether the notification-area app is still on disk. A stat on the
@@ -1377,6 +1497,10 @@ angular.module('syncthing.core')
             hubConnect: hubConnect,
             claimSince: claimSince,
             claimUnseen: claimUnseen,
+            noteChoices: noteChoices,
+            saveNote: saveNote,
+            noteWhen: noteWhen,
+            _cardNotes: cardNotes,
             markReclaimStale: markReclaimStale,
             markConflictsStale: markConflictsStale,
             pollMs: POLL_MS,
@@ -1393,7 +1517,7 @@ angular.module('syncthing.core')
         };
     })
 
-    .directive('desuqHome', function (desuqHome, desuqHistory, $timeout) {
+    .directive('desuqHome', function (desuqHome, desuqHistory, $timeout, $window) {
         'use strict';
 
         return {
@@ -1528,9 +1652,121 @@ angular.module('syncthing.core')
                             // Redraw now rather than at the next poll, so the
                             // row goes when the button is pressed.
                             desuqHome.refresh();
+                            // Done with a file is the moment somebody knows
+                            // what they changed in it. Offered only if they
+                            // did change it and have not said why yet.
+                            scope.openNote(folderID, path, true);
                         }
                     });
                 };
+
+                // "Why I changed this" (lib/api/api_notes.go). One form per
+                // card, keyed by folder like everything else here.
+                scope.noteWhen = function (iso) { return desuqHome.noteWhen(iso); };
+                scope.noteForm = {};
+
+                // path preselects a file; afterDone means the form was offered
+                // by Done rather than asked for, and is dropped quietly when
+                // there is nothing to say (the file was not changed here, or
+                // already has a note).
+                scope.openNote = function (folderID, path, afterDone) {
+                    var form = {
+                        loading: true, path: path || '', text: '', choices: [],
+                        error: '', afterDone: !!afterDone, version: null
+                    };
+                    scope.noteForm[folderID] = form;
+                    desuqHome.noteChoices(folderID).then(function (choices) {
+                        if (scope.noteForm[folderID] !== form) {
+                            return;
+                        }
+                        form.loading = false;
+                        form.choices = choices;
+                        var match = choices.filter(function (c) { return c.path === form.path; })[0];
+                        if (afterDone && (!match || match.noted)) {
+                            delete scope.noteForm[folderID];
+                            return;
+                        }
+                        if (!form.path) {
+                            var first = choices.filter(function (c) { return !c.noted; })[0] || choices[0];
+                            form.path = first ? first.path : '';
+                        } else if (!match) {
+                            // From the right-click menu, about a file that is
+                            // not among your recent saves: still offered, and
+                            // the server says why if it cannot be done.
+                            form.choices = [{ path: form.path }].concat(choices);
+                        }
+                        scope.notePicked(folderID);
+                    });
+                };
+                // A file that already has your note opens with that note in
+                // the box: saving is an edit, and an empty box would have
+                // replaced it without showing what was there.
+                scope.notePicked = function (folderID) {
+                    var form = scope.noteForm[folderID];
+                    if (!form || form.version) {
+                        return;
+                    }
+                    var rows = (desuqHome.state.notes[folderID] || {}).rows || [];
+                    var had = rows.filter(function (n) { return n.mine && n.current && n.path === form.path; })[0];
+                    if (had) {
+                        form.text = had.text;
+                        form.had = true;
+                    } else if (form.had) {
+                        form.text = '';
+                        form.had = false;
+                    }
+                };
+                scope.editNote = function (folderID, n) {
+                    scope.noteForm[folderID] = {
+                        loading: false, path: n.path, text: n.text, choices: [{ path: n.path }],
+                        error: '', afterDone: false, version: { modified: n.modified, size: n.size }
+                    };
+                };
+                scope.closeNote = function (folderID) {
+                    delete scope.noteForm[folderID];
+                };
+                scope.submitNote = function (folderID) {
+                    var form = scope.noteForm[folderID];
+                    if (!form || !form.path || !String(form.text || '').trim()) {
+                        return;
+                    }
+                    form.busy = true;
+                    desuqHome.saveNote(folderID, form.path, form.text, form.version).then(function (msg) {
+                        form.busy = false;
+                        form.error = msg;
+                        if (!msg) {
+                            delete scope.noteForm[folderID];
+                            desuqHome.refresh();
+                        }
+                    });
+                };
+                scope.removeNote = function (folderID, n) {
+                    desuqHome.saveNote(folderID, n.path, '', { modified: n.modified, size: n.size }).then(function (msg) {
+                        scope.claimError[folderID] = msg;
+                        if (!msg) {
+                            desuqHome.refresh();
+                        }
+                    });
+                };
+
+                // The .blend right-click menu's "Say why I changed this" opens
+                // the GUI at ?desuq-note=<folder>&file=<path> (custom/tray).
+                (function openNoteFromURL() {
+                    var q = {};
+                    String($window.location.search || '').replace(/^\?/, '').split('&').forEach(function (kv) {
+                        var i = kv.indexOf('=');
+                        if (i > 0) {
+                            q[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(kv.slice(i + 1).replace(/\+/g, ' '));
+                        }
+                    });
+                    if (!q['desuq-note']) {
+                        return;
+                    }
+                    scope.openNote(q['desuq-note'], q.file || '', false);
+                    if ($window.history && $window.history.replaceState) {
+                        $window.history.replaceState(null, '', $window.location.pathname);
+                    }
+                })();
 
                 // The picker says so when it rewrites a folder's ignores; the
                 // probe is throttled to once a minute otherwise, and waiting

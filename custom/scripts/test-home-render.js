@@ -92,6 +92,10 @@ const world = {
     // through Yuki.
     hub: { folders: [{ folder: 'assets', label: 'Project Assets', through: [],
         via: [{ device: ANA, name: 'Ana', connected: false, via: [{ device: YUKI, name: 'Yuki', connected: true }] }] }] },
+    // Why files changed (lib/api/api_notes.go): none, unless a test says so.
+    // notesYours is what ?yours=1 offers to write a note about.
+    notes: { notes: [], folders: [] },
+    notesYours: [],
     posted: [],
     errors: []
 };
@@ -139,6 +143,17 @@ angular.module('syncthing.core')
             if (url === 'rest/folder/claims') {
                 return reply(world.claims);
             }
+            if (url === 'rest/folder/notes') {
+                const p = (config && config.params) || {};
+                if (p.yours) {
+                    return reply({
+                        notes: world.notes.notes.filter(n => n.folder === p.folder),
+                        folders: world.notes.folders.filter(f => f.folder === p.folder),
+                        yours: world.notesYours
+                    });
+                }
+                return reply(world.notes);
+            }
             if (url.indexOf('rest/db/status?folder=') === 0) {
                 const id = decodeURIComponent(url.split('folder=')[1]);
                 return reply(world.status[id] || {});
@@ -176,6 +191,21 @@ angular.module('syncthing.core')
                 return reply({
                     claims: world.claims.claims.filter(c => c.folder === body.folder),
                     folders: world.claims.folders.filter(f => f.folder === body.folder)
+                });
+            }
+            if (url === 'rest/folder/note') {
+                // The server answers with the folder's notes afterwards.
+                const at = new Date().toISOString();
+                world.notes.notes = world.notes.notes.filter(n => !(n.mine && n.path === body.path &&
+                    (!body.modified || (n.modified === body.modified && n.size === body.size))));
+                if (body.text) {
+                    world.notes.notes.push({ folder: body.folder, label: 'Project Assets', path: body.path,
+                        device: MY_ID, name: 'You', mine: true, modified: body.modified || at, size: body.size || 1,
+                        text: body.text, at: at, current: true, here: true });
+                }
+                return reply({
+                    notes: world.notes.notes.filter(n => n.folder === body.folder),
+                    folders: world.notes.folders.filter(f => f.folder === body.folder)
                 });
             }
             if (url === 'rest/db/hub/connect') {
@@ -886,6 +916,178 @@ console.log('\n-- one of your marks that has not reached somebody');
         /Yuki is offline and will see this when they reconnect/.test(U([{ name: 'Yuki', state: 'offline' }])));
     check('a copy that cannot take marks is said',
         /Ana cannot see marks until their copy is updated/.test(U([{ name: 'Ana', state: 'heldBack' }])));
+}
+
+console.log('\n-- why files changed');
+// lib/api/api_notes.go. Only notes about files as they are now reach the
+// card; one about a replaced version belongs to History.
+{
+    const now = Date.now();
+    const iso = (ms) => new Date(now - ms).toISOString();
+    world.claims = { claims: [], folders: [{ folder: 'assets', canClaim: true, files: 2, bytes: 300 }] };
+    world.notes = {
+        notes: [
+            { folder: 'assets', label: 'Project Assets', path: 'Scenes/cabin.blend', device: YUKI, name: 'Yuki', mine: false,
+                modified: iso(3600000), size: 10, text: 'moved the camera\nlighting untouched', at: iso(60000), current: true, here: false },
+            { folder: 'assets', label: 'Project Assets', path: 'Scenes/cabin.blend', device: YUKI, name: 'Yuki', mine: false,
+                modified: iso(7200000), size: 9, text: 'replaced since', at: iso(7000000), current: false, here: false },
+            { folder: 'assets', label: 'Project Assets', path: 'tree.blend', device: MY_ID, name: 'You', mine: true,
+                modified: '2026-09-26T01:02:03Z', size: 42, text: 'new bark', at: iso(120000), current: true, here: true }
+        ],
+        folders: [{ folder: 'assets', canNote: true }]
+    };
+    const realNow = window.Date.now;
+    window.Date.now = () => realNow() + 1000000;
+    svc.refresh();
+    flush();
+    flush();
+    svc.refresh();
+    flush();
+    flush();
+    window.Date.now = realNow;
+}
+{
+    const rows = [...el[0].querySelectorAll('.desuq-home-note')];
+    const t = (r) => r ? r.textContent.replace(/\s+/g, ' ') : '';
+    check('each current note is a row, and the replaced one is not', rows.length === 2, String(rows.length));
+    check('newest first, with who and which file', /Yuki changed Scenes\/cabin\.blend/.test(t(rows[0])), t(rows[0]));
+    check('the note is shown as written', /moved the camera/.test(t(rows[0])) && /lighting untouched/.test(t(rows[0])));
+    check('a note that arrived before its file says so', /still on its way to you/.test(t(rows[0])));
+    check('a version that is here does not', !/on its way/.test(t(rows[1])));
+    check('only mine can be edited', !rows[0].querySelector('button') && /Edit/.test(t(rows[1])) && /Remove/.test(t(rows[1])));
+    check('the notes file is not counted as work', /6 files/.test(text()) && !/8 files/.test(text()), text().slice(0, 200));
+
+    const buttonIn = (root, label) => [...root.querySelectorAll('button')]
+        .find(b => b.textContent.replace(/\s+/g, ' ').trim().indexOf(label) === 0);
+
+    // Edit keeps the version: an edit is about that save, not the file now.
+    buttonIn(rows[1], 'Edit').click();
+    flush();
+    let form = el[0].querySelector('.desuq-home-noteform');
+    check('Edit opens the form on that note', form && /Your note on tree\.blend/.test(t(form)), t(form));
+    const ta = form && form.querySelector('textarea');
+    check('with what it said', ta && ta.value === 'new bark');
+    angular.element(ta).val('new bark, and moss').triggerHandler('input');
+    flush();
+    buttonIn(form, 'Save note').click();
+    flush();
+    flush();
+    let sent = world.posted[world.posted.length - 1] || {};
+    check('saving an edit names the version it is about',
+        sent.url === 'rest/folder/note' && sent.body.path === 'tree.blend' && sent.body.text === 'new bark, and moss' &&
+        sent.body.modified === '2026-09-26T01:02:03Z' && sent.body.size === 42, JSON.stringify(sent));
+    flush();
+    check('and the form closes', !el[0].querySelector('.desuq-home-noteform'));
+    check('the card shows the new words', /new bark, and moss/.test(text()));
+
+    // A new note: the server offers your recent saves.
+    world.notesYours = [{ path: 'rock.blend', modified: '2026-09-26T02:00:00Z', size: 5, noted: false },
+        { path: 'tree.blend', modified: '2026-09-26T01:02:03Z', size: 42, noted: true }];
+    const open = buttonIn(el[0], 'Say why you changed a file');
+    check('there is a way to say why you changed a file', !!open);
+    open.click();
+    flush();
+    flush();
+    form = el[0].querySelector('.desuq-home-noteform');
+    const sel = form && form.querySelector('select');
+    const opts = sel ? [...sel.options].map(o => o.textContent) : [];
+    check('it lists your recent saves, saying which already have a note',
+        opts.join('|') === 'rock.blend|tree.blend (has a note)', opts.join('|'));
+    check('and starts on one without a note', sel && sel.options[sel.selectedIndex].textContent === 'rock.blend');
+    // Choosing one that has a note shows that note, so saving is an edit
+    // rather than a silent replacement.
+    sel.selectedIndex = 1;
+    angular.element(sel).triggerHandler('change');
+    flush();
+    check('choosing a file with a note puts that note in the box',
+        form.querySelector('textarea').value === 'new bark, and moss', form.querySelector('textarea').value);
+    sel.selectedIndex = 0;
+    angular.element(sel).triggerHandler('change');
+    flush();
+    check('and choosing one without empties it again', form.querySelector('textarea').value === '');
+    angular.element(form.querySelector('textarea')).val('smoothed the edges').triggerHandler('input');
+    flush();
+    buttonIn(form, 'Save note').click();
+    flush();
+    flush();
+    sent = world.posted[world.posted.length - 1] || {};
+    check('a new note is about the file as it is now, so it names no version',
+        sent.body.path === 'rock.blend' && sent.body.text === 'smoothed the edges' && sent.body.modified === undefined,
+        JSON.stringify(sent));
+    flush();
+
+    const rockRow = [...el[0].querySelectorAll('.desuq-home-note.note-mine')].find(r => /rock\.blend/.test(r.textContent));
+    check('the new note is on the card', !!rockRow);
+    buttonIn(rockRow, 'Remove').click();
+    flush();
+    flush();
+    sent = world.posted[world.posted.length - 1] || {};
+    check('Remove sends an empty note for that version', sent.body.path === 'rock.blend' && sent.body.text === '' &&
+        !!sent.body.modified, JSON.stringify(sent));
+    flush();
+    check('and it goes', !/smoothed the edges/.test(text()));
+}
+{
+    // Done with a file is when somebody knows what they changed. Offered
+    // only for a file whose latest save is theirs and has no note.
+    world.claims.claims = [{ folder: 'assets', label: 'Project Assets', path: 'rock.blend', device: MY_ID, name: 'You',
+        mine: true, since: new Date().toISOString(), stale: false }];
+    const realNow = window.Date.now;
+    window.Date.now = () => realNow() + 1200000;
+    svc.refresh();
+    flush();
+    flush();
+    svc.refresh();
+    flush();
+    flush();
+    window.Date.now = realNow;
+    const row = [...el[0].querySelectorAll('.desuq-home-claim')].find(r => /rock\.blend/.test(r.textContent));
+    [...row.querySelectorAll('button')].find(b => /Done/.test(b.textContent)).click();
+    flush();
+    flush();
+    flush();
+    const form = el[0].querySelector('.desuq-home-noteform');
+    const t = form ? form.textContent.replace(/\s+/g, ' ') : '';
+    check('Done offers to say what you changed', /You are done with rock\.blend\. What did you change\?/.test(t), t);
+    check('and can be waved away', /Not now/.test(t));
+    [...form.querySelectorAll('button')].find(b => /Not now/.test(b.textContent)).click();
+    flush();
+    check('which closes it', !el[0].querySelector('.desuq-home-noteform'));
+
+    // The same, for a file somebody else saved last: nothing to explain.
+    world.claims.claims = [{ folder: 'assets', label: 'Project Assets', path: 'theirs.blend', device: MY_ID, name: 'You',
+        mine: true, since: new Date().toISOString(), stale: false }];
+    window.Date.now = () => realNow() + 1400000;
+    svc.refresh();
+    flush();
+    flush();
+    svc.refresh();
+    flush();
+    flush();
+    window.Date.now = realNow;
+    const row2 = [...el[0].querySelectorAll('.desuq-home-claim')].find(r => /theirs\.blend/.test(r.textContent));
+    [...row2.querySelectorAll('button')].find(b => /Done/.test(b.textContent)).click();
+    flush();
+    flush();
+    flush();
+    check('Done on a file you did not change asks nothing', !el[0].querySelector('.desuq-home-noteform'));
+}
+{
+    // The card's rule, directly: current, recent, newest first, five at most.
+    const C = svc._cardNotes;
+    const now = Date.parse('2026-09-26T12:00:00Z');
+    const at = (h) => new Date(now - h * 3600000).toISOString();
+    const rows = [];
+    for (let i = 0; i < 7; i++) {
+        rows.push({ path: 'f' + i, current: true, at: at(i) });
+    }
+    rows.push({ path: 'old', current: true, at: at(24 * 15) });
+    rows.push({ path: 'replaced', current: false, at: at(0) });
+    const out = C(rows, now);
+    check('five shown, newest first', out.length === 5 && out[0].path === 'f0' && out[4].path === 'f4',
+        out.map(n => n.path).join(','));
+    check('and it says how many more', out.more === 2, String(out.more));
+    check('nothing older than two weeks, nothing replaced', C(rows.slice(7), now).length === 0);
 }
 
 console.log('\n-- no green anywhere');

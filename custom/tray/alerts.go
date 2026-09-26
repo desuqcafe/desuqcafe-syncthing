@@ -136,6 +136,9 @@ type alerter struct {
 	// deleted remembers this computer's deletions across restarts. Set by
 	// the app; nil in tests, where observe is a no-op.
 	deleted *deletedMemo
+	// notesSeen is which notes have been announced, across restarts. See
+	// notes.go. nil in tests, where checkNotes does nothing.
+	notesSeen *notesMemo
 
 	// claimsChanged is called after every claims pass, so the Explorer hover
 	// text can follow the claims without a second poll. Set by the app; nil
@@ -821,12 +824,16 @@ func shortDeviceID(id string) string {
 	return id
 }
 
+// truncate shortens to n characters -- runes, not bytes. Cutting bytes split
+// a multi-byte character in half, which a note written in Japanese reaches
+// within a dozen characters, and a toast then showed a replacement box.
 func truncate(s string, n int) string {
 	s = strings.TrimSpace(strings.ReplaceAll(s, "\n", " "))
-	if len(s) <= n {
+	r := []rune(s)
+	if len(r) <= n {
 		return s
 	}
-	return s[:n-1] + "…"
+	return string(r[:n-1]) + "…"
 }
 
 func keysOf[V any](m map[string]V) []string {

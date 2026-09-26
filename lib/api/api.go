@@ -305,6 +305,8 @@ func (s *service) Serve(ctx context.Context) error {
 	restMux.HandlerFunc(http.MethodGet, "/rest/system/tray", s.getSystemTray)                    // (desuqcafe fork, see api_tray.go)
 	restMux.HandlerFunc(http.MethodGet, "/rest/folder/claims", s.getFolderClaims)                // [folder]  (desuqcafe fork, see api_claims.go)
 	restMux.HandlerFunc(http.MethodPost, "/rest/folder/claim", s.postFolderClaim)                // {folder, path, release, auto}  (desuqcafe fork, see api_claims.go)
+	restMux.HandlerFunc(http.MethodGet, "/rest/folder/notes", s.getFolderNotes)                  // [folder] [file] [yours]  (desuqcafe fork, see api_notes.go)
+	restMux.HandlerFunc(http.MethodPost, "/rest/folder/note", s.postFolderNote)                  // {folder, path, text}  (desuqcafe fork, see api_notes.go)
 	restMux.HandlerFunc(http.MethodGet, "/rest/db/peerheldback", s.getDBPeerHeldBack)            // folder device  (desuqcafe fork, see api_peerheldback.go)
 	restMux.HandlerFunc(http.MethodGet, "/rest/db/whohas", s.getDBWhoHas)                        // folder file  (desuqcafe fork, see api_whohas.go)
 	restMux.HandlerFunc(http.MethodGet, "/rest/db/delivery", s.getDBDelivery)                    // folder  (desuqcafe fork, see api_delivery.go)
