@@ -83,7 +83,8 @@ func (t *trashcan) Clean(ctx context.Context) error {
 			return nil
 		}
 
-		if info.ModTime().Before(cutoff) {
+		// desuqcafe fork: a pinned copy is never expired (desuq_pins.go).
+		if info.ModTime().Before(cutoff) && !isPinned(t.versionsFs, path, info.ModTime()) {
 			// The file is too old; remove it.
 			err = t.versionsFs.Remove(path)
 		} else {

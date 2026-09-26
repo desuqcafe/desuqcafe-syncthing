@@ -12,7 +12,7 @@
 
       1. check-handshake-words.ps1     wordlists      no dependencies
       2. go test lib/build lib/ur cmd  telemetry      Go
-      3. go test lib/api               REST handlers  Go
+      3. go test lib/api lib/versioner REST handlers  Go
       4. go test (custom/tray)         tray           Go, nested module
       5. test-handshake.js             handshake      Node
       6. test-handshake-render.js      handshake UI   Node + jsdom
@@ -218,10 +218,13 @@ if (-not $go) {
     # The fork's three server-side handlers live here -- diskfree, dirsizes and
     # reveal -- and until this suite existed none of them were covered by
     # anything the build ran. Upstream's own api tests come along for the ride
-    # and take about seven seconds.
+    # and take about seven seconds. lib/versioner is here too: pinned versions
+    # (desuq_pins.go) are guarded inside upstream's cleanup, and a merge that
+    # moved that cleanup would otherwise delete pinned copies without failing
+    # anything the build ran.
     Invoke-Suite 'go test (api)' {
         Push-Location $RepoRoot
-        try { & $go test ./lib/api/... } finally { Pop-Location }
+        try { & $go test ./lib/api/... ./lib/versioner/... } finally { Pop-Location }
     }
     Invoke-Suite 'go test (tray)' {
         Push-Location (Join-Path $RepoRoot 'custom\tray')

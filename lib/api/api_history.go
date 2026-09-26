@@ -70,6 +70,9 @@ type historyFile struct {
 	// undelete, restoring an existing one is rollback -- so the interface
 	// labels them differently and this is how it knows.
 	Deleted bool `json:"deleted"`
+	// Pinned is how many of this file's copies are kept past the cleanup
+	// (lib/versioner/desuq_pins.go).
+	Pinned int `json:"pinned,omitempty"`
 }
 
 // historyResponse is the summary shape.
@@ -85,6 +88,9 @@ type historyResponse struct {
 	Files    int   `json:"files"`
 	Versions int   `json:"versions"`
 	Bytes    int64 `json:"bytes"`
+	// Pinned counts pinned copies across the whole archive, like the totals
+	// above: the header says what the cleanup will not touch.
+	Pinned int `json:"pinned"`
 	// Rows is the page, newest-first. Sorting happens over the whole archive
 	// before the page is cut, so page one really is the most recent activity.
 	Rows []historyFile `json:"rows"`
@@ -95,10 +101,16 @@ type historyResponse struct {
 // historyVersionsResponse is the ?file= shape: one file's archive, newest
 // first.
 type historyVersionsResponse struct {
-	Folder   string                  `json:"folder"`
-	Name     string                  `json:"name"`
-	Deleted  bool                    `json:"deleted"`
-	Versions []versioner.FileVersion `json:"versions"`
+	Folder   string           `json:"folder"`
+	Name     string           `json:"name"`
+	Deleted  bool             `json:"deleted"`
+	Versions []historyVersion `json:"versions"`
+}
+
+// historyVersion is one archived copy, and whether it is pinned.
+type historyVersion struct {
+	versioner.FileVersion
+	Pinned bool `json:"pinned"`
 }
 
 // historyPageCap bounds a summary page. The browser asks for more by paging;
@@ -136,17 +148,23 @@ func (s *service) getFolderHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	pinned := versioner.PinnedVersions(s.cfg.Folders()[folder])
+
 	if name := qs.Get("file"); name != "" {
 		list := versions[name]
 		// Newest first, matching the summary and the way the list reads.
 		sort.Slice(list, func(i, j int) bool {
 			return list[i].VersionTime.After(list[j].VersionTime)
 		})
+		out := make([]historyVersion, len(list))
+		for i, v := range list {
+			out[i] = historyVersion{FileVersion: v, Pinned: pinned.Has(name, v.VersionTime)}
+		}
 		sendJSON(w, historyVersionsResponse{
 			Folder:   folder,
 			Name:     name,
 			Deleted:  s.historyFileIsGone(folder, name),
-			Versions: list,
+			Versions: out,
 		})
 		return
 	}
@@ -156,6 +174,7 @@ func (s *service) getFolderHistory(w http.ResponseWriter, r *http.Request) {
 	})
 	res.Folder = folder
 	res.Versioning = true
+	res.Pinned = historyCountPinned(versions, pinned, rows)
 
 	res.Total = len(rows)
 	page, perpage := historyPaging(qs.Get("page"), qs.Get("perpage"))
@@ -230,6 +249,32 @@ func historySummarise(versions map[string][]versioner.FileVersion, prefix string
 		return rows[i].Name < rows[j].Name
 	})
 	return res, rows
+}
+
+// historyCountPinned sets each row's pin count and returns the archive-wide
+// total. Only pins whose copy is still listed are counted: a leftover pin on a
+// copy removed by hand is not protecting anything, and a header that counted
+// it would say so.
+func historyCountPinned(versions map[string][]versioner.FileVersion, pinned versioner.PinSet, rows []historyFile) int {
+	count := func(name string) int {
+		n := 0
+		for _, v := range versions[name] {
+			if pinned.Has(name, v.VersionTime) {
+				n++
+			}
+		}
+		return n
+	}
+	total := 0
+	for name := range pinned {
+		if !isClaimsPath(name) {
+			total += count(name)
+		}
+	}
+	for i := range rows {
+		rows[i].Pinned = count(rows[i].Name)
+	}
+	return total
 }
 
 // folderHasVersioning reports whether the folder keeps old copies at all.

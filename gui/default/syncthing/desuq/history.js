@@ -357,7 +357,7 @@ angular.module('syncthing.core')
                     return null;
                 });
             })).then(function (parts) {
-                var merged = { files: 0, versions: 0, bytes: 0, total: 0, rows: [] };
+                var merged = { files: 0, versions: 0, bytes: 0, total: 0, pinned: 0, rows: [] };
                 var failed = 0;
                 var anyVersioning = false;
                 parts.forEach(function (p, i) {
@@ -372,6 +372,7 @@ angular.module('syncthing.core')
                     merged.versions += p.versions;
                     merged.bytes += p.bytes;
                     merged.total += p.total;
+                    merged.pinned += p.pinned || 0;
                     (p.rows || []).forEach(function (row) {
                         row.folder = folders[i];
                         row.folderLabel = labelOf(folders[i]);
@@ -456,6 +457,41 @@ angular.module('syncthing.core')
                 .finally(function () {
                     st.busy = false;
                 });
+        }
+
+        // togglePin keeps one copy past the thirty-day cleanup, or lets it go
+        // again. See lib/versioner/desuq_pins.go.
+        //
+        // Pins are this computer's: every device keeps its own archive, so
+        // there is no shared "Tuesday's copy" to pin everywhere, and the note
+        // under the list says so. The counts are adjusted in place rather than
+        // by reloading, so the list does not jump while somebody is working
+        // down it.
+        function togglePin(row, version) {
+            var want = !version.pinned;
+            st.busy = true;
+            st.notice = '';
+            return $http.post(urlbase + '/folder/pin', {
+                folder: row.folder,
+                file: row.name,
+                versionTime: version.versionTime,
+                pinned: want
+            }).then(function () {
+                var step = want ? 1 : -1;
+                version.pinned = want;
+                row.pinned = Math.max(0, (row.pinned || 0) + step);
+                if (st.archive) {
+                    st.archive.pinned = Math.max(0, (st.archive.pinned || 0) + step);
+                }
+                st.notice = want
+                    ? 'That copy of ' + pretty(row.name) + ' is pinned. The thirty-day cleanup will leave it alone until you unpin it.'
+                    : 'That copy of ' + pretty(row.name) + ' is no longer pinned, and will be cleaned up like the others when it is old enough.';
+            }).catch(function (r) {
+                var why = r && typeof r.data === 'string' && r.data.trim();
+                st.notice = 'Could not ' + (want ? 'pin' : 'unpin') + ' that copy of ' + pretty(row.name) + (why ? ': ' + why : '.');
+            }).finally(function () {
+                st.busy = false;
+            });
         }
 
         // ------------------------------------------------------- conflicts
@@ -697,6 +733,7 @@ angular.module('syncthing.core')
             toggle: toggle,
             expandedFor: function (row) { return st.expanded[rowKey(row)]; },
             restore: restore,
+            togglePin: togglePin,
             refresh: refresh,
             resolveConflict: resolveConflict,
             cancelConfirm: cancelConfirm,

@@ -127,9 +127,10 @@
     </div>
 
     <div class="desuq-hist-summary" ng-if="hist.versionsReady && hist.archive.files">
-      <b>{{ hist.archive.files }}</b> files have older copies kept
+      <b>{{ hist.archive.files }}</b> {{ hist.archive.files == 1 ? 'file has' : 'files have' }} older copies kept
       &mdash; <b>{{ hist.archive.versions }}</b> copies, {{ bytes(hist.archive.bytes) }} on disk.
-      Copies older than thirty days are removed automatically.
+      Copies older than thirty days are removed automatically<span ng-if="hist.archive.pinned">,
+      except the <b>{{ hist.archive.pinned }}</b> pinned</span>.
     </div>
 
     <!-- Three different empty states, because they are three different facts.
@@ -183,7 +184,7 @@
              threw a file away. The tag above already says what happened. -->
         <span class="desuq-hist-tag" ng-if="row.deleted && !conflictOriginal(row.name)">deleted</span>
         <span class="desuq-hist-file-meta">
-          {{ row.versions }} kept · {{ bytes(row.bytes) }} · newest {{ row.newest | date:'d MMM HH:mm' }}
+          {{ row.versions }} kept · {{ bytes(row.bytes) }} · newest {{ row.newest | date:'d MMM HH:mm' }}<span ng-if="row.pinned"> · {{ row.pinned }} pinned</span>
         </span>
       </button>
 
@@ -204,6 +205,17 @@
                        src="{{ previewURL(row.folder, row.name, v.versionTime) }}"></desuq-thumb>
           <span class="desuq-hist-version-when">{{ v.versionTime | date:'d MMM yyyy HH:mm' }}</span>
           <span class="desuq-hist-version-size">{{ bytes(v.size) }}</span>
+          <!-- Pinned copies survive the thirty-day cleanup. A toggle, so the
+               same button says what state the copy is in. -->
+          <button type="button" class="desuq-hist-pin"
+                  ng-class="{ 'is-on': v.pinned }"
+                  ng-disabled="hist.busy"
+                  aria-pressed="{{ v.pinned ? 'true' : 'false' }}"
+                  title="{{ v.pinned ? 'Kept until you unpin it. Click to unpin.' : 'Keep this copy past the thirty-day cleanup' }}"
+                  ng-click="history.togglePin(row, v)">
+            <span class="fa fa-thumb-tack" aria-hidden="true"></span>
+            <span ng-if="v.pinned">Pinned</span><span ng-if="!v.pinned">Pin</span>
+          </button>
           <button type="button" class="btn btn-sm btn-default"
                   ng-disabled="hist.busy"
                   ng-click="history.restore(row, v)">
@@ -221,6 +233,9 @@
             Restoring keeps what is there now &mdash; it is archived first, and
             becomes the newest copy in this list.
           </span>
+          Pin a copy to keep it past the thirty-day cleanup; a pinned copy
+          stays here even after you restore it. Pins are kept on this computer
+          only &mdash; the others keep their own older copies.
         </div>
       </div>
     </div>

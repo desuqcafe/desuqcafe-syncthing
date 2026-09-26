@@ -55,6 +55,13 @@ History and Conflicts now show the preview Blender saves inside each `.blend`,
 beside every older version, so you can find the version you want by looking
 at it. This works for files saved in Blender 5 too, which are compressed.
 
+## Keep a version for good
+
+Older copies are cleaned up after thirty days. Now any one of them can be
+**pinned** in History, and a pinned copy is kept until you unpin it —
+restoring it does not use it up. Pins are kept on the computer where you
+made them: each computer keeps its own older copies.
+
 ## Still true
 
 Windows Defender may still quarantine the tray on install as

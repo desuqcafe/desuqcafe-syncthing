@@ -312,6 +312,7 @@ func (s *service) Serve(ctx context.Context) error {
 	restMux.HandlerFunc(http.MethodPost, "/rest/db/reclaim", s.postDBReclaim)                    // <body>  (desuqcafe fork, see api_reclaim.go)
 	restMux.HandlerFunc(http.MethodPost, "/rest/folder/conflict", s.postFolderConflict)          // <body>  (desuqcafe fork, see api_conflicts.go)
 	restMux.HandlerFunc(http.MethodPost, "/rest/folder/repair", s.postFolderRepair)              // <body>  (desuqcafe fork, see api_repair.go)
+	restMux.HandlerFunc(http.MethodPost, "/rest/folder/pin", s.postFolderPin)                    // <body>  (desuqcafe fork, see api_pins.go)
 	restMux.HandlerFunc(http.MethodPost, "/rest/db/hub/connect", s.postDBHubConnect)             // <body>  (desuqcafe fork, see api_hub.go)
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/restart", s.postSystemRestart)            // -
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/shutdown", s.postSystemShutdown)          // -

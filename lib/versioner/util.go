@@ -329,7 +329,15 @@ func restoreFile(method fs.CopyRangeMethod, src, dst fs.Filesystem, filePath str
 	}
 
 	_ = dst.MkdirAll(filepath.Dir(filePath), fs.ModePerm)
-	err := osutil.RenameOrCopy(method, src, dst, sourceFile, filePath)
+	var err error
+	if isPinned(src, sourceFile, sourceMtime) {
+		// desuqcafe fork: restoring moves the copy out of the archive, and a
+		// pinned copy that left the archive would lose its pin -- the next
+		// save re-archives it under a new, unpinned timestamp. Copy instead.
+		err = osutil.Copy(method, src, dst, sourceFile, filePath)
+	} else {
+		err = osutil.RenameOrCopy(method, src, dst, sourceFile, filePath)
+	}
 	_ = dst.Chtimes(filePath, sourceMtime, sourceMtime)
 	return err
 }
@@ -439,7 +447,8 @@ func clean(ctx context.Context, versionsFs fs.Filesystem, toRemove func([]string
 
 func cleanVersions(versionsFs fs.Filesystem, versions []string, toRemove func([]string, time.Time) []string) {
 	l.Debugln("Versioner: Expiring versions", versions)
-	for _, file := range toRemove(versions, time.Now()) {
+	// desuqcafe fork: a pinned copy is never expired (desuq_pins.go).
+	for _, file := range withoutPinned(versionsFs, toRemove(versions, time.Now())) {
 		if err := versionsFs.Remove(file); err != nil {
 			slog.Warn("Failed to remove versioned file during cleanup", slogutil.FilePath(file), slogutil.Error(err))
 		}

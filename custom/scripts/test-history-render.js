@@ -94,6 +94,8 @@ const world = {
     // What POST /rest/folder/conflict answers with. A function so a case can
     // reject: the refusal path is the interesting one.
     resolve: null,
+    // What POST /rest/folder/pin answers with, when a case wants a refusal.
+    pin: null,
     posted: []
 };
 
@@ -153,6 +155,9 @@ angular.module('syncthing.core')
             world.posted.push({ url: url, body: body });
             if (url === 'rest/folder/conflict' && world.resolve) {
                 return world.resolve(body);
+            }
+            if (url === 'rest/folder/pin' && world.pin) {
+                return world.pin(body);
             }
             return $q.when({ data: {} });
         };
@@ -505,6 +510,70 @@ console.log('\n-- the older versions tab');
     svc.toggle(world.archive['assets'].rows[1]);
     flush();
     check('a deleted file says put it back', el.text().indexOf('Put it back') !== -1);
+}
+
+console.log('\n-- pinning a copy');
+{
+    world.archive['assets'] = {
+        folder: 'assets', versioning: true, files: 1, versions: 2, bytes: 3072, total: 1, pinned: 1,
+        rows: [
+            { name: 'refs/chair_v3.blend', versions: 2, bytes: 3072, newest: '2026-08-26T09:14:00+09:00', oldest: '2026-08-25T17:02:00+09:00', deleted: false, pinned: 1 }
+        ]
+    };
+    world.fileVersions['refs/chair_v3.blend'] = [
+        { versionTime: '2026-08-26T09:14:00+09:00', modTime: '2026-08-26T09:14:00+09:00', size: 2048, pinned: false },
+        { versionTime: '2026-08-25T17:02:00+09:00', modTime: '2026-08-25T17:02:00+09:00', size: 1024, pinned: true }
+    ];
+    world.pin = null;
+    world.posted = [];
+
+    svc.close();
+    const el = render();
+    svc.open('assets', 'versions');
+    flush();
+    check('the summary says pinned copies are exempt from the cleanup',
+        /except the\s+1\s+pinned/.test(el.text()), el.text().slice(0, 200));
+    check('the row counts its pinned copies', el.text().indexOf('1 pinned') !== -1);
+
+    const row = svc.state.archive.rows[0];
+    svc.toggle(row);
+    flush();
+    const pins = el[0].querySelectorAll('.desuq-hist-pin');
+    check('every copy has a pin toggle', pins.length === 2, String(pins.length));
+    check('a pinned copy says so and is pressed',
+        pins[1].textContent.indexOf('Pinned') !== -1 && pins[1].getAttribute('aria-pressed') === 'true' &&
+        pins[1].classList.contains('is-on'));
+    check('an unpinned one offers to pin',
+        /\bPin\b/.test(pins[0].textContent) && pins[0].getAttribute('aria-pressed') === 'false');
+    check('the note says pins are this computer only',
+        el.text().replace(/\s+/g, ' ').indexOf('this computer only') !== -1);
+
+    const first = svc.expandedFor(row).versions[0];
+    svc.togglePin(row, first);
+    flush();
+    const sent = world.posted[0] && world.posted[0].body;
+    check('pinning posts the file and its version time',
+        world.posted.length === 1 && world.posted[0].url === 'rest/folder/pin' &&
+        sent.folder === 'assets' && sent.file === 'refs/chair_v3.blend' &&
+        sent.versionTime === '2026-08-26T09:14:00+09:00' && sent.pinned === true,
+        JSON.stringify(world.posted[0]));
+    check('and the copy, the row and the header all count it without a reload',
+        first.pinned === true && row.pinned === 2 && svc.state.archive.pinned === 2,
+        [first.pinned, row.pinned, svc.state.archive.pinned].join(' '));
+    check('the notice says what a pin does', svc.state.notice.indexOf('leave it alone') !== -1, svc.state.notice);
+
+    // A refusal leaves everything as it was, and says why.
+    const $q = injector.get('$q');
+    world.pin = function () { return $q.reject({ status: 404, data: 'that copy is no longer in the archive\n' }); };
+    const second = svc.expandedFor(row).versions[1];
+    svc.togglePin(row, second);
+    flush();
+    check('a refused unpin changes nothing',
+        second.pinned === true && row.pinned === 2 && svc.state.archive.pinned === 2);
+    check('and passes the server\'s reason on',
+        svc.state.notice.indexOf('no longer in the archive') !== -1, svc.state.notice);
+    check('and the buttons are usable again', svc.state.busy === false);
+    world.pin = null;
 }
 
 {

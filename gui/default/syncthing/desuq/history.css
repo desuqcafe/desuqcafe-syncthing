@@ -416,6 +416,46 @@ reads as "no longer here" rather than "alarm".
     font-variant-numeric: tabular-nums;
 }
 
+.desuq-hist-pin {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12.5px;
+    line-height: 1;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--v-border-strong);
+    background: transparent;
+    color: var(--v-text-dim);
+    cursor: pointer;
+}
+
+.desuq-hist-pin:hover:not([disabled]) {
+    color: var(--v-text);
+    border-color: var(--v-accent);
+}
+
+.desuq-hist-pin:focus-visible {
+    outline: none;
+    box-shadow: var(--v-ring);
+}
+
+.desuq-hist-pin.is-on {
+    color: var(--v-accent-bright);
+    border-color: var(--v-accent);
+    background: var(--v-accent-wash-strong);
+}
+
+.desuq-hist-pin .fa {
+    font-size: 12px;
+}
+
+.desuq-hist-pin[disabled] {
+    opacity: 0.55;
+    cursor: default;
+}
+
 .desuq-hist-version-note {
     margin-top: 9px;
     font-size: 12.5px;

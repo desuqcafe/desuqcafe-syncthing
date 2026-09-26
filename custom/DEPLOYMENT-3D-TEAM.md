@@ -1868,6 +1868,46 @@ the device and its route. Connecting to a stranger returns 404. Connecting
 to the real one adds the device and shares the folder, and the notice then
 goes away on both sides.
 
+## 29. Pinning a version
+
+Staggered versioning at thirty days is a good safety net and a bad archive.
+The copy of a scene that the client signed off on was removed on day
+thirty-one along with the forty autosaves around it. Every row under
+*History → Older versions* now has a **Pin** toggle, and a pinned copy is
+kept until somebody unpins it.
+
+- **Every cleanup path checks for pins.** Simple and staggered versioning
+  both remove through `cleanVersions`, on every save and on the periodic
+  clean, and the trashcan has its own sweep. Both are guarded
+  (`lib/versioner/desuq_pins.go`; the two upstream edits are in
+  `CUSTOMIZATIONS.md`). The external versioner never cleans anything.
+- **Restoring a pinned copy does not use it up.** Upstream *moves* the copy
+  out of the archive on restore. A pinned copy that left the archive would
+  lose its pin, because the next save re-archives it with a new timestamp
+  and no pin. So a pinned copy is copied back and stays put. An unpinned one
+  still moves, as upstream does.
+- **Pins are this computer's.** The archive is not synced: each device fills
+  its own `.stversions` when *it* replaces a file, stamped with *its* clock,
+  so there is no shared identity for "Tuesday's version" to pin everywhere.
+  The pins live in `desuq-pins.json` beside the database, not in the folder,
+  and the History screen says so. A sidecar file inside `.stversions` was
+  rejected: every walk in the versioner would see it, and the trashcan would
+  list it as a version and then delete it at the cutoff.
+- **A pin whose copy has gone is not tidied away.** Pruning would mean
+  trusting one listing of the archive to be complete. One bad walk would then
+  unpin a copy that is still there, and the next clean would delete it. A
+  leftover entry costs a few bytes; the header counts only pins whose copy is
+  still listed.
+- **A pinned copy still counts toward the bytes on disk** shown in the
+  History header. That header now says how many copies are exempt from the
+  cleanup.
+
+Verified on a pair with staggered versioning at thirty days and a ten-second
+cleanup interval. Three copies older than thirty days were planted and two
+were pinned. The next clean removed only the unpinned one. Restoring a pinned
+copy put its bytes back in the folder and left it in the archive, still
+pinned, through a further clean.
+
 ## Recommended configuration
 
 Applied per machine, under *Actions → Advanced → Defaults*:
