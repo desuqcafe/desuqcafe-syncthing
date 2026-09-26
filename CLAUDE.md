@@ -87,6 +87,7 @@ Everything else still resolves by keeping both sides.
 | `custom/scripts/test-history-render.js` | Drives the history screen. The restart guard and the run collapse are what it tries to break. Needs jsdom; no instance required |
 | `custom/scripts/test-seed-naming.ps1` | Asserts a re-seed never takes a device name somebody chose |
 | `custom/scripts/disable-inherited-ci.ps1` | Turn off upstream's workflows |
+| `custom/FILE-BROWSER-OPTIONS.md` | Our own Explorer-like browser: seven options with pros and cons, and a recommendation. **Undecided; nothing built** |
 | `custom/RELEASE-NOTES.md` | The body of the **next** release, rewritten each time. The release workflow reads it and appends the install section |
 | `custom/CUSTOMIZATIONS.md` | Divergence register and merge guide |
 | `custom/DEPLOYMENT-3D-TEAM.md` | Recommended config for the target users |
