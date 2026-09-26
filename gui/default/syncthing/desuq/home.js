@@ -85,6 +85,9 @@ angular.module('syncthing.core')
             // folder id -> { rows, canNote, reason } from /rest/folder/notes:
             // why files changed, in the words of whoever changed them.
             notes: {},
+            // folder id -> device id -> { connected, lastSeen, lastSave } from
+            // /rest/db/presence: who is around, and what they last did.
+            presence: {},
             // folder id -> device id -> { files, bytes } from
             // /rest/db/peerheldback: what each peer is choosing not to keep.
             peerHeld: {},
@@ -890,6 +893,9 @@ angular.module('syncthing.core')
                             // A note about a version since replaced belongs
                             // to History, where that version has a row.
                             notes: cardNotes((st.notes[f.id] || {}).rows, Date.now()),
+                            // One line per person: here or since when, what
+                            // they have marked, what they last saved.
+                            presence: presenceLines(people, st.presence[f.id], fc.rows, new Date()),
                             canNote: (st.notes[f.id] || {}).canNote !== false,
                             failedItems: s.errors || 0,
                             // Why a stopped folder stopped. Upstream puts the
@@ -913,11 +919,33 @@ angular.module('syncthing.core')
                     refreshTray();
                     refreshClaims();
                     refreshNotes();
+                    refreshPresence(st.folders);
                     refreshPeerHeld(st.folders);
                     refreshDelivery(st.folders);
                     refreshHub(st.folders);
 
-                    peers.forEach(function (p) { p.note = peerNote(p.shares); });
+                    peers.forEach(function (p) {
+                        p.note = peerNote(p.shares);
+                        // Since when an offline person has been away. Any
+                        // folder's presence answer carries it; it is per
+                        // device, not per folder.
+                        p.seen = '';
+                        if (!p.connected) {
+                            var answered = false;
+                            Object.keys(st.presence).some(function (fid) {
+                                var one = st.presence[fid][p.deviceID];
+                                answered = answered || !!one;
+                                if (one && one.lastSeen) {
+                                    p.seen = 'Last seen ' + whenWords(new Date(one.lastSeen), new Date()) + '.';
+                                    return true;
+                                }
+                                return false;
+                            });
+                            if (!p.seen && answered) {
+                                p.seen = 'Has never connected.';
+                            }
+                        }
+                    });
                     st.peers = peers;
                     st.headline = headline(st.folders, st.peers, st.errors, st.tray);
                     st.ready = true;
@@ -1293,6 +1321,99 @@ angular.module('syncthing.core')
             return out.join(' ');
         }
 
+        // --------------------------------------------------------- presence
+        //
+        // /rest/db/presence (lib/api/api_presence.go) walks the folder's index
+        // for each person's newest save, so once a minute like the hub probe.
+        // Whether somebody is connected comes from the connections poll,
+        // every tick; this only adds "since when" and "what last".
+        var PRESENCE_MS = 60000;
+        var presenceAsked = 0;
+
+        function refreshPresence(folders) {
+            var now = Date.now();
+            if (presenceAsked && now - presenceAsked < PRESENCE_MS) {
+                return;
+            }
+            presenceAsked = now;
+            folders.forEach(function (f) {
+                if (!f.people.length) {
+                    delete st.presence[f.id];
+                    return;
+                }
+                $http.get(urlbase + '/db/presence', { params: { folder: f.id } })
+                    .then(function (r) {
+                        var byDevice = {};
+                        ((r.data && r.data.people) || []).forEach(function (p) {
+                            byDevice[p.device] = p;
+                        });
+                        st.presence[f.id] = byDevice;
+                    }, angular.noop);
+            });
+        }
+
+        // "at 14:20", "yesterday at 18:40", "on Monday", "on 12/09/2026".
+        function whenWords(t, now) {
+            var hhmm = ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2);
+            if (t.toDateString() === now.toDateString()) {
+                return 'at ' + hhmm;
+            }
+            var y = new Date(now.getTime());
+            y.setDate(y.getDate() - 1);
+            if (t.toDateString() === y.toDateString()) {
+                return 'yesterday at ' + hhmm;
+            }
+            if (now - t < 6 * 86400000) {
+                return 'on ' + ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][t.getDay()];
+            }
+            return 'on ' + t.toLocaleDateString();
+        }
+
+        // The same, closer in: "just now", "12 min ago", then whenWords.
+        function agoWords(t, now) {
+            var mins = Math.floor((now - t) / 60000);
+            if (mins < 1) {
+                return 'just now';
+            }
+            if (mins < 60) {
+                return mins + ' min ago';
+            }
+            return whenWords(t, now);
+        }
+
+        // One line per person on a folder card. `people` is the folder's
+        // shareOf() list, `presence` the /rest/db/presence answer by device,
+        // `claims` the folder's marks. Connected comes from `people`, which
+        // is refreshed every tick, not from the slower presence probe.
+        function presenceLines(people, presence, claims, now) {
+            presence = presence || {};
+            return (people || []).map(function (s) {
+                var p = presence[s.deviceID] || {};
+                var parts = [];
+                if (s.connected) {
+                    parts.push('here now');
+                } else if (p.lastSeen) {
+                    parts.push('last seen ' + whenWords(new Date(p.lastSeen), now));
+                } else if (presence[s.deviceID]) {
+                    // Only said once the probe has answered: before that,
+                    // "never" would be a guess.
+                    parts.push('has never connected');
+                }
+                var theirs = (claims || []).filter(function (c) {
+                    return !c.mine && c.device === s.deviceID;
+                });
+                if (theirs.length) {
+                    parts.push('working on ' + baseName(theirs[0].path) +
+                        (theirs.length > 1 ? ' and ' + (theirs.length - 1) + ' more' : ''));
+                }
+                if (p.lastSave) {
+                    parts.push('last saved ' + baseName(p.lastSave.path) + ' ' +
+                        agoWords(new Date(p.lastSave.modified), now));
+                }
+                return { deviceID: s.deviceID, name: s.name, here: !!s.connected, text: parts.join(' · ') };
+            }).filter(function (l) { return l.text; });
+        }
+
         // ------------------------------------------------------------ notes
         //
         // "Why I changed this" (lib/api/api_notes.go). Slower than the marks:
@@ -1501,6 +1622,7 @@ angular.module('syncthing.core')
             saveNote: saveNote,
             noteWhen: noteWhen,
             _cardNotes: cardNotes,
+            _presenceLines: presenceLines,
             markReclaimStale: markReclaimStale,
             markConflictsStale: markConflictsStale,
             pollMs: POLL_MS,

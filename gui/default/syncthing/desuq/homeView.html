@@ -113,6 +113,17 @@
         </div>
         <div class="desuq-home-people-note">{{ f.peopleNote }}</div>
 
+        <!-- Presence (lib/api/api_presence.go): the strip above says where
+             each person's copy has got to; this says whether they are around
+             and what they are doing -- the thing somebody wants to know before
+             phoning, or before opening a file. -->
+        <ul class="desuq-home-presence" ng-if="f.presence.length">
+          <li ng-repeat="p in f.presence track by p.deviceID">
+            <span class="desuq-home-dotlight" ng-class="p.here ? 'is-on' : 'is-off'" aria-hidden="true"></span>
+            <b>{{ p.name }}</b> {{ p.text }}
+          </li>
+        </ul>
+
         <!-- Who only reaches whom through one computer (lib/api/api_hub.go).
              Said on the card, beside the people it is about, because the
              failure it predicts is silent: two people online, not syncing,
@@ -506,6 +517,7 @@
            accepted it. -->
       <div class="desuq-home-card-facts">
         <span ng-class="{ 'desuq-home-warn': !p.shares.length }">{{ p.note }}</span>
+        <span ng-if="p.seen">{{ p.seen }}</span>
       </div>
 
       <!-- The verification badge. The card itself lives in this person's

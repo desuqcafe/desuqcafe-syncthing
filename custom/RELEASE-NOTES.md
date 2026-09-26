@@ -78,6 +78,12 @@ share with sees it on the main screen and gets a notification. History shows
 each note beside the exact version it was written about, so an older copy
 says why it was saved. Only the person who saved a version can write its note.
 
+## Who is around
+
+Each folder now says, for each person, whether they are here now or when you
+last saw them, what they have marked as working on, and the last file they
+saved. An offline person's card says since when.
+
 ## Still true
 
 Windows Defender may still quarantine the tray on install as

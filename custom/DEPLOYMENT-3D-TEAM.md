@@ -2030,6 +2030,40 @@ for that file, if you changed it and have not said why yet. Right-click a
   folder they already keep hidden and uncounted -- except the count, which
   they still include, as they would any unknown file there.
 
+## 32. Who is around
+
+Each folder card now has a line per person under the coloured initials:
+
+*Kai — here now · working on cabin.blend · last saved tree.blend 12 min ago*
+*Mia — last seen yesterday at 18:40 · last saved rock.blend on Tuesday*
+
+The initials already said where each person's *copy* has got to. This says
+whether the *person* is around and what they are doing -- the question behind
+"should I phone before I open this?". An offline person's own card says
+*Last seen yesterday at 18:40.* too, where it used to say only *Offline*.
+
+- **Here** is the live connection, from the same poll as everything else on
+  the screen. **Last seen** is `/rest/stats/device`, which reports a device
+  that has never connected as 1970 rather than as nothing; the server filters
+  that once (`lib/api/api_presence.go`) and the screen says *has never
+  connected* -- but only after the server has answered, so it is never a guess.
+- **Working on** is their marks (§25) in this folder.
+- **Last saved** is the newest file in the folder whose current version they
+  saved, from the index's `ModifiedBy` and the file's own modification time.
+  From the index rather than `/rest/events/disk` because the event buffer
+  starts empty whenever the daemon restarts, so on Monday it knows nothing
+  about Friday; the index knows for good. The price is that it only knows
+  current versions: a file Kai saved and Mia saved over since is Mia's, and
+  a deletion is nobody's save. Nothing older than thirty days is said, and
+  the server reads at most the 300 most recently modified files to find
+  everybody -- someone whose newest save is older than all of those is not
+  "around" in any useful sense.
+- **Once a minute**, like the hub probe: one metadata walk per folder plus a
+  few lookups.
+- Verified on a pair: B saved a file and A's card named it within a scan; B
+  shut down and A said *last seen* with the time; a device added and never
+  connected read as never, not as fifty-six years ago.
+
 ## Recommended configuration
 
 Applied per machine, under *Actions → Advanced → Defaults*:

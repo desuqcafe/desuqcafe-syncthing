@@ -96,6 +96,8 @@ const world = {
     // notesYours is what ?yours=1 offers to write a note about.
     notes: { notes: [], folders: [] },
     notesYours: [],
+    // folder id -> /rest/db/presence answer (lib/api/api_presence.go).
+    presence: {},
     posted: [],
     errors: []
 };
@@ -142,6 +144,9 @@ angular.module('syncthing.core')
             }
             if (url === 'rest/folder/claims') {
                 return reply(world.claims);
+            }
+            if (url === 'rest/db/presence') {
+                return reply(world.presence[config.params.folder] || { folder: config.params.folder, people: [] });
             }
             if (url === 'rest/folder/notes') {
                 const p = (config && config.params) || {};
@@ -1088,6 +1093,66 @@ console.log('\n-- why files changed');
         out.map(n => n.path).join(','));
     check('and it says how many more', out.more === 2, String(out.more));
     check('nothing older than two weeks, nothing replaced', C(rows.slice(7), now).length === 0);
+}
+
+console.log('\n-- who is around');
+// lib/api/api_presence.go. The rule first, directly.
+{
+    const P = svc._presenceLines;
+    const now = new Date(2026, 8, 26, 12, 0, 0);
+    const yuki = { deviceID: YUKI, name: 'Yuki', connected: true };
+    const ana = { deviceID: ANA, name: 'Ana', connected: false };
+    const lines = P([yuki, ana], {
+        [YUKI]: { device: YUKI, connected: true, lastSave: { path: 'Scenes/tree.blend', modified: new Date(2026, 8, 26, 11, 48).toISOString() } },
+        [ANA]: { device: ANA, connected: false, lastSeen: new Date(2026, 8, 25, 18, 40).toISOString(),
+            lastSave: { path: 'rock.blend', modified: new Date(2026, 8, 22, 10, 0).toISOString() } }
+    }, [
+        { device: YUKI, mine: false, path: 'Scenes/cabin.blend' },
+        { device: YUKI, mine: false, path: 'b.blend' },
+        { device: MY_ID, mine: true, path: 'mine.blend' }
+    ], now);
+    check('here, what they have marked, and what they last saved',
+        lines[0].text === 'here now · working on cabin.blend and 1 more · last saved tree.blend 12 min ago', lines[0].text);
+    check('away: since when, and what they last left',
+        lines[1].text === 'last seen yesterday at 18:40 · last saved rock.blend on Tuesday', lines[1].text);
+    const never = P([ana], { [ANA]: { device: ANA, connected: false } }, [], now);
+    check('somebody who never connected is said so', never[0].text === 'has never connected', never[0].text);
+    check('but not before the server has answered', P([ana], undefined, [], now).length === 0);
+}
+{
+    world.presence = { assets: { folder: 'assets', people: [
+        { device: YUKI, connected: true, lastSave: { path: 'tree.blend', modified: new Date(Date.now() - 5 * 60000).toISOString() } },
+        { device: ANA, connected: false, lastSeen: new Date(Date.now() - 3 * 86400000).toISOString() }
+    ] } };
+    world.claims = { claims: [], folders: [{ folder: 'assets', canClaim: true, files: 0, bytes: 0 }] };
+    const realNow = window.Date.now;
+    window.Date.now = () => realNow() + 2000000;
+    svc.refresh();
+    flush();
+    flush();
+    svc.refresh();
+    flush();
+    flush();
+    window.Date.now = realNow;
+    const rows = [...el[0].querySelectorAll('.desuq-home-presence li')].map(li => li.textContent.replace(/\s+/g, ' ').trim());
+    check('one line per person on the folder card', rows.length === 2, JSON.stringify(rows));
+    check('Yuki is here and saved a file minutes ago', /^Yuki here now · last saved tree\.blend \d+ min ago$/.test(rows[0] || ''), rows[0]);
+    check('Ana is away, and since when', /^Ana Ruiz last seen on \w+day$/.test(rows[1] || ''), rows[1]);
+    check('her own card says so too', /Last seen on \w+day\./.test(text()), text().slice(-400));
+}
+{
+    world.presence = { assets: { folder: 'assets', people: [{ device: YUKI, connected: true }, { device: ANA, connected: false }] } };
+    const realNow = window.Date.now;
+    window.Date.now = () => realNow() + 2200000;
+    svc.refresh();
+    flush();
+    flush();
+    svc.refresh();
+    flush();
+    flush();
+    window.Date.now = realNow;
+    check('a person who has never connected: the folder card', /Ana Ruiz has never connected/.test(text().replace(/\s+/g, ' ')));
+    check('and her own card', /Has never connected\./.test(text()));
 }
 
 console.log('\n-- no green anywhere');
