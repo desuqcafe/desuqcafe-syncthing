@@ -1764,6 +1764,110 @@ pass pokes the folder marker. File names and labels go through the same
 one-line filter as the label always did, because both are chosen by other
 people and `desktop.ini` is obeyed by the shell.
 
+## 28. Pictures of scenes, whether it arrived, and who is in the middle
+
+Three things that all answer a question the modellers were asking out loud.
+
+### A picture of every .blend
+
+The History and Conflicts screens showed a thumbnail beside every texture
+and a blank beside every scene -- the files that matter most. Blender writes
+a small preview into every `.blend` it saves (the one its own file browser
+shows), so `/preview/` now reads it out of the file header:
+`lib/api/desuq_blendthumb.go`. It reads only the first few kilobytes, so a
+600 MB scene costs the same as a small one, and `.blend1` backups work too.
+
+Two things were not obvious:
+
+- **Blender 5 compresses by default, with zstd.** Every 5.x file on the
+  development machine was compressed. The Go standard library has a zstd
+  decoder but keeps it internal; rather than add a dependency to the root
+  module (which conflicts on every upstream merge), the reader reaches the
+  same decoder through `debug/elf`, which exposes it for compressed ELF
+  sections. 4.x files are usually uncompressed; 2.x files may be gzip.
+- **A file saved from a script has no preview.** `blender --background`
+  writes none, and neither does a file saved with *Save Preview Images*
+  turned off. The screen shows no picture rather than a broken one.
+
+Verified on a pair, in Chrome: a live 4.5 file and an archived 5.x zstd
+version of the same name, each with its own picture.
+
+### "Sending cabin.blend to Kai" / "Kai does not have your latest"
+
+The main screen said *"Kai is still catching up -- 12 MiB to go"* and
+*"Sending 12 MiB to Kai"* about a computer that had been switched off
+since Tuesday. Nothing was being sent. Completion is worked out from the
+peer's stored index, and it reads the same whether they are here or not.
+
+`GET /rest/db/delivery` walks each peer's remote need (the files whose
+current version their index does not have) and splits it by who made that
+version. The ones this computer made are *yours*. So the card now says:
+
+| Their state | What the card says |
+| --- | --- |
+| Connected, missing some of yours | *Sending cabin.blend to Kai.* |
+| Not connected, missing some of yours | *Kai does not have your latest cabin.blend yet -- their computer is not connected. It goes when they are back.* |
+| Not connected, missing only other people's changes | *Kai is not connected. 3 MiB of changes will reach them when they are back.* |
+
+A person who is behind and offline gets a plain outline instead of a
+progress ring, because a ring frozen at 40% looks like a transfer that
+stalled. The headline no longer says *Sending* about anybody who is offline.
+
+Files somebody holds back on purpose (selective sync) are **not** counted as
+undelivered. Remote need leaves ignored files out, which was checked on a
+pair rather than assumed: completion is fooled by selective sync, this is
+not.
+
+The tray adds two things:
+
+- **"Now on Kai's computer"** -- *cabin.blend and 2 more of your files
+  have reached Kai.* Only for a delivery that **waited** at least two
+  minutes: a big file over a slow link, or somebody coming back after being
+  away. A save that arrives in seconds is the normal case, and a toast for
+  every save would be noise.
+- **Pausing warns about undelivered work.** *Kai does not have your latest
+  cabin.blend yet. Pausing keeps it from reaching them until you resume.*
+  This is folded into the existing pause-with-marks warning, so it is one
+  toast.
+
+### Three people, and one computer in the middle
+
+The usual three-person setup: the person who made the folder shares it with
+each of the other two. Syncthing then syncs A-B and A-C, **and never B-C**,
+because neither was told about the other. Everything still reaches everyone
+through A -- until A's computer is off. Then B and C stop syncing with each
+other while both are online, and nothing anywhere says so.
+
+Every peer announces who it shares each folder with, in the cluster config
+sent when it connects. Upstream reads that list for introductions and then
+drops it; `lib/model/desuq_hub.go` keeps it (one line in `model.go`, see
+`CUSTOMIZATIONS.md`). `GET /rest/db/hub` then reports both ends:
+
+- **On the computer in the middle:** *Kai and Mia only sync with each
+  other through this computer. When it is off, their changes do not reach
+  each other.* This is said only about two people who have both been heard
+  from and both have the folder. Someone who has never connected has a
+  different problem, and the card already says that one.
+- **On a computer at the edge:** *You get Mia's changes only through
+  Alex's computer. When it is off, the two of you do not sync.* This one
+  has a **Connect directly** button. It adds Mia as a device (her ID and
+  name come from Alex's announcement) and shares the folder with her. Mia
+  is then asked to accept on her own computer, as for anybody new, and the
+  verification card applies. The button refuses anybody who is not in that
+  folder at one of your peers: it is not a general add-device route.
+
+**Why not Syncthing's introducer setting**, which exists for exactly this?
+It has to be turned on at the edges, about the middle computer. After that,
+the middle computer's future choices of devices and folders become theirs
+too, including removals. That is a permanent grant of trust. Connecting
+directly is one person, one folder, one click, and it shows in the device
+list afterwards.
+
+Verified on a pair with a third device ID that never connects. The edge sees
+the device and its route. Connecting to a stranger returns 404. Connecting
+to the real one adds the device and shares the folder, and the notice then
+goes away on both sides.
+
 ## Recommended configuration
 
 Applied per machine, under *Actions → Advanced → Defaults*:

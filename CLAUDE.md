@@ -32,7 +32,7 @@ future `git merge upstream/main` is work you can plan rather than a surprise:
   A line in the root `go.mod`/`go.sum` is a conflict on every upstream
   dependency bump: a recurring tax for a one-off convenience.
 
-Seventeen upstream files carry fork edits today, 642 insertions against 207
+Eighteen upstream files carry fork edits today, 646 insertions against 207
 deletions. Stripping the telemetry is what changed the character of that: it
 is the first work that had to *delete* upstream behaviour rather than sit
 beside it, because there is no additive way to remove a consent nag or a
@@ -234,6 +234,21 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
   and take sizes from the global entry -- `/rest/db/peerheldback`
   (`lib/model/desuq_peerheldback.go`). Sixth instance of the local-state-lies
   class, and the first seen from the sending side.
+- **Blender 5 compresses `.blend` files with zstd by default.** Every 5.x
+  file on the development machine began `28 B5 2F FD`, so a thumbnail reader
+  that skips compressed files skips nearly everything. The standard library's
+  zstd decoder is `internal/zstd`; `lib/api/desuq_blendthumb.go` reaches it
+  through `debug/elf` rather than add a root `go.mod` dependency. The 5.x
+  header is also a different shape (`BLENDER17-01v0500`, 32-byte block
+  headers with the length moved). A file saved from `--background` has no
+  preview at all.
+- **A peer's cluster config says who it shares each folder with, and upstream
+  throws that away** once introductions and auto-accept have read it. Keeping
+  it (`lib/model/desuq_hub.go`, one line in `ClusterConfig`) is the only way
+  to see that two peers never sync with each other except through you.
+- **Remote need excludes files the peer ignores.** Verified on a pair: a file
+  B holds back never appears in A's `/rest/db/delivery` for B. So "does not
+  have your latest" is not fooled by selective sync, unlike completion.
 - **`.desuq-claims/` is a directory of the fork's own inside synced
   folders.** "I'm working on this", one file per device
   (`lib/api/api_claims.go`). Anything new that lists, counts, versions or

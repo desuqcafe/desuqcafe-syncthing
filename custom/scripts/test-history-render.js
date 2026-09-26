@@ -549,7 +549,8 @@ console.log('\n-- previewable is the server\'s extension list');
     const previewable = window.previewable;
     const previewURL = window.previewURL;
     check('a texture is previewable', previewable('refs/wood.PNG') && previewable('a.jpg') && previewable('b.gif'));
-    check('a blend file is not', !previewable('scene.blend') && !previewable('notes') && !previewable(''));
+    check('a blend file is, and its .blend1 backup', previewable('scene.blend') && previewable('Scenes/cabin.BLEND1'));
+    check('other files are not', !previewable('notes') && !previewable('') && !previewable('scene.blend2') && !previewable('a.blend.txt'));
     // The extension gate is here so that a folder of .blend files costs no
     // requests at all -- the server would refuse them one at a time.
     check('the url carries folder, file and version',
@@ -582,7 +583,8 @@ console.log('\n-- thumbnails in the archive');
         folder: 'assets', versioning: true, files: 2, versions: 4, bytes: 4096, total: 2,
         rows: [
             { name: 'wood_albedo.png', versions: 2, bytes: 2048, newest: '2026-08-26T09:14:00+09:00', oldest: '2026-08-20T09:14:00+09:00', deleted: false },
-            { name: 'scene.blend', versions: 2, bytes: 2048, newest: '2026-08-25T09:14:00+09:00', oldest: '2026-08-20T09:14:00+09:00', deleted: false }
+            { name: 'scene.blend', versions: 2, bytes: 2048, newest: '2026-08-25T09:14:00+09:00', oldest: '2026-08-20T09:14:00+09:00', deleted: false },
+            { name: 'notes.txt', versions: 1, bytes: 10, newest: '2026-08-25T09:14:00+09:00', oldest: '2026-08-25T09:14:00+09:00', deleted: false }
         ]
     };
     world.fileVersions['wood_albedo.png'] = [
@@ -598,8 +600,12 @@ console.log('\n-- thumbnails in the archive');
     const src = () => el.html().replace(/&amp;/g, '&');
     check('a texture row draws its picture',
         src().indexOf('preview/?folder=assets&file=wood_albedo.png') !== -1);
-    check('a blend file row asks for nothing',
-        el.html().indexOf('file=scene.blend') === -1);
+    // The server reads the preview Blender embeds in the file
+    // (lib/api/desuq_blendthumb.go), so a .blend row asks too.
+    check('a blend file row asks for its preview picture',
+        src().indexOf('preview/?folder=assets&file=scene.blend') !== -1);
+    check('a file with no preview asks for nothing',
+        el.html().indexOf('file=notes.txt') === -1);
     // The path is the load-bearing part: under rest/ every one of these would
     // be a 403 in a real browser and pass here.
     check('and the thumbnails are not asked for under rest/',

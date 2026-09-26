@@ -307,9 +307,12 @@ func (s *service) Serve(ctx context.Context) error {
 	restMux.HandlerFunc(http.MethodPost, "/rest/folder/claim", s.postFolderClaim)                // {folder, path, release, auto}  (desuqcafe fork, see api_claims.go)
 	restMux.HandlerFunc(http.MethodGet, "/rest/db/peerheldback", s.getDBPeerHeldBack)            // folder device  (desuqcafe fork, see api_peerheldback.go)
 	restMux.HandlerFunc(http.MethodGet, "/rest/db/whohas", s.getDBWhoHas)                        // folder file  (desuqcafe fork, see api_whohas.go)
+	restMux.HandlerFunc(http.MethodGet, "/rest/db/delivery", s.getDBDelivery)                    // folder  (desuqcafe fork, see api_delivery.go)
+	restMux.HandlerFunc(http.MethodGet, "/rest/db/hub", s.getDBHub)                              // (desuqcafe fork, see api_hub.go)
 	restMux.HandlerFunc(http.MethodPost, "/rest/db/reclaim", s.postDBReclaim)                    // <body>  (desuqcafe fork, see api_reclaim.go)
 	restMux.HandlerFunc(http.MethodPost, "/rest/folder/conflict", s.postFolderConflict)          // <body>  (desuqcafe fork, see api_conflicts.go)
 	restMux.HandlerFunc(http.MethodPost, "/rest/folder/repair", s.postFolderRepair)              // <body>  (desuqcafe fork, see api_repair.go)
+	restMux.HandlerFunc(http.MethodPost, "/rest/db/hub/connect", s.postDBHubConnect)             // <body>  (desuqcafe fork, see api_hub.go)
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/restart", s.postSystemRestart)            // -
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/shutdown", s.postSystemShutdown)          // -
 	restMux.HandlerFunc(http.MethodPost, "/rest/system/upgrade", s.postSystemUpgrade)            // -

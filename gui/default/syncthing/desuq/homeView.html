@@ -112,6 +112,30 @@
           </span>
         </div>
         <div class="desuq-home-people-note">{{ f.peopleNote }}</div>
+
+        <!-- Who only reaches whom through one computer (lib/api/api_hub.go).
+             Said on the card, beside the people it is about, because the
+             failure it predicts is silent: two people online, not syncing,
+             because a third switched off. -->
+        <div class="desuq-home-hub" ng-if="f.hub.through">
+          <span class="fas fa-sitemap" aria-hidden="true"></span>
+          <span>{{ f.hub.through }}</span>
+        </div>
+        <div class="desuq-home-hub" ng-repeat="v in f.hub.via track by v.device">
+          <span class="fas fa-sitemap" aria-hidden="true"></span>
+          <span>
+            {{ v.text }}
+            <span class="desuq-home-hub-result" ng-if="hubResult[f.id + ' ' + v.device].text"
+                  ng-class="{ 'is-error': !hubResult[f.id + ' ' + v.device].ok }">{{ hubResult[f.id + ' ' + v.device].text }}</span>
+          </span>
+          <button type="button" class="btn btn-xs btn-default"
+                  ng-if="!hubResult[f.id + ' ' + v.device].ok"
+                  ng-disabled="hubResult[f.id + ' ' + v.device].busy"
+                  ng-click="hubConnect(f.id, v)"
+                  title="Add {{ v.name }} and share this folder with them. They are asked to accept.">
+            <span class="fas fa-link"></span>&nbsp;Connect directly
+          </button>
+        </div>
       </div>
 
       <!-- Who is working on what (lib/api/api_claims.go). Somebody else's

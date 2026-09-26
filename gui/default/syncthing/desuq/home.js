@@ -85,6 +85,13 @@ angular.module('syncthing.core')
             // folder id -> device id -> { files, bytes } from
             // /rest/db/peerheldback: what each peer is choosing not to keep.
             peerHeld: {},
+            // folder id -> device id -> { yours, names } from
+            // /rest/db/delivery: which of this computer's changes each
+            // person does not have yet.
+            delivery: {},
+            // folder id -> { through, via } from /rest/db/hub: who in the
+            // folder only reaches whom through one computer.
+            hub: {},
             // {tone, text, detail} -- tone drives colour and weight, nothing else.
             headline: { tone: 'busy', text: 'Checking…', detail: '' }
         };
@@ -182,9 +189,10 @@ angular.module('syncthing.core')
         // How one other person stands on one folder. `remoteState` is the field
         // that distinguishes "behind" from "has not accepted the share at all",
         // which look identical if you only read the percentage.
-        function shareOf(peer, completion, held) {
+        function shareOf(peer, completion, held, delivery) {
             var c = completion || {};
             var h = held || {};
+            var dv = delivery || {};
             var pct = typeof c.completion === 'number' ? c.completion : null;
             var kind;
             // 'unknown' from a *connected* peer is also "not accepted", and it
@@ -221,6 +229,14 @@ angular.module('syncthing.core')
                 kind = 'partial';
             } else if (pct >= 100) {
                 kind = 'complete';
+            } else if (!peer.connected) {
+                // Behind, and not connected: nothing is moving. Completion is
+                // computed from their stored index and reads the same whether
+                // they are here or not, so this said "still catching up, 12
+                // MiB to go" about a computer switched off since Tuesday --
+                // and the headline said "Sending 12 MiB to Kai". Delivery
+                // (lib/api/api_delivery.go) says which of it is yours.
+                kind = 'away';
             } else {
                 kind = 'behind';
             }
@@ -234,8 +250,37 @@ angular.module('syncthing.core')
                 needBytes: c.needBytes || 0,
                 heldFiles: h.files || 0,
                 heldBytes: h.bytes || 0,
-                changedFiles: h.changed || 0
+                changedFiles: h.changed || 0,
+                // Of what they are missing, the part this computer made.
+                // Only meaningful while they are behind or away; a delivery
+                // answer from before they caught up is ignored.
+                yoursFiles: (kind === 'behind' || kind === 'away') ? ((dv.yours && dv.yours.files) || 0) : 0,
+                yoursNames: (kind === 'behind' || kind === 'away')
+                    ? (dv.names || []).map(function (n) { return baseName(n); }) : []
             };
+        }
+
+        // The last part of an index path, which carries the OS separator.
+        function baseName(path) {
+            var parts = String(path || '').split(/[\\\/]/);
+            return parts[parts.length - 1] || String(path || '');
+        }
+
+        // "cabin.blend", "cabin.blend and tree.blend", "cabin.blend and 4
+        // more": the files a delivery is about, named, because "3 files" is
+        // not the thing anybody is waiting for.
+        function yoursPhrase(s) {
+            var names = s.yoursNames || [];
+            if (!s.yoursFiles || !names.length) {
+                return s.yoursFiles + ' ' + plural(s.yoursFiles, 'file', 'files');
+            }
+            if (s.yoursFiles === 1) {
+                return names[0];
+            }
+            if (s.yoursFiles === 2 && names.length >= 2) {
+                return names[0] + ' and ' + names[1];
+            }
+            return names[0] + ' and ' + (s.yoursFiles - 1) + ' more';
         }
 
         // One sentence under the people strip. The strip says who; this says
@@ -303,11 +348,33 @@ angular.module('syncthing.core')
                 }).join(' ');
             }
             var behind = people.filter(function (s) { return s.kind === 'behind'; });
-            if (behind.length) {
-                var pending = behind.reduce(function (a, s) { return a + s.needBytes; }, 0);
-                return joinNames(behind.map(function (s) { return s.name; })) + ' ' +
-                    plural(behind.length, 'is', 'are') + ' still catching up' +
-                    (pending > 0 ? ' — ' + size(pending) + ' to go.' : '.');
+            var away = people.filter(function (s) { return s.kind === 'away'; });
+            if (behind.length || away.length) {
+                // Yours first: "your latest has not reached Kai" is the
+                // sentence a person acts on -- wait before switching off,
+                // or tell them. Somebody else's changes still on their way
+                // to a third person is background.
+                var sentences = [];
+                behind.forEach(function (s) {
+                    if (s.yoursFiles > 0) {
+                        sentences.push('Sending ' + yoursPhrase(s) + ' to ' + s.name + '.');
+                    }
+                });
+                var others = behind.filter(function (s) { return !(s.yoursFiles > 0); });
+                if (others.length) {
+                    var pending = others.reduce(function (a, s) { return a + s.needBytes; }, 0);
+                    sentences.push(joinNames(others.map(function (s) { return s.name; })) + ' ' +
+                        plural(others.length, 'is', 'are') + ' still catching up' +
+                        (pending > 0 ? ' — ' + size(pending) + ' to go.' : '.'));
+                }
+                away.forEach(function (s) {
+                    sentences.push(s.yoursFiles > 0
+                        ? s.name + ' does not have your latest ' + yoursPhrase(s) +
+                            ' yet — their computer is not connected. It goes when they are back.'
+                        : s.name + ' is not connected. ' + size(s.needBytes) +
+                            ' of changes will reach them when they are back.');
+                });
+                return sentences.join(' ');
             }
             var paused = by('paused');
             if (paused.length === people.length) {
@@ -356,6 +423,10 @@ angular.module('syncthing.core')
             if (behind.length) {
                 return 'Receiving ' + joinNames(behind) + '.';
             }
+            var away = pick('away');
+            if (away.length) {
+                return 'Not connected — ' + joinNames(away) + ' will catch up when they are back.';
+            }
             var paused = pick('paused');
             if (paused.length === shares.length) {
                 return joinNames(paused) + ' ' + plural(paused.length, 'is', 'are') + ' paused on their computer.';
@@ -380,6 +451,9 @@ angular.module('syncthing.core')
                 case 'partial':     return s.name + ' keeps part of this folder — ' + s.heldFiles + ' ' +
                     plural(s.heldFiles, 'file', 'files') + ' (' + size(s.heldBytes) + ') are not on their computer.';
                 case 'behind':      return s.name + ' has ' + s.pct + '% — ' + size(s.needBytes) + ' still to reach them.';
+                case 'away':        return s.name + ' is not connected. ' + (s.yoursFiles > 0
+                    ? 'Your latest ' + yoursPhrase(s) + ' has not reached them yet.'
+                    : size(s.needBytes) + ' will reach them when they are back.');
                 case 'changedthere': return s.name + ' changed ' + s.changedFiles + ' ' + plural(s.changedFiles, 'file', 'files') +
                     ' on their computer. Their copy only receives, so the changes stay there.';
                 case 'notaccepted': return s.name + ' has not accepted this folder yet.';
@@ -542,12 +616,15 @@ angular.module('syncthing.core')
             }
 
             // Everything is here, but it has not all reached everybody yet.
-            var outbound = 0, waitingOn = [];
+            // Only people who are connected: 'away' is behind with nothing
+            // moving, and "Sending" about a switched-off computer was false.
+            var outbound = 0, waitingOn = [], yours = [];
             active.forEach(function (f) {
                 f.people.forEach(function (s) {
                     if (s.kind === 'behind') {
                         outbound += s.needBytes;
                         if (waitingOn.indexOf(s.name) === -1) { waitingOn.push(s.name); }
+                        if (s.yoursFiles > 0) { yours.push(yoursPhrase(s) + ' to ' + s.name); }
                     }
                 });
             });
@@ -555,7 +632,9 @@ angular.module('syncthing.core')
                 return {
                     tone: TONE.busy,
                     text: 'Sending ' + size(outbound) + ' to ' + joinNames(waitingOn) + '.',
-                    detail: 'Your copy is complete. Theirs is catching up.'
+                    detail: yours.length
+                        ? 'On its way: ' + yours.join('; ') + '. Your copy is complete.'
+                        : 'Your copy is complete. Theirs is catching up.'
                 };
             }
 
@@ -605,13 +684,18 @@ angular.module('syncthing.core')
 
             // Somebody who keeps only part of a folder does not "have the
             // same", however complete completion says they are.
-            var partly = [], ownChanges = [];
+            var partly = [], ownChanges = [], undelivered = [], offline = [];
             active.forEach(function (f) {
                 f.people.forEach(function (s) {
                     if (s.kind === 'partial' && partly.indexOf(s.name) === -1) { partly.push(s.name); }
                     if (s.kind === 'changedthere' && ownChanges.indexOf(s.name) === -1) { ownChanges.push(s.name); }
+                    if (s.kind === 'away') {
+                        var into = s.yoursFiles > 0 ? undelivered : offline;
+                        if (into.indexOf(s.name) === -1) { into.push(s.name); }
+                    }
                 });
             });
+            offline = offline.filter(function (n) { return undelivered.indexOf(n) === -1; });
             everyone = everyone.filter(function (n) { return partly.indexOf(n) === -1; });
             var others = [];
             if (everyone.length) {
@@ -623,6 +707,17 @@ angular.module('syncthing.core')
             if (ownChanges.length) {
                 others.push(joinNames(ownChanges) + ' ' + plural(ownChanges.length, 'has', 'have') +
                     ' changes that stay on their computer');
+            }
+            // Still "Everything is here": it is, on this computer. What has
+            // not happened is the other half, and it happens by itself when
+            // they connect -- a normal evening, not a problem.
+            if (undelivered.length) {
+                others.push(joinNames(undelivered) + ' ' + plural(undelivered.length, 'does', 'do') +
+                    ' not have your latest yet — not connected');
+            }
+            if (offline.length) {
+                others.push(joinNames(offline) + ' ' + plural(offline.length, 'is', 'are') +
+                    ' not connected, and will catch up when back');
             }
             return {
                 tone: TONE.good,
@@ -730,7 +825,7 @@ angular.module('syncthing.core')
                         var s = statuses[f.id] || {};
                         var people = res.sharedIDs.map(function (id) {
                             return shareOf(peerByID[id], (completions[f.id] || {})[id],
-                                (st.peerHeld[f.id] || {})[id]);
+                                (st.peerHeld[f.id] || {})[id], (st.delivery[f.id] || {})[id]);
                         });
                         people.forEach(function (p) {
                             p.title = shareTitle(p);
@@ -798,7 +893,8 @@ angular.module('syncthing.core')
                             // Who this folder is shared with, and where each of
                             // them has actually got to.
                             people: people,
-                            peopleNote: peopleNote(people, heldBack, localFiles)
+                            peopleNote: peopleNote(people, heldBack, localFiles),
+                            hub: hubNotes(st.hub[f.id])
                         };
                     });
 
@@ -807,6 +903,8 @@ angular.module('syncthing.core')
                     refreshTray();
                     refreshClaims();
                     refreshPeerHeld(st.folders);
+                    refreshDelivery(st.folders);
+                    refreshHub(st.folders);
 
                     peers.forEach(function (p) { p.note = peerNote(p.shares); });
                     st.peers = peers;
@@ -943,6 +1041,124 @@ angular.module('syncthing.core')
                         }, angular.noop);
                 });
             });
+        }
+
+        // --------------------------------------------------------- delivery
+        //
+        // Which of *your* changes each person is missing
+        // (lib/api/api_delivery.go). Asked only for folders where somebody
+        // is behind or away, because it walks their remote need -- and that
+        // is empty, and so free, for everybody who is in step. Faster than
+        // the held-back probe: "Sending cabin.blend to Kai" is only worth
+        // saying while it is true.
+        var DELIVERY_MS = 10000;
+        var deliveryAsked = 0;
+
+        function refreshDelivery(folders) {
+            var now = Date.now();
+            if (deliveryAsked && now - deliveryAsked < DELIVERY_MS) {
+                return;
+            }
+            deliveryAsked = now;
+            folders.forEach(function (f) {
+                var worth = f.people.some(function (s) { return s.kind === 'behind' || s.kind === 'away'; });
+                if (!worth) {
+                    delete st.delivery[f.id];
+                    return;
+                }
+                $http.get(urlbase + '/db/delivery', { params: { folder: f.id } })
+                    .then(function (r) {
+                        var byDevice = {};
+                        ((r.data && r.data.peers) || []).forEach(function (p) {
+                            byDevice[p.device] = p;
+                        });
+                        st.delivery[f.id] = byDevice;
+                    }, angular.noop);
+            });
+        }
+
+        // -------------------------------------------------------------- hub
+        //
+        // Three people and one folder, set up the usual way: the person who
+        // made it shared it with each of the other two, and those two were
+        // never told about each other. Everything reaches everybody through
+        // the one computer in the middle -- until it is off, when the other
+        // two stop syncing with each other while both are online, and
+        // nothing says so. /rest/db/hub reads who each peer says it shares
+        // the folder with (lib/api/api_hub.go). It only changes when
+        // somebody's configuration does, so once a minute is plenty.
+        var HUB_MS = 60000;
+        var hubAsked = 0;
+
+        function refreshHub(folders) {
+            var now = Date.now();
+            var shared = folders.some(function (f) { return f.people.length > 0; });
+            if (!shared || (hubAsked && now - hubAsked < HUB_MS)) {
+                return;
+            }
+            hubAsked = now;
+            $http.get(urlbase + '/db/hub').then(function (r) {
+                var next = {};
+                ((r.data && r.data.folders) || []).forEach(function (f) { next[f.folder] = f; });
+                st.hub = next;
+            }, angular.noop);
+        }
+
+        // hubNotes turns one folder's answer into what the card says.
+        //
+        // through: this computer is the middle. Said as a fact with its
+        // consequence, and what to do about it -- which is on *their*
+        // screens, since this computer already shares with both.
+        //
+        // via: this computer is an edge, and here there is something to
+        // press. Named the way the person in the middle named them, since
+        // this computer has never met them.
+        function hubNotes(h) {
+            if (!h) {
+                return { through: '', via: [] };
+            }
+            var through = '';
+            var pairs = h.through || [];
+            if (pairs.length === 1) {
+                through = pairs[0].a.name + ' and ' + pairs[0].b.name + ' only sync with each other through ' +
+                    'this computer. When it is off, their changes do not reach each other. ' +
+                    'Each of them can fix that with "Connect directly" on their own main screen.';
+            } else if (pairs.length > 1) {
+                var names = [];
+                pairs.forEach(function (p) {
+                    [p.a.name, p.b.name].forEach(function (n) {
+                        if (names.indexOf(n) === -1) { names.push(n); }
+                    });
+                });
+                through = joinNames(names) + ' only sync with each other through this computer. ' +
+                    'When it is off, their changes do not reach each other.';
+            }
+            var via = (h.via || []).map(function (v) {
+                var middle = joinNames((v.via || []).map(function (m) { return m.name; }));
+                return {
+                    device: v.device,
+                    name: v.name,
+                    text: 'You get ' + v.name + "'s changes only through " + middle + "'s computer. " +
+                        'When it is off, the two of you do not sync.'
+                };
+            });
+            return { through: through, via: via };
+        }
+
+        // Add the person as a device and share the folder with them. They
+        // are asked to accept, as for anybody new. Answers a sentence either
+        // way: success is also something to say, because nothing visible
+        // changes until they accept.
+        function hubConnect(folderID, device, name) {
+            return $http.post(urlbase + '/db/hub/connect', { folder: folderID, device: device })
+                .then(function () {
+                    hubAsked = 0;
+                    return { ok: true, text: 'Asked to connect to ' + name + '. They need to accept on their ' +
+                        'computer, and check the verification card with you.' };
+                }, function (r) {
+                    return { ok: false, text: 'Could not add ' + name + ': ' +
+                        ((r && r.data) ? String(r.data).trim() : 'try again in a moment') + '.' };
+                });
         }
 
         // ----------------------------------------------------------- claims
@@ -1131,6 +1347,7 @@ angular.module('syncthing.core')
             reclaim: reclaim,
             repair: repair,
             releaseClaim: releaseClaim,
+            hubConnect: hubConnect,
             claimSince: claimSince,
             claimUnseen: claimUnseen,
             markReclaimStale: markReclaimStale,
@@ -1143,7 +1360,9 @@ angular.module('syncthing.core')
             _shareOf: shareOf,
             _initials: initials,
             _peopleNote: peopleNote,
-            _peerNote: peerNote
+            _peerNote: peerNote,
+            _yoursPhrase: yoursPhrase,
+            _hubNotes: hubNotes
         };
     })
 
@@ -1240,6 +1459,16 @@ angular.module('syncthing.core')
 
                 scope.claimError = {};
                 scope.claimHelp = {};
+
+                // "Connect directly", keyed by folder + device.
+                scope.hubResult = {};
+                scope.hubConnect = function (folderID, v) {
+                    var key = folderID + ' ' + v.device;
+                    scope.hubResult[key] = { busy: true, text: '' };
+                    desuqHome.hubConnect(folderID, v.device, v.name).then(function (res) {
+                        scope.hubResult[key] = res;
+                    });
+                };
                 scope.releaseClaim = function (folderID, path) {
                     desuqHome.releaseClaim(folderID, path).then(function (msg) {
                         scope.claimError[folderID] = msg;

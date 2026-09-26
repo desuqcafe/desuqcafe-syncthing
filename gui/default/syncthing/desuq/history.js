@@ -741,8 +741,9 @@ angular.module('syncthing.core')
     // desuqThumb is one thumbnail, and the whole of its job is disappearing
     // quietly.
     //
-    // /rest/folder/preview refuses anything it cannot decode -- a .png that is
-    // really a .tga renamed, a file still being written, an archived copy the
+    // /preview/ refuses anything it cannot decode -- a .png that is
+    // really a .tga renamed, a .blend saved without a preview picture, a
+    // file still being written, an archived copy the
     // versioner has since cleaned away -- and a bare <img> answers that with a
     // broken-image icon, which reads as "your file is damaged" rather than
     // "there is no picture of this". So the element removes itself instead.
@@ -826,10 +827,11 @@ function prettyArchive(name) {
 }
 
 // previewable is the same extension list lib/api/api_preview.go accepts.
-// Checked here so an unpreviewable file costs no request at all -- a folder of
-// .blend files would otherwise ask for, and be refused, one thumbnail per row.
+// Checked here so an unpreviewable file costs no request at all. A .blend is
+// on it: the server reads the preview Blender embeds in the file's header
+// (lib/api/desuq_blendthumb.go), and ".blend1" is Blender's own backup of one.
 function previewable(name) {
-    return /\.(png|jpe?g|gif)$/i.test(String(name || ''));
+    return /\.(png|jpe?g|gif|blend1?)$/i.test(String(name || ''));
 }
 
 // previewURL points at the fork's thumbnail endpoint. versionTime is the

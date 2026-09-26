@@ -85,6 +85,13 @@ const world = {
     claims: { claims: [], folders: [] },
     // What each peer is choosing not to keep: nothing, unless a test says so.
     peerHeld: { files: 0, bytes: 0 },
+    // folder id -> /rest/db/delivery answer
+    delivery: {},
+    deliveryAsked: [],
+    // /rest/db/hub: this computer is an edge, and Ana reaches it only
+    // through Yuki.
+    hub: { folders: [{ folder: 'assets', label: 'Project Assets', through: [],
+        via: [{ device: ANA, name: 'Ana', connected: false, via: [{ device: YUKI, name: 'Yuki', connected: true }] }] }] },
     posted: [],
     errors: []
 };
@@ -118,6 +125,13 @@ angular.module('syncthing.core')
             }
             if (url === 'rest/system/tray') {
                 return reply(world.tray);
+            }
+            if (url === 'rest/db/hub') {
+                return reply(world.hub);
+            }
+            if (url === 'rest/db/delivery') {
+                world.deliveryAsked.push(config.params.folder);
+                return reply(world.delivery[config.params.folder] || { folder: config.params.folder, peers: [] });
             }
             if (url.indexOf('rest/db/peerheldback') === 0) {
                 return reply(world.peerHeld);
@@ -154,6 +168,9 @@ angular.module('syncthing.core')
                     claims: world.claims.claims.filter(c => c.folder === body.folder),
                     folders: world.claims.folders.filter(f => f.folder === body.folder)
                 });
+            }
+            if (url === 'rest/db/hub/connect') {
+                return reply({ device: body.device, name: 'Ana' });
             }
             throw new Error('unstubbed POST ' + url);
         };
@@ -500,6 +517,8 @@ check('the one at 45% is marked behind', /who-behind/.test(html()));
 check('the one at 100% is marked complete', /who-complete/.test(html()));
 check('the connected one gets a presence badge', /desuq-home-who-badge/.test(html()));
 check('the note explains the circles', /catching up/.test(text()), text().slice(0, 120));
+check('delivery is asked for the folder somebody is behind on',
+    world.deliveryAsked.indexOf('assets') !== -1, JSON.stringify(world.deliveryAsked));
 
 console.log('\n-- calm stays quiet');
 // The weight rule is carried entirely by the tone class -- is-good and is-busy
@@ -545,6 +564,29 @@ svc.refresh();
 flush();
 flush();
 check('the row goes when the conflicts do', !/changed in two places at once/.test(text()));
+
+console.log('\n-- somebody reached only through somebody else');
+svc.refresh();
+flush();
+flush();
+check('the card says who is reached only through whom',
+    /You get Ana's changes only through Yuki's computer/.test(text()), text().slice(0, 200));
+{
+    const btn = Array.prototype.find.call(el[0].querySelectorAll('.desuq-home-hub button'),
+        b => /Connect directly/.test(b.textContent));
+    check('with a button to connect directly', !!btn);
+    if (btn) {
+        btn.click();
+        flush();
+        const last = world.posted[world.posted.length - 1] || {};
+        check('which asks the server to add that person to that folder',
+            last.url === 'rest/db/hub/connect' && last.body.folder === 'assets' && last.body.device === ANA,
+            JSON.stringify(last));
+        check('and says what happens next', /They need to accept on their computer/.test(text()));
+        check('and the button goes', !Array.prototype.some.call(el[0].querySelectorAll('.desuq-home-hub button'),
+            b => /Connect directly/.test(b.textContent)));
+    }
+}
 
 console.log('\n-- a folder that has stopped');
 // This is the state one of the author's own folders has been in since 24
@@ -681,6 +723,65 @@ console.log('\n-- a peer whose copy only receives, and who changed things in it'
     const h = H([folder({ people: [p] })], [peer()], []);
     check('the headline does not claim to be sending to them', !/Sending/.test(h.text), h.text);
     check('and says they have changes of their own', /changes that stay on their computer/.test(h.detail), h.detail);
+}
+
+console.log('\n-- behind and not connected is away, not catching up');
+// Completion reads the same whether the peer is here or not. The screen said
+// "Sending 12 MiB to Yuki -- theirs is catching up" about a computer that was
+// switched off. /rest/db/delivery says which of it is yours.
+{
+    const dv = { yours: { files: 3, bytes: 900 }, names: ['Scenes\\cabin.blend', 'tree.blend', 'rock.blend'] };
+    const a = svc._shareOf(peer({ connected: false }), { completion: 40, remoteState: 'valid', needBytes: 12582912 }, null, dv);
+    check('a disconnected peer at 40% is away', a.kind === 'away', a.kind);
+    check('carrying your files, by their last name', a.yoursFiles === 3 && a.yoursNames[0] === 'cabin.blend', JSON.stringify(a.yoursNames));
+    const b = svc._shareOf(peer(), { completion: 40, remoteState: 'valid' }, null, dv);
+    check('the same peer connected is behind', b.kind === 'behind', b.kind);
+    const c = svc._shareOf(peer(), { completion: 100, remoteState: 'valid' }, null, dv);
+    check('a stale delivery answer is ignored once they are complete', c.kind === 'complete' && c.yoursFiles === 0, c.yoursFiles);
+
+    const Y = svc._yoursPhrase;
+    check('one file is named', Y({ yoursFiles: 1, yoursNames: ['cabin.blend'] }) === 'cabin.blend');
+    check('two are both named', Y({ yoursFiles: 2, yoursNames: ['cabin.blend', 'tree.blend'] }) === 'cabin.blend and tree.blend');
+    check('more are counted', Y({ yoursFiles: 7, yoursNames: ['cabin.blend', 'x', 'y', 'z', 'w'] }) === 'cabin.blend and 6 more');
+
+    const N = svc._peopleNote;
+    const away = person({ kind: 'away', connected: false, pct: 40, needBytes: 12582912, yoursFiles: 1, yoursNames: ['cabin.blend'] });
+    const note = N([away], 0, 6);
+    check('the note says your latest has not reached them', /Yuki does not have your latest cabin\.blend yet/.test(note), note);
+    check('and why, and what happens next', /not connected\. It goes when they are back/.test(note), note);
+    check('and never that they are catching up', !/catching up/.test(note), note);
+    const theirs = N([person({ kind: 'away', connected: false, needBytes: 1048576, yoursFiles: 0 })], 0, 6);
+    check('away with nothing of yours says what waits for them', /Yuki is not connected\. 1(\.0)? MiB of changes will reach them/.test(theirs), theirs);
+
+    const sending = N([person({ kind: 'behind', pct: 40, needBytes: 900, yoursFiles: 1, yoursNames: ['cabin.blend'] })], 0, 6);
+    check('connected and missing yours: sending, by name', sending === 'Sending cabin.blend to Yuki.', sending);
+
+    const h = H([folder({ people: [away] })], [peer({ connected: false })], []);
+    check('the headline does not claim to be sending to somebody away', !/Sending/.test(h.text), h.text);
+    check('it is still everything is here', /Everything is here/.test(h.text), h.text);
+    check('and the detail says your latest has not reached them', /Yuki does not have your latest yet — not connected/.test(h.detail), h.detail);
+
+    const hs = H([folder({ people: [person({ kind: 'behind', pct: 40, needBytes: 900, yoursFiles: 1, yoursNames: ['cabin.blend'] })] })], [peer()], []);
+    check('sending headline names what is on its way', /On its way: cabin\.blend to Yuki/.test(hs.detail), hs.detail);
+
+    check('the card note for away', /Not connected — Project Assets will catch up/.test(
+        svc._peerNote([{ label: 'Project Assets', kind: 'away' }])));
+}
+
+console.log('\n-- only syncing through one computer');
+{
+    const HN = svc._hubNotes;
+    check('nothing known says nothing', HN(undefined).through === '' && HN(undefined).via.length === 0);
+    const mid = HN({ through: [{ a: { name: 'Kai' }, b: { name: 'Mia' } }], via: [] });
+    check('the middle names the pair and the consequence',
+        /^Kai and Mia only sync with each other through this computer\. When it is off/.test(mid.through), mid.through);
+    check('and where the fix is', /Connect directly/.test(mid.through));
+    const edge = HN({ through: [], via: [{ device: 'D', name: 'Mia', via: [{ name: 'Alex' }] }] });
+    check('the edge names who and through whom',
+        edge.via.length === 1 && /^You get Mia's changes only through Alex's computer\./.test(edge.via[0].text),
+        edge.via[0] && edge.via[0].text);
+    const three = HN({ through: [{ a: { name: 'A' }, b: { name: 'B' } }, { a: { name: 'A' }, b: { name: 'C' } }], via: [] });
+    check('several pairs are one sentence, each name once', /^A, B,? and C only sync/.test(three.through), three.through);
 }
 
 console.log('\n-- a local-only folder warns what switching it would do');

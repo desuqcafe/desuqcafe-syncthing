@@ -51,12 +51,15 @@
 //
 // WHAT IT WILL NOT DO
 //
-// Only the image formats the standard library decodes -- PNG, JPEG and GIF.
-// Not because a .blend preview would not be lovely, but because the only
-// honest way to read one is a Blender header parser, and because refusing
-// everything else keeps this from being a general "read any file in any
-// folder" route. The GUI checks the same extension list before it asks, so an
-// unsupported file costs no request at all.
+// Only the image formats the standard library decodes -- PNG, JPEG and GIF --
+// and .blend, whose embedded preview picture desuq_blendthumb.go reads out of
+// the file header. Refusing everything else keeps this from being a general
+// "read any file in any folder" route. The GUI checks the same extension list
+// before it asks, so an unsupported file costs no request at all.
+//
+// A .blend is not held to previewMaxBytes: a scene file is routinely hundreds
+// of megabytes, and the reader stops within its first few kilobytes, so the
+// size of the file says nothing about the cost of the preview.
 
 package api
 
@@ -163,12 +166,25 @@ func (s *service) getFolderPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	defer fd.Close()
 
-	if info.Size() > previewMaxBytes {
-		http.Error(w, errPreviewTooLarge.Error(), http.StatusRequestEntityTooLarge)
-		return
+	var (
+		body        []byte
+		contentType string
+	)
+	if previewIsBlend(name) {
+		body, contentType, err = previewEncodeBlend(fd, info.Size())
+		if errors.Is(err, errBlendNoThumb) {
+			// Saved without one -- from a script, or with previews turned
+			// off. Said as such so the GUI can tell it from a broken file.
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+	} else {
+		if info.Size() > previewMaxBytes {
+			http.Error(w, errPreviewTooLarge.Error(), http.StatusRequestEntityTooLarge)
+			return
+		}
+		body, contentType, err = previewEncode(fd)
 	}
-
-	body, contentType, err := previewEncode(fd)
 	if err != nil {
 		// A file that does not decode is not a server fault -- a .png that is
 		// really a .tga renamed reaches here, and so does a copy that is still
@@ -197,10 +213,35 @@ func previewSupported(name string) bool {
 		return false
 	}
 	switch lowerASCII(name[i:]) {
-	case ".png", ".jpg", ".jpeg", ".gif":
+	case ".png", ".jpg", ".jpeg", ".gif", ".blend", ".blend1":
 		return true
 	}
 	return false
+}
+
+// previewIsBlend reports a Blender file, or Blender's own ".blend1" backup
+// of one, which is the same format.
+func previewIsBlend(name string) bool {
+	i := strings.LastIndexByte(name, '.')
+	if i < 0 {
+		return false
+	}
+	ext := lowerASCII(name[i:])
+	return ext == ".blend" || ext == ".blend1"
+}
+
+// previewEncodeBlend returns the thumbnail of a .blend's embedded preview.
+// Always PNG: the preview carries alpha where the viewport had none.
+func previewEncodeBlend(r io.ReaderAt, size int64) ([]byte, string, error) {
+	src, err := blendThumbnail(r, size)
+	if err != nil {
+		return nil, "", err
+	}
+	var out bytes.Buffer
+	if err := png.Encode(&out, previewThumbnail(src, previewMaxEdge)); err != nil {
+		return nil, "", err
+	}
+	return out.Bytes(), "image/png", nil
 }
 
 // previewEncode reads an image and returns the thumbnail bytes.

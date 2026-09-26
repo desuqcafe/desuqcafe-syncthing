@@ -19,16 +19,20 @@ import (
 
 func TestPreviewSupported(t *testing.T) {
 	cases := map[string]bool{
-		"a.png":             true,
-		"a.PNG":             true,
-		"refs/chair.jpeg":   true,
-		`refs\chair.JPG`:    true,
-		"loop.gif":          true,
-		"scene.blend":       false,
-		"texture.tga":       false,
-		"noextension":       false,
-		"":                  false,
-		"archive.png.blend": false,
+		"a.png":               true,
+		"a.PNG":               true,
+		"refs/chair.jpeg":     true,
+		`refs\chair.JPG`:      true,
+		"loop.gif":            true,
+		"scene.blend":         true,
+		"Scenes/cabin.BLEND1": true,
+		"scene.blend2":        false,
+		"texture.tga":         false,
+		"noextension":         false,
+		"":                    false,
+		"archive.png.blend":   true,
+		"archive.blend.png":   true,
+		"notes.blend.txt":     false,
 	}
 	for in, want := range cases {
 		if got := previewSupported(in); got != want {

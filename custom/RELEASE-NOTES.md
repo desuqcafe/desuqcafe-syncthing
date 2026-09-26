@@ -3,51 +3,60 @@
      install section to it, so this file is only ever "what changed".
      Old releases keep their own notes on GitHub; git history keeps these. -->
 
-# desuqcafe Syncthing v2.1.6-desuq.9
+# desuqcafe Syncthing v2.1.6-desuq.10
 
-Say "I'm working on this" before you open a file, so nobody ends up with a
-conflict copy.
+Know what happened while you were apart, know whether your work has reached
+the others, and see a picture of every scene in the history.
 
 Update by running the installer over the top. Your folders, devices and
-settings are untouched. **Everyone you share with needs this version** to see
-each other's marks.
+settings are untouched. **Everyone you share with needs this version** for
+most of this to work between you.
 
-## "I'm working on this"
+## Working apart
 
-When two people open the same `.blend` and both save, Syncthing keeps both and
-renames one aside. Nothing is lost, but two afternoons have gone different
-ways, and one of you has to redo work. What would have stopped it is saying
-something before either of you opened the file.
+- **When two computers meet again, one notification says what happened.**
+  What the other person changed, and which files you *both* changed, which
+  are the ones that became conflict copies.
+- **A file you deleted can come back** if somebody else edited it later.
+  That used to happen silently. Now you are told.
+- **Saving a `.blend` marks it as "I'm working on this" automatically**, and
+  the mark comes off after a few quiet hours.
+- **A mark you make while someone is offline says so.** The notification no
+  longer implies they have seen it.
 
-Now there is a way to say it. In Explorer, **right-click the file → Send to →
-desuqcafe Syncthing - I'm working on this.** Everyone you share that folder
-with:
+## Right-click a .blend
 
-- gets a notification: *Yuki is working on cabin.blend*;
-- sees it on the folder in the app, with the time you started;
-- and, if they change that file anyway, gets a second warning saying so,
-  while there is still time to call you.
+In Explorer, right-click a `.blend` → *desuqcafe Syncthing* → **I'm working
+on this**, **Show history**, or **Who has this?** (on Windows 11 this is under
+*Show more options*). Hover over a synced folder to see who is working on
+what in it.
 
-When you are done, send the file there again, or press **Done** in the app.
-A mark more than three days old is shown faded, as possibly forgotten.
+## Did it reach them?
 
-**Nothing is locked.** Anyone can still open and save a marked file. It is a
-note to the others, not a lock.
+- While your changes are on their way: *Sending cabin.blend to Kai.*
+- While they are offline: *Kai does not have your latest cabin.blend yet —
+  their computer is not connected. It goes when they are back.* This used to
+  say "Sending" and "catching up" about a computer that was switched off.
+- When a delivery that waited has arrived, a notification: *cabin.blend has
+  reached Kai.* Deliveries that finish in seconds stay quiet.
+- Pausing syncing warns you if somebody does not have your latest yet.
 
-## It no longer says someone has "the same files" when they do not
+## Nobody silently in the middle
 
-If somebody picked only some of a folder's files to keep, your screen used to
-say they had *the same files as you*. Now it says they keep only part of it,
-and how much is not on their computer.
+With three people, the usual setup has the other two syncing only *through*
+you. When your computer is off, they stop syncing with each other, and
+nothing said so. Now the screen does, on every computer involved. The two at
+the edges get a **Connect directly** button, which adds the other person;
+they then accept it as usual.
 
-## The activity list no longer stops after a restart
+## A picture of every scene
 
-*What has been happening* stopped showing new changes after Syncthing
-restarted, until you reloaded the page. It now notices and starts again.
+History and Conflicts now show the preview Blender saves inside each `.blend`,
+beside every older version, so you can find the version you want by looking
+at it. This works for files saved in Blender 5 too, which are compressed.
 
 ## Still true
 
 Windows Defender may still quarantine the tray on install as
-`Trojan:Win32/Bearfoos.A!ml`. It is a false positive, and since desuq.8 you
-are told when it happens. `custom/DEPLOYMENT-3D-TEAM.md` section 20 has the
-details.
+`Trojan:Win32/Bearfoos.A!ml`. It is a false positive, and you are told when
+it happens. `custom/DEPLOYMENT-3D-TEAM.md` section 20 has the details.

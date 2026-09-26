@@ -337,6 +337,7 @@ func (a *app) onReady() {
 	go a.alerts.watchConflicts(a.ctx)
 	go a.alerts.watchStale(a.ctx)
 	go a.alerts.watchClaims(a.ctx)
+	go a.alerts.watchDelivery(a.ctx)
 	if !a.opts.noIcons {
 		go a.watchFolders(a.ctx)
 	}
@@ -468,12 +469,26 @@ func (a *app) togglePause() {
 // after the pause rather than asked before it, because a tray menu has no
 // way to ask anything -- and the pause is still the right call more often
 // than not; this is so the person knows what the others are seeing.
+//
+// The same moment is when an undelivered change matters: somebody still
+// missing this computer's latest will go on missing it until the resume
+// (delivery.go). Both are one toast -- two toasts for one click is how people
+// learn to dismiss them.
 func (a *app) warnHeldClaims(cl *client) {
-	reply, err := cl.claims()
-	if err != nil {
-		return
+	var title, body string
+	if reply, err := cl.claims(); err == nil {
+		title, body = pausedClaimsMessage(reply.Claims)
 	}
-	if title, body := pausedClaimsMessage(reply.Claims); title != "" {
+	if replies, err := allDeliveries(cl); err == nil {
+		if undelivered := pausedDeliveryMessage(replies); undelivered != "" {
+			if title == "" {
+				title, body = "Paused before everything was delivered", undelivered
+			} else {
+				body = undelivered + " " + body
+			}
+		}
+	}
+	if title != "" {
 		a.notify.Notify(Notification{Title: title, Body: body, Launch: a.guiURL()})
 	}
 }

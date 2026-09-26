@@ -329,6 +329,19 @@ be filled with something. One column lets the page be as short as its content.
     color: var(--v-accent-bright);
 }
 
+/* Behind and not connected: nothing is moving, so no progress ring -- a ring
+   frozen at 40% reads as a transfer that stalled. A plain outline instead,
+   the same muted weight as their offline badge being absent. */
+.desuq-home-who.who-away {
+    background-color: transparent;
+    border: 1px solid var(--v-border);
+}
+
+.desuq-home-who.who-away .desuq-home-who-i {
+    background: transparent;
+    color: var(--v-text-muted);
+}
+
 /* Has never accepted the share. Dashed, because this one does not resolve on
    its own and should not be mistaken for "0% and moving". */
 .desuq-home-who.who-notaccepted {
@@ -372,6 +385,40 @@ be filled with something. One column lets the page be as short as its content.
     margin-top: 8px;
     font-size: 13px;
     color: var(--v-text-muted);
+}
+
+/* Only syncing through one computer. Not a problem while it is on, so it is
+   the note's weight with an icon, not a banner -- but it names a failure
+   nobody would otherwise see coming, so it is its own line. */
+.desuq-home-hub {
+    margin-top: 8px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--v-text);
+}
+
+.desuq-home-hub > .fas {
+    margin-top: 3px;
+    color: var(--v-accent-bright);
+}
+
+.desuq-home-hub > span:nth-child(2) {
+    flex: 1 1 auto;
+}
+
+.desuq-home-hub .btn {
+    flex: 0 0 auto;
+}
+
+.desuq-home-hub-result {
+    display: block;
+    color: var(--v-text-muted);
+}
+
+.desuq-home-hub-result.is-error {
+    color: var(--v-warning-bright);
 }
 
 /* ------------------------------------------------------------ who is working */

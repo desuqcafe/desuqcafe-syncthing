@@ -1202,6 +1202,7 @@ type ClusterConfigReceivedEventData struct {
 
 func (m *model) ClusterConfig(conn protocol.Connection, cm *protocol.ClusterConfig) error {
 	deviceID := conn.DeviceID()
+	m.desuqRememberClusterConfig(deviceID, cm) // desuqcafe fork, see desuq_hub.go
 
 	if cm.Secondary {
 		// No handling of secondary connection ClusterConfigs; they merely

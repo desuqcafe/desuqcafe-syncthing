@@ -141,6 +141,10 @@ type alerter struct {
 	// text can follow the claims without a second poll. Set by the app; nil
 	// in tests.
 	claimsChanged func()
+
+	// deliveries is what each peer has been missing of this computer's
+	// changes, and since when. See delivery.go.
+	deliveries deliveryTracker
 }
 
 func newAlerter(n notifier, guiURL func() string, current func() *client) *alerter {
