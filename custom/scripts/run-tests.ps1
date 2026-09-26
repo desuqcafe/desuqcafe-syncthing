@@ -267,8 +267,11 @@ if (-not $node) {
 # Blender.
 Section 'Python'
 $python = $null
-$candidates = @('python.exe', 'py.exe', 'python3.exe' | ForEach-Object {
-        (Get-Command $_ -EA SilentlyContinue).Source })
+# Get-Command yields nothing for a missing name, and strict mode will not read
+# .Source off nothing -- so take it from what was found rather than from each
+# name.
+$candidates = @(Get-Command 'python.exe', 'py.exe', 'python3.exe' -EA SilentlyContinue |
+        ForEach-Object Source)
 # Blender carries its own Python, and a machine with Blender and nothing
 # else is exactly where the add-on is used.
 $candidates += @(Get-ChildItem "$env:ProgramFiles\Blender Foundation\*\*\python\bin\python.exe" -EA SilentlyContinue |

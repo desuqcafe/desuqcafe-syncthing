@@ -3,3 +3,8 @@
 # version number into the tree.
 resource.syso
 versioninfo.json
+
+# `go build` in this directory with GOOS unset to windows names its output
+# after the directory, with no extension, so the root *.exe rule misses it. A
+# 12 MB Linux build of the tray was committed that way once.
+/tray

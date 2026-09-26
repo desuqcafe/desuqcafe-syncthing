@@ -149,7 +149,7 @@ Needs [Go](https://go.dev/dl/) (the version in [`go.mod`](go.mod)) and
 
 ```powershell
 .\custom\build-windows.ps1 -Installer     # binary + installer into custom\dist
-.\custom\scripts\run-tests.ps1            # all eight suites; -Quick for the fast six
+.\custom\scripts\run-tests.ps1            # all thirteen suites; -Quick for the fast eleven
 ```
 
 `go run build.go` still builds a stock, unbranded Syncthing binary the way

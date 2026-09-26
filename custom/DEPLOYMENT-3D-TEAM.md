@@ -1299,9 +1299,8 @@ between the two builds, or the classifier's score simply sitting near a
 threshold and falling the other side of it.
 
 **Two of three builds were quarantined. Treat the detection as live.** Expect
-it on a machine that has not seen this software before — which is every
-machine except the one these notes were written on — and keep the recovery
-steps below to hand.
+it on any machine that has not seen this software before, and keep the
+recovery steps below to hand.
 
 ### What was tried, and what is left
 
@@ -1310,21 +1309,16 @@ steps below to hand.
 | Remove the `rundll32` LOLBin (desuq.5) | No effect — quarantined identically |
 | Pin the GUI certificate, dropping `InsecureSkipVerify` (desuq.6) | Not caught. Unattributable — see above |
 
-The remaining lever, if this keeps happening, is **to stop shipping a separate
-tray executable**: fold it into `desuq-syncthing.exe` as a mode, so the flagged
-file ceases to exist. Note that the daemon has never once been flagged —
-larger, does far more, same compiler, same directory, equally unsigned. The
-cost is real: the tray is a separate Go module specifically to keep the
-`systray` dependency out of the root `go.mod`, where it would conflict on
-every upstream dependency bump. And it is a gamble — the merged binary might
-inherit the detection, which would cost the daemon too. Do not reach for it
-until the detection recurs on a build that already has the pin.
+Neither change is a fix, and reshaping the code until a classifier stops
+objecting is not the goal. The durable answers are the ones below: report the
+false positive to Microsoft, and sign the binaries.
 
 ### What to actually do
 
 1. **Restore it**, per machine: *Windows Security → Virus & threat protection →
-   Protection history → Restore*. Then add an exclusion for
-   `%LOCALAPPDATA%\Programs\desuq-syncthing\` so the next install survives.
+   Protection history → Restore* (or *Allow on device*), for this detection
+   only. Do not exclude the install folder from scanning: it is writable by
+   anything running as you.
 2. **Report the false positive to Microsoft**, at their submission portal. Free,
    and it is the only route that fixes it for everyone rather than per machine.
 3. Afterwards, check the tray is running and that *Start at sign-in* survived —
@@ -1333,8 +1327,8 @@ until the detection recurs on a build that already has the pin.
 Step 1 is not something a non-technical modeller will do over the phone. That
 is the real cost, and it is what a **code-signing certificate** buys: a signed
 binary from a consistent publisher is far less likely to be classified this way
-at all, and it is the only durable answer for a team that installs on machines
-you are not sitting at.
+at all, and it is the only durable answer wherever the installer is run by
+somebody who will not go looking in Protection history.
 
 ### The product now notices
 
@@ -1381,7 +1375,7 @@ control of every folder Syncthing manages.
 
 **Why it needs a pin rather than ordinary verification.** Syncthing generates
 that certificate with the device name as its common name and its only DNS SAN
-(`CN=desuq, DNS:desuq` on the machine this was written on) and **no IP SAN**.
+(`CN=<device name>, DNS:<device name>`) and **no IP SAN**.
 So `https://127.0.0.1:8384` can never satisfy hostname verification, whatever
 is in the trust store — which is presumably how the bypass got there in the
 first place. `custom/tray/tlspin.go` supplies both halves from the certificate
@@ -1460,8 +1454,8 @@ a copy and look — which overwrites the file you were trying to protect.
 `/preview/` decodes the image server-side and box-samples it down, so a strip
 of twenty thumbnails costs a few kilobytes each rather than twenty 4K textures.
 PNG, JPEG and GIF only: refusing everything else also keeps it from being a
-"read any file in any folder" route. A `.blend` shows no thumbnail — reading
-one honestly means a Blender header parser.
+"read any file in any folder" route. A `.blend` has its own reader, for the
+preview Blender saves inside the file (§28).
 
 **It is the one fork endpoint not under `/rest/`.** A thumbnail is an `<img>`
 source, an `<img>` cannot send a header, and everything under `/rest/` is
@@ -1476,9 +1470,8 @@ aside** tag rather than under forty characters of timestamp and device ID.
 ## 23. A folder that stopped, and a button that would have destroyed the library
 
 A folder whose directory is not there stops, says *folder path missing*, and
-waits. On the machine this document was written for, one of three folders had
-been in that state for two days behind a card that said **Stopped** and offered
-nothing to press.
+waits. In practice that can last for days, behind a card that said
+**Stopped** and offered nothing to press.
 
 There are three ways out and the card now names all three: plug the drive back
 in (and it clears on its own), point the folder at where it lives now under
@@ -1504,7 +1497,7 @@ What it *will* do:
 
 | Situation | Answer |
 | --- | --- |
-| Directory gone, nothing ever in it | Creates it. This is the folder that was stuck on the author's machine |
+| Directory gone, nothing ever in it | Creates it. The common case: a folder added but never populated |
 | Directory gone, files in the index | **Refused**, naming the count |
 | Marker gone, files still on disk | Puts the marker back. Somebody's cleaner ate a dot-directory |
 | Marker gone, directory empty, files in the index | **Refused**. Same disk letter, different disk |
@@ -1656,7 +1649,7 @@ pair, editing on both sides and reconnecting.
 | a receive-only copy is switched to Send & Receive | **Everything it was holding is sent, deletions included.** Verified: a file deleted on the receive-only side was deleted for everybody the moment the type changed | Nothing |
 
 Edit against delete is decided by *which happened later*, not by which kind
-of change it was. The plan this wave started from assumed "the edit wins",
+of change it was. The starting assumption was "the edit wins",
 which is half of it; both outcomes were produced on the pair by changing
 only the order.
 
@@ -1712,8 +1705,8 @@ Verified: a six-file burst marked nothing.
 **Opening a file is the better moment, and it is deliberately not used.**
 Seeing it means inspecting Blender's process -- command lines or open handles
 -- which is the behaviour a classifier dislikes, on a binary Defender already
-quarantines (§20). A Blender add-on that marks on open is the right way to get
-it, and is on the later list.
+quarantines (§20). Marking on open is what the optional Blender add-on does
+instead (§33), from inside Blender.
 
 ### The soft lock, tried and dropped
 
@@ -1784,8 +1777,8 @@ shows), so `/preview/` now reads it out of the file header:
 
 Two things were not obvious:
 
-- **Blender 5 compresses by default, with zstd.** Every 5.x file on the
-  development machine was compressed. The Go standard library has a zstd
+- **Blender 5 compresses by default, with zstd.** Every 5.x file tested was
+  compressed. The Go standard library has a zstd
   decoder but keeps it internal; rather than add a dependency to the root
   module (which conflicts on every upstream merge), the reader reaches the
   same decoder through `debug/elf`, which exposes it for compressed ELF
@@ -2117,8 +2110,8 @@ about a saved version, and the one on disk would be the previous save), and
   refusal on a version still arriving, and -- checked after Blender has
   exited -- the mark coming off on quit. By hand, because CI has no Blender;
   `custom/scripts/test-blender-addon.py` checks the client's decisions with
-  plain Python and is suite 13. Only Blender 5.2 is installed on the
-  development machine, so that is the version covered.
+  plain Python and is suite 13. Only Blender 5.2 has been run live, so that
+  is the version covered.
 
 ## Recommended configuration
 
@@ -2176,14 +2169,14 @@ instruction rather than a default, and is applied whatever is already there.
 `custom/scripts/test-seed-naming.ps1` runs all of that against the real script
 and the real binary in a throwaway directory.
 
-**Watch for this on the next release.** `$SeedVersion` is now 2, so installing
-over an existing machine re-seeds it -- and observed on a real install, that
-renamed the device from the machine's host name to the Windows user name. The
-rule worked exactly as written: the device name still matched `os.Hostname()`,
-so it counted as a name `generate` picked rather than one a person typed, and
-the user name replaced it. That machine's host name had in fact been chosen
-deliberately, which is the finding: a **deliberately meaningful host name gets
-treated as auto-generated**, because the test cannot tell the two apart. If any of the
+**Watch for this whenever `$SeedVersion` changes.** At 2, installing over an
+existing machine re-seeds it -- and on a real install that renamed the device
+from the machine's host name to the Windows user name. The rule worked
+exactly as written: the device name still matched `os.Hostname()`, so it
+counted as a name `generate` picked rather than one a person typed, and the
+user name replaced it. But a host name can be chosen on purpose too, which is
+the finding: a **deliberately meaningful host name gets treated as
+auto-generated**, because the test cannot tell the two apart. If any of the
 three machines has a host name somebody chose on purpose, set the device name
 explicitly before shipping the upgrade:
 

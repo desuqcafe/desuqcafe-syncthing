@@ -4,7 +4,7 @@ package main
 //
 // WHY THIS EXISTS
 //
-// The tray has had a Pause Syncing checkbox since wave 1, and it pauses until
+// The tray has had a Pause Syncing checkbox from the start, and it pauses until
 // somebody unpauses it. The reason people press it is not open-ended: a render
 // is running, or a big import is going, and they want the disk and the network
 // to themselves for a while. Then they forget, because a paused Syncthing

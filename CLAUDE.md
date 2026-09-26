@@ -205,7 +205,7 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
   cursor before returning anything, so `since=4211` against a restarted daemon
   answers *empty*, every time, until 4211 more events exist. Ask for the
   newest with `since=0&limit=1&timeout=0` and compare. The History feed froze
-  on exactly this until wave 15; `checkRestart` in `history.js` and
+  on exactly this until it was fixed; `checkRestart` in `history.js` and
   `checkCollisions` in `custom/tray/claims.go` are the two readers. Two more things it will not tell
   you: **the first scan emits one event per existing file** (verified — six
   files, six events, one timestamp), which overruns 1000 on a real asset
@@ -239,7 +239,7 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
   (`lib/model/desuq_peerheldback.go`). Sixth instance of the local-state-lies
   class, and the first seen from the sending side.
 - **Blender 5 compresses `.blend` files with zstd by default.** Every 5.x
-  file on the development machine began `28 B5 2F FD`, so a thumbnail reader
+  file tested began `28 B5 2F FD`, so a thumbnail reader
   that skips compressed files skips nearly everything. The standard library's
   zstd decoder is `internal/zstd`; `lib/api/desuq_blendthumb.go` reaches it
   through `debug/elf` rather than add a root `go.mod` dependency. The 5.x
@@ -317,7 +317,7 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
   *contents* and fails on the root -- which is, usefully, the exact shape of a
   drive that came back empty.
 - **Syncthing's GUI certificate has no IP SAN.** `https-cert.pem` carries the
-  device name as its common name and its only DNS SAN (`CN=desuq, DNS:desuq`),
+  device name as its common name and its only DNS SAN (`CN=<name>, DNS:<name>`),
   so a connection to `https://127.0.0.1:8384` can never pass hostname
   verification however the trust store is arranged. That is why
   `custom/tray/tlspin.go` pins: the certificate goes in a one-entry root pool

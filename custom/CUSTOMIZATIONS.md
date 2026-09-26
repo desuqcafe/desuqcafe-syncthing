@@ -205,7 +205,7 @@ merge that silently drops the guard costs something: a pinned copy would be
 removed on schedule with no error anywhere. That is why `lib/versioner` joined
 the Go suite `run-tests.ps1` runs.
 
-The main-screen wave added the three newest files — `notifications.html`,
+The main-screen work added the three newest files — `notifications.html`,
 `shutdownDialogView.html` and `idqrModalView.html` — and is the largest single
 change to `index.html` so far at 149 insertions. Only **nine** of that file's
 deletions are fork work in total, which is the point: the new screen is a
@@ -368,13 +368,13 @@ upstream's version of the function and re-apply the `envOr(...)` wrappers.
 ## Running the tests
 
 ```powershell
-.\custom\scripts\run-tests.ps1            # all eight suites
-.\custom\scripts\run-tests.ps1 -Quick     # the six that need no binary and no pair
+.\custom\scripts\run-tests.ps1            # all thirteen suites
+.\custom\scripts\run-tests.ps1 -Quick     # the eleven that need no binary and no pair
 ```
 
-Nine suites in three languages, four of them needing jsdom and one needing two
+Thirteen suites in four languages, six of them needing jsdom and one needing two
 live Syncthing instances. Until `run-tests.ps1` existed the only way to run
-them all was to remember nine command lines, so nothing did.
+them all was to remember every command line, so nothing did.
 
 A missing prerequisite -- no Go, no jsdom, no built binary -- is reported as
 SKIP rather than as failure, and the exit code stays 0. But the summary says
