@@ -255,6 +255,9 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
   (`lib/api/api_claims.go`). Anything new that lists, counts, versions or
   ignores a folder's contents has to decide what to do about it -- see the
   table in `DEPLOYMENT-3D-TEAM.md` §25 for what every existing view does.
+  A device's file there can outlive its marks: it keeps `accepted`
+  hand-overs until the giver's side is gone (`lib/api/api_handoff.go`,
+  §30), so "no marks" does not mean "no file".
 - **The page loads no Fancytree skin.** Upstream uses Fancytree only in table
   mode, so list mode -- the selective-sync picker -- rendered every row with a
   browser-default bullet and 40px indents until `selective.css` styled the

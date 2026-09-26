@@ -96,6 +96,11 @@ type claimsFile struct {
 	Version int          `json:"version"`
 	Device  string       `json:"device"`
 	Claims  []claimEntry `json:"claims"`
+	// Accepted is the hand-overs this device has taken (api_handoff.go).
+	// Kept after the mark itself is released, until the giver's side of the
+	// hand-over is gone. Omitted when empty, so a file with none reads
+	// exactly as it did.
+	Accepted []handoffAck `json:"accepted,omitempty"`
 }
 
 type claimEntry struct {
@@ -107,6 +112,12 @@ type claimEntry struct {
 	// only ever taken off by hand. Omitted when false, so a file written by
 	// an older build reads exactly as it did.
 	Auto bool `json:"auto,omitempty"`
+	// To is set on a mark this device is handing to somebody else, and
+	// From on a mark this device was handed. HandedAt identifies the
+	// hand-over on both sides. See api_handoff.go.
+	To       string    `json:"to,omitempty"`
+	From     string    `json:"from,omitempty"`
+	HandedAt time.Time `json:"handedAt,omitzero"`
 }
 
 // claimRow is one claim as the API reports it.
@@ -123,6 +134,18 @@ type claimRow struct {
 	// Unseen is, on this device's own marks, everybody the folder is shared
 	// with whose copy does not have them yet. Empty means everybody has.
 	Unseen []claimPeer `json:"unseen,omitempty"`
+	// HandingTo is who this mark is being handed to, while they have not
+	// taken it yet. From is who handed it over, on a mark that was.
+	HandingTo *claimRef `json:"handingTo,omitempty"`
+	From      *claimRef `json:"from,omitempty"`
+}
+
+// claimRef names a device in a claim row. Mine says it is this computer, so
+// the interface can say "you" without comparing IDs.
+type claimRef struct {
+	Device string `json:"device"`
+	Name   string `json:"name"`
+	Mine   bool   `json:"mine,omitempty"`
 }
 
 // claimPeer is one person a mark has not reached, and why. The why is what
@@ -158,6 +181,9 @@ type claimRequest struct {
 	Release bool   `json:"release"`
 	// Auto marks the claim as made by the tray on a save. See claimEntry.
 	Auto bool `json:"auto"`
+	// HandTo hands this computer's mark to another device the folder is
+	// shared with. See api_handoff.go.
+	HandTo string `json:"handTo"`
 }
 
 // cleanClaimPath turns what a caller sent into the slash-separated,
@@ -201,6 +227,14 @@ func applyClaim(list []claimEntry, p string, release, auto bool, now time.Time) 
 				c.Auto = false
 				changed = true
 			}
+			// Marking by hand a file you are handing over takes it back.
+			// A save does not: the tray marks on every save, and saving once
+			// more before the other person has it must not cancel the
+			// hand-over.
+			if c.To != "" && !auto {
+				c.To, c.HandedAt = "", time.Time{}
+				changed = true
+			}
 		}
 		out = append(out, c)
 	}
@@ -221,26 +255,64 @@ func applyClaim(list []claimEntry, p string, release, auto bool, now time.Time) 
 // one the file is named for -- and forgiving about the rest: an entry with a
 // path that does not clean up is dropped, not the whole file.
 func parseClaimsFile(data []byte, want protocol.DeviceID) ([]claimEntry, bool) {
+	doc, ok := parseClaimsDoc(data, want)
+	return doc.Claims, ok
+}
+
+// parseClaimsDoc is parseClaimsFile with the accepted hand-overs as well.
+// A hand-over field naming something that is not a device ID is dropped
+// rather than the mark: the mark is still true.
+func parseClaimsDoc(data []byte, want protocol.DeviceID) (claimsFile, bool) {
 	var f claimsFile
 	if err := json.Unmarshal(data, &f); err != nil {
-		return nil, false
+		return claimsFile{}, false
 	}
 	dev, err := protocol.DeviceIDFromString(f.Device)
 	if err != nil || dev != want {
-		return nil, false
+		return claimsFile{}, false
 	}
-	out := make([]claimEntry, 0, len(f.Claims))
+	out := claimsFile{Version: f.Version, Device: f.Device, Claims: make([]claimEntry, 0, len(f.Claims))}
 	for _, c := range f.Claims {
 		p, ok := cleanClaimPath(c.Path)
 		if !ok || c.Since.IsZero() {
 			continue
 		}
-		out = append(out, claimEntry{Path: p, Since: c.Since, Auto: c.Auto})
-		if len(out) == claimsMaxPerDevice {
+		e := claimEntry{Path: p, Since: c.Since, Auto: c.Auto}
+		if !c.HandedAt.IsZero() {
+			e.To, e.From = cleanDeviceString(c.To), cleanDeviceString(c.From)
+			if e.To != "" || e.From != "" {
+				e.HandedAt = c.HandedAt
+			}
+		}
+		out.Claims = append(out.Claims, e)
+		if len(out.Claims) == claimsMaxPerDevice {
+			break
+		}
+	}
+	for _, a := range f.Accepted {
+		p, ok := cleanClaimPath(a.Path)
+		from := cleanDeviceString(a.From)
+		if !ok || from == "" || a.HandedAt.IsZero() {
+			continue
+		}
+		out.Accepted = append(out.Accepted, handoffAck{From: from, Path: p, HandedAt: a.HandedAt})
+		if len(out.Accepted) == claimsMaxPerDevice {
 			break
 		}
 	}
 	return out, true
+}
+
+// cleanDeviceString is a device ID in its canonical spelling, or "".
+func cleanDeviceString(s string) string {
+	if s == "" {
+		return ""
+	}
+	id, err := protocol.DeviceIDFromString(s)
+	if err != nil {
+		return ""
+	}
+	return id.String()
 }
 
 // claimFileName is where a device's claims live, relative to the folder root.
@@ -279,6 +351,11 @@ func (s *service) getFolderClaims(w http.ResponseWriter, r *http.Request) {
 	res := claimsResponse{Claims: []claimRow{}, Folders: []claimsFolder{}}
 	now := time.Now()
 	for _, id := range ids {
+		// Take anything handed to this computer, and tidy away what the other
+		// side has taken, before listing. Here rather than on a timer of its
+		// own because both the tray and the main screen already ask this
+		// every few seconds -- whichever is running keeps hand-overs moving.
+		s.reconcileHandoffs(folders[id])
 		rows, info := s.claimsIn(folders[id], now)
 		res.Claims = append(res.Claims, rows...)
 		res.Folders = append(res.Folders, info)
@@ -297,17 +374,81 @@ func (s *service) claimsIn(cfg config.FolderConfiguration, now time.Time) ([]cla
 		label = cfg.ID
 	}
 
+	docs := s.readClaimDocs(cfg)
+	info.Files, info.Bytes = docs.files, docs.bytes
+
+	var rows []claimRow
+	for _, dev := range docs.order {
+		doc := docs.byDevice[dev]
+		mine := dev == s.id
+		name := s.claimName(dev)
+		var unseen []claimPeer
+		if mine {
+			unseen = s.claimsUnseenBy(cfg, claimFileName(dev))
+		}
+		for _, c := range doc.Claims {
+			row := claimRow{
+				Folder: cfg.ID,
+				Label:  label,
+				Path:   c.Path,
+				Device: dev.String(),
+				Name:   name,
+				Mine:   mine,
+				Since:  c.Since,
+				Stale:  now.Sub(c.Since) > claimStaleAfter,
+				Auto:   c.Auto,
+			}
+			if c.To != "" {
+				// Once the other side has taken it, the giver's half is only
+				// waiting for the giver's computer to tidy it away -- which
+				// may be switched off for the weekend. It is not a mark any
+				// more, and showing it would put two names on one file.
+				if docs.accepted(c.To, dev, c) {
+					continue
+				}
+				row.HandingTo = s.claimRefFor(c.To)
+			}
+			if c.From != "" {
+				row.From = s.claimRefFor(c.From)
+			}
+			if mine {
+				row.Unseen = unseen
+			}
+			rows = append(rows, row)
+		}
+	}
+	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Since.After(rows[j].Since) })
+	return rows, info
+}
+
+// claimDocs is every believable claims file in one folder.
+type claimDocs struct {
+	byDevice map[protocol.DeviceID]claimsFile
+	// order is byDevice's keys, sorted, so rows come out in a stable order.
+	order []protocol.DeviceID
+	// present is every device that has a claims file on disk, believable or
+	// not. A file that is there but cannot be read right now is not the same
+	// as no file: see pruneAcks.
+	present map[protocol.DeviceID]bool
+	// files and bytes count every claims file, for the main screen to
+	// subtract from the folder's totals.
+	files int
+	bytes int64
+}
+
+// readClaimDocs reads one folder's claims off disk. The disk rather than the
+// index for the contents, because the index holds hashes, not bytes; the index
+// for the author, because the disk does not know who wrote anything.
+func (s *service) readClaimDocs(cfg config.FolderConfiguration) claimDocs {
+	docs := claimDocs{byDevice: map[protocol.DeviceID]claimsFile{}, present: map[protocol.DeviceID]bool{}}
 	ffs := cfg.Filesystem()
 	names, err := ffs.DirNames(claimsDir)
 	if err != nil {
-		return nil, info
+		return docs
 	}
 	sort.Strings(names)
 
 	devices := s.cfg.Devices()
-	var rows []claimRow
-	var unseen []claimPeer
-	unseenAsked := false
 	for _, n := range names {
 		if !strings.HasSuffix(n, ".json") || fs.IsTemporary(n) {
 			continue
@@ -321,12 +462,12 @@ func (s *service) claimsIn(cfg config.FolderConfiguration, now time.Time) ([]cla
 		if err != nil || !st.IsRegular() {
 			continue
 		}
-		info.Files++
-		info.Bytes += st.Size()
+		docs.files++
+		docs.bytes += st.Size()
+		docs.present[dev] = true
 
 		mine := dev == s.id
-		devCfg, known := devices[dev]
-		if !mine && !known {
+		if _, known := devices[dev]; !mine && !known {
 			// Somebody the folder is not shared with, as far as this
 			// computer knows. Nothing to name them by, and no reason to
 			// believe them.
@@ -335,44 +476,37 @@ func (s *service) claimsIn(cfg config.FolderConfiguration, now time.Time) ([]cla
 		if !s.claimAuthoredBy(cfg.ID, rel, dev, mine) {
 			continue
 		}
-
 		data, err := readClaimsBytes(ffs, rel)
 		if err != nil {
 			continue
 		}
-		entries, valid := parseClaimsFile(data, dev)
+		doc, valid := parseClaimsDoc(data, dev)
 		if !valid {
 			continue
 		}
-
-		name := dev.Short().String()
-		if mine {
-			name = "You"
-		} else if devCfg.Name != "" {
-			name = devCfg.Name
-		}
-		if mine && !unseenAsked {
-			unseen, unseenAsked = s.claimsUnseenBy(cfg, rel), true
-		}
-		for _, c := range entries {
-			rows = append(rows, claimRow{
-				Folder: cfg.ID,
-				Label:  label,
-				Path:   c.Path,
-				Device: dev.String(),
-				Name:   name,
-				Mine:   mine,
-				Since:  c.Since,
-				Stale:  now.Sub(c.Since) > claimStaleAfter,
-				Auto:   c.Auto,
-			})
-			if mine {
-				rows[len(rows)-1].Unseen = unseen
-			}
-		}
+		docs.byDevice[dev] = doc
+		docs.order = append(docs.order, dev)
 	}
-	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Since.After(rows[j].Since) })
-	return rows, info
+	return docs
+}
+
+// claimName is what a claim row calls a device.
+func (s *service) claimName(dev protocol.DeviceID) string {
+	if dev == s.id {
+		return "You"
+	}
+	if d, ok := s.cfg.Devices()[dev]; ok && d.Name != "" {
+		return d.Name
+	}
+	return dev.Short().String()
+}
+
+func (s *service) claimRefFor(device string) *claimRef {
+	dev, err := protocol.DeviceIDFromString(device)
+	if err != nil {
+		return nil
+	}
+	return &claimRef{Device: dev.String(), Name: s.claimName(dev), Mine: dev == s.id}
 }
 
 // claimDelivery is satisfied by the real model; see
@@ -491,8 +625,26 @@ func (s *service) postFolderClaim(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var handTo protocol.DeviceID
+	if req.HandTo != "" && !req.Release {
+		var herr error
+		if handTo, herr = s.handoffTarget(cfg, req.HandTo); herr != nil {
+			http.Error(w, herr.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
 	claimsMut.Lock()
-	err := s.writeOwnClaim(cfg, p, req.Release, req.Auto)
+	var err error
+	if req.HandTo != "" && !req.Release {
+		err = s.writeOwnDoc(cfg, func(doc *claimsFile) (bool, error) {
+			next, err := applyHandoff(doc.Claims, p, handTo, time.Now())
+			doc.Claims = next
+			return err == nil, err
+		})
+	} else {
+		err = s.writeOwnClaim(cfg, p, req.Release, req.Auto)
+	}
 	claimsMut.Unlock()
 	if errors.Is(err, errClaimTooMany) {
 		http.Error(w, err.Error(), http.StatusConflict)
@@ -530,10 +682,24 @@ func (s *service) claimTargetExists(cfg config.FolderConfiguration, p string) bo
 // list removes the file rather than leaving "claims: []" behind, so a folder
 // where nobody is working on anything carries nothing extra at all.
 func (s *service) writeOwnClaim(cfg config.FolderConfiguration, p string, release, auto bool) error {
+	return s.writeOwnDoc(cfg, func(doc *claimsFile) (bool, error) {
+		next, changed, err := applyClaim(doc.Claims, p, release, auto, time.Now())
+		if err != nil || !changed {
+			return false, err
+		}
+		doc.Claims = next
+		return true, nil
+	})
+}
+
+// writeOwnDoc is the read-modify-write every change to this device's claims
+// file goes through. The caller holds claimsMut. mutate reports whether it
+// changed anything; nothing is written if not.
+func (s *service) writeOwnDoc(cfg config.FolderConfiguration, mutate func(*claimsFile) (bool, error)) error {
 	ffs := cfg.Filesystem()
 	rel := claimFileName(s.id)
 
-	var list []claimEntry
+	var doc claimsFile
 	// Start from what is on disk only if the index agrees we wrote it. A file
 	// of ours that somebody else has overwritten is replaced, not extended:
 	// extending it would re-send their forgery under our name.
@@ -542,19 +708,20 @@ func (s *service) writeOwnClaim(cfg config.FolderConfiguration, p string, releas
 			// A file of ours we cannot parse is replaced, not refused: nobody
 			// else should write it, so the only way to get it back is to
 			// write it.
-			list, _ = parseClaimsFile(data, s.id)
+			doc, _ = parseClaimsDoc(data, s.id)
 		}
 	}
 
-	next, changed, err := applyClaim(list, p, release, auto, time.Now())
+	changed, err := mutate(&doc)
 	if err != nil {
 		return err
 	}
 	if !changed {
 		return nil
 	}
+	next := doc.Claims
 
-	if len(next) == 0 {
+	if len(next) == 0 && len(doc.Accepted) == 0 {
 		if err := ffs.Remove(rel); err != nil && !fs.IsNotExist(err) {
 			return err
 		}
@@ -569,10 +736,16 @@ func (s *service) writeOwnClaim(cfg config.FolderConfiguration, p string, releas
 	// hide things still syncs them.
 	_ = ffs.Hide(claimsDir)
 
+	if next == nil {
+		// "claims": [] rather than null, for a file kept only for its
+		// accepted hand-overs: an older build reading it expects a list.
+		next = []claimEntry{}
+	}
 	data, err := json.MarshalIndent(claimsFile{
-		Version: claimsFileVersion,
-		Device:  s.id.String(),
-		Claims:  next,
+		Version:  claimsFileVersion,
+		Device:   s.id.String(),
+		Claims:   next,
+		Accepted: doc.Accepted,
 	}, "", "  ")
 	if err != nil {
 		return err

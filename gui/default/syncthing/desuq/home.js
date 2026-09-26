@@ -881,6 +881,7 @@ angular.module('syncthing.core')
                                 return (a.mine === b.mine) ? 0 : (a.mine ? 1 : -1);
                             }),
                             canClaim: fc.canClaim !== false,
+                            claimReason: fc.reason || '',
                             failedItems: s.errors || 0,
                             // Why a stopped folder stopped. Upstream puts the
                             // sentence in the summary and nothing showed it,
@@ -1198,17 +1199,41 @@ angular.module('syncthing.core')
         // Done with a file. Answers '' on success and a sentence otherwise;
         // the card is redrawn from the server's answer rather than guessed.
         function releaseClaim(folderID, path) {
-            return $http.post(urlbase + '/folder/claim',
-                { folder: folderID, path: path, release: true })
+            return postClaim({ folder: folderID, path: path, release: true },
+                'Could not take that mark off. Try again in a moment.');
+        }
+
+        // Hand your mark to somebody else the folder is shared with
+        // (lib/api/api_handoff.go). It stays yours, and everybody still sees
+        // the file as taken, until their computer picks it up.
+        function handClaim(folderID, path, deviceID) {
+            return postClaim({ folder: folderID, path: path, handTo: deviceID },
+                'Could not hand that file over. Try again in a moment.');
+        }
+
+        // Take back a hand-over nobody has picked up yet: marking it by hand
+        // again is what does that on the server.
+        function keepClaim(folderID, path) {
+            return postClaim({ folder: folderID, path: path },
+                'Could not keep that file. Try again in a moment.');
+        }
+
+        function postClaim(body, failure) {
+            return $http.post(urlbase + '/folder/claim', body)
                 .then(function (r) {
-                    var one = takeClaims(r.data)[folderID];
+                    var one = takeClaims(r.data)[body.folder];
                     if (one) {
-                        st.claims[folderID] = one;
+                        st.claims[body.folder] = one;
                     }
                     claimsAsked = 0;
                     return '';
-                }, function () {
-                    return 'Could not take that mark off. Try again in a moment.';
+                }, function (r) {
+                    // The server's own sentence when it has one: "that person
+                    // does not share this folder" is something to act on.
+                    var why = r && r.status >= 400 && r.status < 500 &&
+                        typeof r.data === 'string' && r.data.trim();
+                    return why ? failure.replace(/ Try again in a moment\.$/, '') + ' ' +
+                        why.charAt(0).toUpperCase() + why.slice(1) + '.' : failure;
                 });
         }
 
@@ -1347,6 +1372,8 @@ angular.module('syncthing.core')
             reclaim: reclaim,
             repair: repair,
             releaseClaim: releaseClaim,
+            handClaim: handClaim,
+            keepClaim: keepClaim,
             hubConnect: hubConnect,
             claimSince: claimSince,
             claimUnseen: claimUnseen,
@@ -1467,6 +1494,31 @@ angular.module('syncthing.core')
                     scope.hubResult[key] = { busy: true, text: '' };
                     desuqHome.hubConnect(folderID, v.device, v.name).then(function (res) {
                         scope.hubResult[key] = res;
+                    });
+                };
+                // "Hand over", keyed by folder + path: whether the list of
+                // people is open. Only needed with more than one person; with
+                // one, the button names them and hands over directly.
+                scope.handOpen = {};
+                scope.toggleHand = function (folderID, path) {
+                    var key = folderID + ' ' + path;
+                    scope.handOpen[key] = !scope.handOpen[key];
+                };
+                scope.handClaim = function (folderID, path, deviceID) {
+                    delete scope.handOpen[folderID + ' ' + path];
+                    desuqHome.handClaim(folderID, path, deviceID).then(function (msg) {
+                        scope.claimError[folderID] = msg;
+                        if (!msg) {
+                            desuqHome.refresh();
+                        }
+                    });
+                };
+                scope.keepClaim = function (folderID, path) {
+                    desuqHome.keepClaim(folderID, path).then(function (msg) {
+                        scope.claimError[folderID] = msg;
+                        if (!msg) {
+                            desuqHome.refresh();
+                        }
                     });
                 };
                 scope.releaseClaim = function (folderID, path) {

@@ -82,6 +82,17 @@ type claimRow struct {
 	Auto   bool      `json:"auto"`
 	// Unseen is, on this device's own claims, who does not have them yet.
 	Unseen []claimPeer `json:"unseen"`
+	// HandingTo and From are hand-overs (lib/api/api_handoff.go): who a
+	// mark is being passed to, and who passed a mark on.
+	HandingTo *claimRef `json:"handingTo"`
+	From      *claimRef `json:"from"`
+}
+
+// claimRef names a device in a claim row; Mine is this computer.
+type claimRef struct {
+	Device string `json:"device"`
+	Name   string `json:"name"`
+	Mine   bool   `json:"mine"`
 }
 
 // claimPeer is one person a claim has not reached. State is "offline",
@@ -234,10 +245,12 @@ type claimWatch struct {
 	diskCursor int
 	// warned is when each (folder, path) last raised a collision toast.
 	warned map[string]time.Time
+	// handed is every mark handed to this computer already announced.
+	handed map[string]bool
 }
 
 func newClaimWatch() *claimWatch {
-	return &claimWatch{seen: map[string]bool{}, warned: map[string]time.Time{}, diskCursor: -1}
+	return &claimWatch{seen: map[string]bool{}, warned: map[string]time.Time{}, handed: map[string]bool{}, diskCursor: -1}
 }
 
 // newPeerClaims is the pure half of the announcement: which of these claims
@@ -283,6 +296,16 @@ func claimAnnouncement(fresh []claimRow) (title, body string) {
 	}
 	if len(fresh) == 1 {
 		r := fresh[0]
+		switch {
+		case r.From != nil && r.From.Mine:
+			// The other half of a hand-over this computer made: the news is
+			// that it arrived, not that somebody else has the file open.
+			return truncate(who+" has taken "+filepath.Base(r.Path), 60),
+				"You handed it over in " + r.Label + ". It is marked as theirs now."
+		case r.From != nil:
+			return truncate(who+" has taken over "+filepath.Base(r.Path), 60),
+				"From " + r.From.Name + ", in " + r.Label + ". Leave it closed until " + who + " is done."
+		}
 		return truncate(who+" is working on "+filepath.Base(r.Path), 60),
 			"In " + r.Label + ". Leave it closed until they are done, or you will both end up with a copy of your own."
 	}
@@ -303,6 +326,62 @@ func claimAnnouncement(fresh []claimRow) (title, body string) {
 	}
 	return fmt.Sprintf("%d files are being worked on", len(fresh)),
 		list + ". Open the app to see who has which."
+}
+
+// newHandoffs is which of this computer's own marks were handed to it by
+// somebody else and have not been announced. The server takes a hand-over by
+// itself (lib/api/api_handoff.go), so without this the person it was meant
+// for would learn about it only by opening the app. Same memory rules as
+// newPeerClaims: once each, forgotten when the mark goes.
+func newHandoffs(rows []claimRow, seen map[string]bool, cutoff time.Time) []claimRow {
+	present := map[string]bool{}
+	var fresh []claimRow
+	for _, r := range rows {
+		if !r.Mine || r.From == nil || r.From.Mine {
+			continue
+		}
+		k := claimKey(r)
+		present[k] = true
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		if r.Since.After(cutoff) {
+			fresh = append(fresh, r)
+		}
+	}
+	for k := range seen {
+		if !present[k] {
+			delete(seen, k)
+		}
+	}
+	sort.Slice(fresh, func(i, j int) bool { return fresh[i].Since.Before(fresh[j].Since) })
+	return fresh
+}
+
+// handoffAnnouncement words the toast for files handed to this computer.
+func handoffAnnouncement(fresh []claimRow) (title, body string) {
+	if len(fresh) == 0 {
+		return "", ""
+	}
+	if len(fresh) == 1 {
+		r := fresh[0]
+		return truncate(r.From.Name+" handed you "+filepath.Base(r.Path), 60),
+			"In " + r.Label + ". It is marked as yours now, so the others can see you have it. Press Done in the app when you are finished."
+	}
+	names := make([]string, 0, claimsMaxNames)
+	for i, r := range fresh {
+		if i == claimsMaxNames {
+			break
+		}
+		names = append(names, filepath.Base(r.Path))
+	}
+	list := strings.Join(names, ", ")
+	if len(fresh) > claimsMaxNames {
+		list += fmt.Sprintf(" and %d more", len(fresh)-claimsMaxNames)
+	}
+	return fmt.Sprintf("%d files were handed to you", len(fresh)),
+		list + ". They are marked as yours now."
 }
 
 // collisions is the pure half of the warning: which files that somebody else
@@ -373,6 +452,11 @@ func (a *alerter) checkClaims(w *claimWatch) {
 	if fresh := newPeerClaims(reply.Claims, w.seen, w.since); len(fresh) > 0 {
 		title, body := claimAnnouncement(fresh)
 		slog.Info("announced files somebody else is working on", "count", len(fresh), "title", title)
+		a.notify.Notify(Notification{Title: title, Body: body, Launch: a.guiURL()})
+	}
+	if fresh := newHandoffs(reply.Claims, w.handed, w.since); len(fresh) > 0 {
+		title, body := handoffAnnouncement(fresh)
+		slog.Info("announced files handed to this computer", "count", len(fresh), "title", title)
 		a.notify.Notify(Notification{Title: title, Body: body, Launch: a.guiURL()})
 	}
 

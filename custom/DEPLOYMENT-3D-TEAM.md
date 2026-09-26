@@ -1908,6 +1908,49 @@ were pinned. The next clean removed only the unpinned one. Restoring a pinned
 copy put its bytes back in the folder and left it in the archive, still
 pinned, through a further clean.
 
+## 30. Handing a file over
+
+"Kai, this one's yours now." Before this, passing a scene on meant taking
+your mark off and hoping Kai put theirs on before anybody else opened it.
+Now your own mark on the main screen has **Give to Kai** (or **Hand over**
+and a list, when more than one person shares the folder). Kai's computer
+picks it up by itself, marks it as Kai's, and the tray tells Kai: *Mia
+handed you cabin.blend.* Your computer is told back: *Kai has taken
+cabin.blend.* Until it is picked up, the mark stays yours and reads *You are
+handing cabin.blend to Kai*, with **Keep it** to change your mind.
+
+- **Still one writer per claims file.** Nobody writes another device's file,
+  so a hand-over is three steps, each on the device that owns the file. The
+  giver sets `to` on its own entry. The taker writes its own mark with
+  `from`, plus an acknowledgement in an `accepted` list. The giver sees the
+  acknowledgement and drops its entry. `lib/api/api_handoff.go`.
+- **The file is never unmarked in between.** While it is in transit it is
+  still the giver's mark, and third people see it as taken. Once the taker has
+  it, the giver's leftover entry is hidden everywhere, not just on the
+  giver's computer, because the acknowledgement says it has been taken.
+- **The giver can switch off straight after handing over.** That is the
+  normal case, not an edge case. The acknowledgement is kept in the taker's
+  file after they press **Done**, until the giver's entry is gone. Without it,
+  the taker's computer would see the old *to: Kai* and take the file again
+  at every pass. Verified on a pair by never polling the giver: the taker
+  took the file, pressed Done, and it did not come back. When the giver
+  returned, its entry went, then the taker's acknowledgement, leaving no
+  claims files in the folder at all.
+- **Saving does not cancel a hand-over; marking by hand does.** The tray
+  marks a `.blend` on every save. A save on the giver's side between handing
+  over and the pick-up must not take it back, and it does not. Marking it by
+  hand (**Keep it**) does.
+- **A computer where the folder only receives cannot take a hand-over.** A
+  mark made there reaches nobody, so acknowledging would hide the giver's mark
+  and leave the file unmarked for everybody. The hand-over waits, and that
+  computer's card says why.
+- **It runs whenever claims are asked for**, which the tray does every twenty
+  seconds and the main screen every ten. No new timer, and it keeps working
+  with only one of the two running.
+- **Older builds** ignore `to`, `from` and `accepted` as unknown fields. To
+  them a mark in transit is simply the giver's mark, and a taken one is the
+  taker's.
+
 ## Recommended configuration
 
 Applied per machine, under *Actions → Advanced → Defaults*:

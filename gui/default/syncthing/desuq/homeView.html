@@ -144,21 +144,64 @@
       <ul class="desuq-home-claims" ng-if="f.claims.length">
         <li class="desuq-home-claim" ng-repeat="c in f.claims track by c.device + c.path"
             ng-class="{ 'claim-mine': c.mine, 'claim-stale': c.stale }">
-          <span class="fas fa-pencil-alt desuq-home-claim-icon" aria-hidden="true"></span>
+          <span class="fa desuq-home-claim-icon" aria-hidden="true"
+                ng-class="c.handingTo ? 'fa-hand-o-right' : 'fa-pencil'"></span>
           <span class="desuq-home-claim-text">
-            <b>{{ c.mine ? 'You are' : c.name + ' is' }}</b> working on
-            <span class="desuq-home-claim-path" title="{{ c.path }}">{{ c.path }}</span>
+            <!-- Being handed over (lib/api/api_handoff.go): still the giver's
+                 mark until the other computer picks it up, so the file reads
+                 as taken to everybody throughout. -->
+            <span ng-if="c.handingTo">
+              <b>{{ c.mine ? 'You are' : c.name + ' is' }}</b> handing
+              <span class="desuq-home-claim-path" title="{{ c.path }}">{{ c.path }}</span>
+              to <b>{{ c.handingTo.mine ? 'you' : c.handingTo.name }}</b>
+            </span>
+            <span ng-if="!c.handingTo">
+              <b>{{ c.mine ? 'You are' : c.name + ' is' }}</b> working on
+              <span class="desuq-home-claim-path" title="{{ c.path }}">{{ c.path }}</span>
+            </span>
             <span class="desuq-home-claim-since">{{ claimSince(c.since, c.stale) }}</span>
-            <span class="desuq-home-claim-note" ng-if="c.mine && c.auto">marked when you saved it; it comes off after a few quiet hours</span>
+            <span class="desuq-home-claim-note" ng-if="c.from">handed over by {{ c.from.mine ? 'you' : c.from.name }}</span>
+            <span class="desuq-home-claim-note" ng-if="c.mine && c.handingTo">still yours until {{ c.handingTo.name }}'s computer picks it up</span>
+            <!-- A hand-over to a computer where this folder only receives
+                 cannot be taken there: a mark made there would reach nobody. -->
+            <span class="desuq-home-claim-note" ng-if="!c.mine && c.handingTo.mine && !f.canClaim">you cannot take it here &mdash; {{ f.claimReason || 'marks made on this computer would not reach anybody' }}</span>
+            <span class="desuq-home-claim-note" ng-if="c.mine && c.auto && !c.handingTo">marked when you saved it; it comes off after a few quiet hours</span>
             <!-- A mark is a file in the folder, and a file does not reach a
                  computer that is switched off. Said here because the moment
                  you mark a file is when you might phone instead. -->
             <span class="desuq-home-claim-unseen" ng-if="c.mine && claimUnseen(c.unseen)">{{ claimUnseen(c.unseen) }}</span>
           </span>
-          <button type="button" class="btn btn-xs btn-default" ng-if="c.mine"
-                  ng-click="releaseClaim(f.id, c.path)" title="Take the mark off this file">
-            <span class="fas fa-check"></span>&nbsp;Done
-          </button>
+          <span class="desuq-home-claim-actions" ng-if="c.mine">
+            <!-- Hand it over. One person: the button names them. More: a
+                 short list, so the one click that matters is still one. -->
+            <button type="button" class="btn btn-xs btn-default"
+                    ng-if="!c.handingTo && f.people.length == 1"
+                    ng-click="handClaim(f.id, c.path, f.people[0].deviceID)"
+                    title="Pass your mark to {{ f.people[0].name }}, so the file is never unmarked in between">
+              <span class="fa fa-hand-o-right"></span>&nbsp;Give to {{ f.people[0].name }}
+            </button>
+            <button type="button" class="btn btn-xs btn-default"
+                    ng-if="!c.handingTo && f.people.length > 1"
+                    aria-expanded="{{ handOpen[f.id + ' ' + c.path] ? 'true' : 'false' }}"
+                    ng-click="toggleHand(f.id, c.path)"
+                    title="Pass your mark to somebody else, so the file is never unmarked in between">
+              <span class="fa fa-hand-o-right"></span>&nbsp;Hand over
+            </button>
+            <button type="button" class="btn btn-xs btn-default" ng-if="c.handingTo"
+                    ng-click="keepClaim(f.id, c.path)"
+                    title="{{ c.handingTo.name }} has not picked it up yet. Keep working on it yourself">
+              Keep it
+            </button>
+            <button type="button" class="btn btn-xs btn-default"
+                    ng-click="releaseClaim(f.id, c.path)" title="Take the mark off this file">
+              <span class="fas fa-check"></span>&nbsp;Done
+            </button>
+          </span>
+          <span class="desuq-home-claim-handto" ng-if="c.mine && handOpen[f.id + ' ' + c.path]">
+            Give it to
+            <button type="button" class="btn btn-xs btn-default" ng-repeat="p in f.people track by p.deviceID"
+                    ng-click="handClaim(f.id, c.path, p.deviceID)">{{ p.name }}</button>
+          </span>
         </li>
       </ul>
       <div class="desuq-home-card-reveal-error" ng-if="claimError[f.id]">{{ claimError[f.id] }}</div>

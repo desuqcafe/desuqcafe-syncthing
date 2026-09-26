@@ -164,6 +164,15 @@ angular.module('syncthing.core')
                 // The server answers with the folder's claims afterwards.
                 world.claims.claims = world.claims.claims.filter(c =>
                     !(c.folder === body.folder && c.path === body.path && c.mine && body.release));
+                // Handing over sets handingTo on the row; marking again by
+                // hand takes it back (lib/api/api_handoff.go).
+                world.claims.claims.forEach(c => {
+                    if (c.folder === body.folder && c.path === body.path && c.mine && !body.release) {
+                        c.handingTo = body.handTo
+                            ? { device: body.handTo, name: body.handTo === YUKI ? 'Yuki' : 'Ana' }
+                            : undefined;
+                    }
+                });
                 return reply({
                     claims: world.claims.claims.filter(c => c.folder === body.folder),
                     folders: world.claims.folders.filter(f => f.folder === body.folder)
@@ -656,13 +665,51 @@ world.claims = {
     check('and names the file', rows[0] && /Scenes\/cabin\.blend/.test(rows[0].textContent));
     check('mine says so, quietly', rows[1] && /claim-mine/.test(rows[1].className) &&
         /You are working on/.test(rows[1].textContent));
+    const buttonIn = (row, label) => [...row.querySelectorAll('button')]
+        .find(b => b.textContent.replace(/\s+/g, ' ').trim().indexOf(label) === 0);
     check('only mine has a Done button',
-        !rows[0].querySelector('button') && !!(rows[1] && rows[1].querySelector('button')));
+        !rows[0].querySelector('button') && !!(rows[1] && buttonIn(rows[1], 'Done')));
     check('the claims files are not counted as work', /6 files/.test(text()) && !/8 files/.test(text()),
         text().slice(0, 200));
     check('there is a way to find out how to mark a file', /Working on a file\?/.test(text()));
 
-    rows[1].querySelector('button').click();
+    // Handing over (lib/api/api_handoff.go). Two people share this folder,
+    // so it is a short list rather than one named button.
+    const handBtn = buttonIn(rows[1], 'Hand over');
+    check('my mark can be handed over', !!handBtn);
+    check('somebody else\'s cannot', !buttonIn(rows[0], 'Hand over'));
+    handBtn.click();
+    flush();
+    const list = rows[1].querySelector('.desuq-home-claim-handto');
+    const names = list ? [...list.querySelectorAll('button')].map(b => b.textContent.trim()) : [];
+    check('it offers everybody the folder is shared with', names.join(',') === 'Yuki,Ana Ruiz', names.join(','));
+    [...list.querySelectorAll('button')][0].click();
+    flush();
+    flush();
+    let sent = world.posted[world.posted.length - 1] || {};
+    check('choosing Yuki hands that file to Yuki',
+        sent.url === 'rest/folder/claim' && sent.body.path === 'mine.blend' &&
+        sent.body.handTo === YUKI && !sent.body.release, JSON.stringify(sent));
+    flush();
+    let mineRow = [...el[0].querySelectorAll('.desuq-home-claim')].find(r => /mine\.blend/.test(r.textContent));
+    const mineText = mineRow ? mineRow.textContent.replace(/\s+/g, ' ') : '';
+    check('the row says it is being handed to Yuki', /You are handing mine\.blend to Yuki/.test(mineText), mineText);
+    check('and that it is still yours until they pick it up', /still yours until Yuki's computer picks it up/.test(mineText));
+    check('the list closes', !mineRow.querySelector('.desuq-home-claim-handto'));
+
+    const keep = buttonIn(mineRow, 'Keep it');
+    check('a hand-over nobody has picked up can be taken back', !!keep);
+    keep.click();
+    flush();
+    flush();
+    sent = world.posted[world.posted.length - 1] || {};
+    check('taking it back marks the file again, without handing or releasing',
+        sent.body.path === 'mine.blend' && !sent.body.handTo && !sent.body.release, JSON.stringify(sent));
+    flush();
+    mineRow = [...el[0].querySelectorAll('.desuq-home-claim')].find(r => /mine\.blend/.test(r.textContent));
+    check('and it reads as yours again', mineRow && /You are working on/.test(mineRow.textContent));
+
+    buttonIn(mineRow, 'Done').click();
     flush();
     flush();
     const last = world.posted[world.posted.length - 1] || {};
@@ -688,6 +735,45 @@ world.claims = {
     window.Date.now = realNow;
     check('a folder that cannot send a mark does not offer to explain how', !/Working on a file\?/.test(text()));
     check('but still shows the marks that arrive', /Yuki is working on/.test(text()));
+}
+{
+    // A hand-over addressed here, where the folder only receives: it cannot
+    // be taken, and the card says why rather than leaving it hanging.
+    world.claims.claims.push({ folder: 'assets', label: 'Project Assets', path: 'rig.blend', device: YUKI, name: 'Yuki',
+        mine: false, since: new Date().toISOString(), stale: false,
+        handingTo: { device: MY_ID, name: 'You', mine: true } });
+    const realNow = window.Date.now;
+    window.Date.now = () => realNow() + 600000;
+    svc.refresh();
+    flush();
+    flush();
+    svc.refresh();
+    flush();
+    flush();
+    window.Date.now = realNow;
+    const t = text().replace(/\s+/g, ' ');
+    check('a hand-over to you says so', /Yuki is handing rig\.blend to you/.test(t), t.slice(0, 300));
+    check('and why it cannot be taken here', /you cannot take it here — only receives/.test(t));
+    world.claims.claims.pop();
+}
+{
+    // A mark that was handed over says who by.
+    world.claims.folders = [{ folder: 'assets', canClaim: true, files: 2, bytes: 300 }];
+    world.claims.claims.push({ folder: 'assets', label: 'Project Assets', path: 'rig.blend', device: MY_ID, name: 'You',
+        mine: true, since: new Date().toISOString(), stale: false,
+        from: { device: YUKI, name: 'Yuki' } });
+    const realNow = window.Date.now;
+    window.Date.now = () => realNow() + 800000;
+    svc.refresh();
+    flush();
+    flush();
+    svc.refresh();
+    flush();
+    flush();
+    window.Date.now = realNow;
+    const t = text().replace(/\s+/g, ' ');
+    check('a mark handed to you says who from', /You are working on rig\.blend .*handed over by Yuki/.test(t), t.slice(0, 300));
+    world.claims.claims.pop();
 }
 {
     const S = svc.claimSince;

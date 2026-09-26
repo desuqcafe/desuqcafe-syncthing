@@ -152,3 +152,45 @@ func TestFolderForPath(t *testing.T) {
 		}
 	}
 }
+
+func TestNewHandoffs(t *testing.T) {
+	start := time.Date(2026, 9, 25, 9, 0, 0, 0, time.UTC)
+	cutoff := start.Add(-claimsGrace)
+	seen := map[string]bool{}
+
+	handed := claimRow{Folder: "assets", Label: "Project Assets", Path: "Scenes/cabin.blend", Device: "ME", Name: "You",
+		Mine: true, Since: start, From: &claimRef{Device: "YUKI", Name: "Yuki"}}
+	plain := claimRow{Folder: "assets", Path: "texture1.png", Device: "ME", Name: "You", Mine: true, Since: start}
+	// Somebody else's mark handed on by somebody else is theirs, not news of
+	// a hand-over to this computer.
+	theirs := claimRow{Folder: "assets", Path: "b.blend", Device: "ANA", Name: "Ana", Since: start,
+		From: &claimRef{Device: "YUKI", Name: "Yuki"}}
+
+	got := newHandoffs([]claimRow{handed, plain, theirs}, seen, cutoff)
+	if len(got) != 1 || got[0].Path != "Scenes/cabin.blend" {
+		t.Fatalf("first pass: %+v", got)
+	}
+	if got := newHandoffs([]claimRow{handed, plain}, seen, cutoff); len(got) != 0 {
+		t.Errorf("announced twice: %+v", got)
+	}
+	title, body := handoffAnnouncement([]claimRow{handed})
+	if title != "Yuki handed you cabin.blend" || !strings.Contains(body, "marked as yours") {
+		t.Errorf("toast: %q / %q", title, body)
+	}
+}
+
+func TestClaimAnnouncementAfterHandoff(t *testing.T) {
+	// On the giver's computer, the other half of their own hand-over.
+	back := []claimRow{{Label: "Project Assets", Path: "Scenes/cabin.blend", Name: "Kai",
+		From: &claimRef{Name: "You", Mine: true}}}
+	if title, _ := claimAnnouncement(back); title != "Kai has taken cabin.blend" {
+		t.Errorf("giver: %q", title)
+	}
+	// On a third computer.
+	third := []claimRow{{Label: "Project Assets", Path: "Scenes/cabin.blend", Name: "Kai",
+		From: &claimRef{Name: "Mia"}}}
+	title, body := claimAnnouncement(third)
+	if title != "Kai has taken over cabin.blend" || !strings.Contains(body, "From Mia") {
+		t.Errorf("third: %q / %q", title, body)
+	}
+}

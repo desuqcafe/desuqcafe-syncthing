@@ -55,6 +55,13 @@ History and Conflicts now show the preview Blender saves inside each `.blend`,
 beside every older version, so you can find the version you want by looking
 at it. This works for files saved in Blender 5 too, which are compressed.
 
+## Hand a file over
+
+Your own "I'm working on this" mark now has **Give to Kai**. Their computer
+picks it up and marks the file as theirs, and they get a notification. The
+file is never unmarked in between, so nobody else opens it by mistake. It
+still works if you switch off straight after handing it over.
+
 ## Keep a version for good
 
 Older copies are cleaned up after thirty days. Now any one of them can be
