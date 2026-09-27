@@ -39,6 +39,7 @@ function check(name, ok, detail) {
 
 const MY_ID = 'DOTXM4D-P5KQMPR-E4GKNVC-P56RCRR-HEFJ4NT-IDLZTFD-ETSTCJN-X7BGOAJ';
 const PEER_ID = 'W3QCFTB-3CVDCU5-6VDBLXB-K4VVQGO-BQKUMVN-VZUCTGP-C4WUMYX-U5RUBQU';
+const OTHER_ID = '2FGMV2I-HEBG5DU-72FQ7O7-E6IKBAK-ICDG7YI-SYX3GXD-7BQ4XON-KXXT5Q6';
 
 // --- the world the stub serves -------------------------------------------
 //
@@ -82,6 +83,13 @@ window.eval(fs.readFileSync(
 const angular = window.angular;
 angular.module('syncthing.core', []);
 window.eval(fs.readFileSync(path.join(desuq, 'firstRunWizard.js'), 'utf8'));
+// Step 3 is the verification card, and the call-not-chat instruction now
+// lives on it: loaded so that sentence is asserted where it renders.
+window.eval(fs.readFileSync(path.join(desuq, 'handshakeWords.js'), 'utf8'));
+window.eval(fs.readFileSync(path.join(desuq, 'deviceHandshakeDirective.js'), 'utf8'));
+// The invite dialog shares the guide's shell and is opened from it, so it is
+// tested here too (invite.js).
+window.eval(fs.readFileSync(path.join(desuq, 'invite.js'), 'utf8'));
 
 // --- the stubs -----------------------------------------------------------
 
@@ -114,6 +122,26 @@ angular.module('syncthing.core')
             if (config && config.cache && config.cache.get(url) !== undefined) {
                 return $q.when({ data: config.cache.get(url) });
             }
+            if (url === 'rest/svc/deviceid') {
+                // Syncthing's own check: both lengths, any case, dashes or not.
+                const raw = String(config.params.id).toUpperCase().replace(/[^A-Z0-9]/g, '');
+                const known = [MY_ID, PEER_ID, OTHER_ID].filter(x => x.replace(/-/g, '') === raw)[0];
+                return reply(known ? { id: known } : { error: 'not a device ID' });
+            }
+            if (url === 'rest/config/defaults/device') {
+                return reply({ deviceID: '', name: '', addresses: ['dynamic'], compression: 'metadata' });
+            }
+            if (url.indexOf('rest/config/folders/') === 0) {
+                const id = decodeURIComponent(url.slice('rest/config/folders/'.length));
+                const f = world.folders.filter(x => x.id === id)[0];
+                return f ? reply(f) : $q.reject({ status: 404 });
+            }
+            // The card asks whether its device is verified.
+            if (url.indexOf('rest/config/devices/') === 0) {
+                const id = decodeURIComponent(url.slice('rest/config/devices/'.length));
+                const d = world.devices.filter(x => x.deviceID === id)[0];
+                return d ? reply(d) : $q.reject({ status: 404 });
+            }
             const fn = routes[url];
             if (!fn) { throw new Error('unstubbed GET ' + url); }
             return fn();
@@ -124,7 +152,24 @@ angular.module('syncthing.core')
                 world.myName = body.name;
                 return $q.when({ data: {} });
             }
+            // The invite dialog's: sharing a folder.
+            if (url.indexOf('rest/config/folders/') === 0) {
+                const id = decodeURIComponent(url.slice('rest/config/folders/'.length));
+                const f = world.folders.filter(x => x.id === id)[0];
+                Object.assign(f, body);
+                world.written.push({ url: url, body: body });
+                return $q.when({ data: {} });
+            }
             throw new Error('unstubbed PATCH ' + url);
+        };
+        http.post = function (url, body) {
+            // The invite dialog adding somebody.
+            if (url === 'rest/config/devices') {
+                world.devices.push(body);
+                world.written.push({ url: url, body: body });
+                return $q.when({ data: {} });
+            }
+            throw new Error('unstubbed POST ' + url);
         };
         return http;
     });
@@ -224,12 +269,19 @@ check('code stays ticked once they are added', svc.isDone('code') === true);
 check('the peer is listed', st.peers.length === 1 && st.peers[0].name === 'amy');
 check('and shown as connected', st.peers[0].connected === true);
 
-// The handshake directive's own store, read but never written here.
-store.setItem('desuq.handshake.confirmed', JSON.stringify({
-    [PEER_ID.replace(/[^A-Z0-9]/g, '')]: { phrase: 'X', rank: 1, at: 'today' }
-}));
+check('verify is not ticked while somebody is unverified', svc.isDone('verify') === false);
+
+// Verification is in the device's config since it became the condition for
+// connecting at all (lib/model/desuq_verified.go).
+world.devices = [{ deviceID: PEER_ID, name: 'amy', desuqVerifiedAt: '2026-09-27T10:00:00Z' }];
 svc.refresh(); flush();
-check('verify ticks off a stored confirmation', svc.isDone('verify') === true);
+check('verify ticks off a verification in the config', svc.isDone('verify') === true);
+
+world.devices.push({ deviceID: OTHER_ID, name: 'ben' });
+svc.refresh(); flush();
+check('one unverified person un-ticks it: nothing syncs with them', svc.isDone('verify') === false);
+world.devices.pop();
+svc.refresh(); flush();
 
 world.folders = [{ id: 'assets', label: 'Assets' }];
 svc.refresh(); flush();
@@ -299,7 +351,9 @@ check('step 2 renders the QR from upstream\'s own endpoint',
 
 svc.goTo(2); flush();
 check('step 3 says mutual adding is not proof of identity',
-    /does not prove whose code it was/i.test(text()));
+    /not whose code it was/i.test(text()));
+check('step 3 says nothing syncs until you have compared',
+    /Nothing syncs with anybody until/i.test(text()));
 check('step 3 says there is nothing to compare yet',
     /Nobody has been added yet/i.test(text()));
 
@@ -308,8 +362,9 @@ check('step 3 says there is nothing to compare yet',
 world.devices = [{ deviceID: PEER_ID, name: 'amy' }];
 svc.refresh(); flush();
 check('step 3 says to compare on a call, not in the chat',
-    /Read the card to each other on a call/i.test(text()) &&
-    /Not in the chat that carried the code/i.test(text()));
+    /on a call/i.test(text()) &&
+    /Not the chat you sent the code in/i.test(text()));
+check('step 3 names the person on the card', /Get amy on a call/.test(text()));
 
 svc.goTo(3); flush();
 check('step 4 promises nothing downloads before you choose',
@@ -356,6 +411,91 @@ console.log('');
 // the jsdom window and will hold node open forever. Closing it is also the
 // assertion that closing stops the polling.
 svc.close();
+
+// =========================================================================
+console.log('\n-- the invite dialog');
+// =========================================================================
+{
+    reset();
+    world.written = [];
+    world.folders = [
+        { id: 'assets', label: 'Project Assets', devices: [{ deviceID: MY_ID }] },
+        { id: 'refs', label: 'References', devices: [{ deviceID: MY_ID }] }
+    ];
+    const inv = injector.get('desuqInvite');
+    const ist = inv.state;
+    const verification = injector.get('desuqVerification');
+    $templateCache.put('syncthing/desuq/inviteView.html',
+        fs.readFileSync(path.join(desuq, 'inviteView.html'), 'utf8'));
+    const iel = $compile('<desuq-invite></desuq-invite>')($rootScope.$new());
+    const itext = () => iel[0].textContent.replace(/\s+/g, ' ').trim();
+
+    inv.open(); flush();
+    check('opens on "who"', ist.open && inv.stepName() === 'who');
+    check('offers both halves: their code, or mine',
+        /I have their code/.test(itext()) && /They need my code/.test(itext()));
+
+    ist.idDraft = 'nonsense'; inv.checkID(); flush();
+    check('refuses something that is not a code', /not a device code/.test(ist.idError) && inv.stepName() === 'who');
+    ist.idDraft = MY_ID; inv.checkID(); flush();
+    check('refuses this computer\'s own code', /own code/.test(ist.idError));
+
+    // Pasted the way chat apps mangle it: lower case, no dashes.
+    ist.idDraft = OTHER_ID.toLowerCase().replace(/-/g, '');
+    ist.nameDraft = 'Ben';
+    inv.checkID(); flush();
+    check('a pasted code moves on to the card', inv.stepName() === 'verify' && ist.idDraft === OTHER_ID, ist.idDraft);
+    check('the card is on screen, naming them', !!iel[0].querySelector('device-handshake .desuq-handshake') &&
+        /Get Ben on a call/.test(itext()));
+    check('and says nothing syncs until it is done', /Nothing syncs with Ben until/.test(itext()));
+    check('the way past it says what it is, not "skip"', /Not on a call now/.test(itext()) && !/skip/i.test(itext()));
+
+    // Verify: the card writes provisionally for a device not saved yet.
+    const card = angular.element(iel[0].querySelector('device-handshake')).isolateScope();
+    card.startChallenge(); flush();
+    card.choose(card.sas); flush();
+    check('verifying marks the draft', !!ist.draft.desuqVerifiedAt && !!verification.provisional(OTHER_ID));
+    inv.toShare(); flush();
+    check('the folders step says it is verified', /Ben is verified on this computer/.test(itext()));
+    check('lists every folder', ist.folders.length === 2);
+    ist.folders.filter(f => f.id === 'refs')[0].checked = true;
+    inv.save(); flush();
+
+    const added = world.written.filter(w => w.url === 'rest/config/devices')[0];
+    check('saves the device with its verification', !!added && added.body.deviceID === OTHER_ID &&
+        added.body.name === 'Ben' && added.body.desuqVerifiedAt === ist.draft.desuqVerifiedAt,
+        JSON.stringify(added && added.body));
+    check('from the configured defaults', !!added && added.body.addresses[0] === 'dynamic');
+    const refs = world.folders.filter(f => f.id === 'refs')[0];
+    check('shares the ticked folder', refs.devices.some(d => d.deviceID === OTHER_ID));
+    check('and not the unticked one',
+        !world.folders.filter(f => f.id === 'assets')[0].devices.some(d => d.deviceID === OTHER_ID));
+    check('says what happens next', inv.stepName() === 'done' && /Ben is added/.test(itext()) &&
+        /asked to accept References/.test(itext()) && /also has to pick your card/.test(itext()));
+
+    // Opened from somebody's card: straight to the card, their folders ticked.
+    inv.close(); flush();
+    world.devices = [{ deviceID: PEER_ID, name: 'amy' }];
+    world.folders[0].devices.push({ deviceID: PEER_ID });
+    inv.open({ deviceID: PEER_ID }); flush();
+    check('for somebody already added, it starts at the card', ist.mode === 'existing' && inv.stepName() === 'verify');
+    inv.back(); flush();
+    check('and there is no going back to "who"', inv.stepName() === 'verify');
+    inv.toShare(); flush();
+    const assets = ist.folders.filter(f => f.id === 'assets')[0];
+    check('folders already shared are shown ticked and fixed', assets.checked && assets.already);
+    check('unverified, the folders step says nothing will sync', /their computer will not be let in/.test(itext()));
+
+    // From a knock: the code is filled in.
+    inv.close(); flush();
+    inv.open({ deviceID: OTHER_ID, name: 'ben-pc' }); flush();
+    check('a knock arrives with its code and name filled in',
+        inv.stepName() === 'who' && ist.idDraft === OTHER_ID && ist.nameDraft === 'ben-pc');
+
+    inv.close(); flush();
+    const css = fs.readFileSync(path.join(desuq, 'invite.css'), 'utf8');
+    check('invite.css references no success token', css.indexOf('--v-success') === -1);
+}
 
 // No green. This screen used --v-success for a completed step, a reached
 // checkpoint and an online peer -- the only fork screen that did, because it

@@ -223,9 +223,16 @@ if (-not $go) {
     # (desuq_pins.go) are guarded inside upstream's cleanup, and a merge that
     # moved that cleanup would otherwise delete pinned copies without failing
     # anything the build ran.
+    # The verification gate (lib/model/desuq_verified.go) is two lines inside
+    # upstream's model.go; its tests are here so a merge that moves either
+    # line fails the build rather than quietly letting unverified devices in.
+    # Only the fork's own tests from lib/model: upstream's take minutes.
     Invoke-Suite 'go test (api)' {
         Push-Location $RepoRoot
-        try { & $go test ./lib/api/... ./lib/versioner/... } finally { Pop-Location }
+        try {
+            & $go test ./lib/api/... ./lib/versioner/...
+            if ($LASTEXITCODE -eq 0) { & $go test ./lib/model/ -run '^TestDesuq' }
+        } finally { Pop-Location }
     }
     Invoke-Suite 'go test (tray)' {
         Push-Location (Join-Path $RepoRoot 'custom\tray')

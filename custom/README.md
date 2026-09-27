@@ -12,8 +12,8 @@ different here.
 
 ## For the person you are sending this to
 
-1. Download `desuq-syncthing-setup-<version>.exe` from the
-   [Releases page](https://github.com/desuqcafe/desuqcafe-syncthing/releases).
+1. Download [`desuq-syncthing-setup.exe`](https://github.com/desuqcafe/desuqcafe-syncthing/releases/latest/download/desuq-syncthing-setup.exe),
+   which is always the newest release.
 2. Run it. There is **no UAC prompt** — it installs only for the current user.
 3. Tick *"Start automatically when I sign in"* if wanted, and finish.
 

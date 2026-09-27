@@ -68,6 +68,10 @@ window.eval(fs.readFileSync(path.join(desuq, 'home.js'), 'utf8'));
 // state through the service, so the injector cannot build one without the
 // other.
 window.eval(fs.readFileSync(path.join(desuq, 'history.js'), 'utf8'));
+// home.js injects desuqVerification, for the one-off move of old localStorage
+// confirmations into the config; it lives beside the card.
+window.eval(fs.readFileSync(path.join(desuq, 'handshakeWords.js'), 'utf8'));
+window.eval(fs.readFileSync(path.join(desuq, 'deviceHandshakeDirective.js'), 'utf8'));
 
 // --- the world the stub answers from -------------------------------------
 
@@ -99,7 +103,15 @@ const world = {
     // folder id -> /rest/db/presence answer (lib/api/api_presence.go).
     presence: {},
     posted: [],
-    errors: []
+    errors: [],
+    // /rest/cluster/unverified (lib/api/api_verified.go): nobody knocking.
+    knocks: {},
+    // /rest/system/version for this computer.
+    version: 'v2.1.6-desuq.10',
+    // Upstream's pending lists, and the fork's members of each offer.
+    pendingDevices: {},
+    pendingFolders: {},
+    members: {}
 };
 
 angular.module('syncthing.core')
@@ -131,6 +143,21 @@ angular.module('syncthing.core')
             }
             if (url === 'rest/system/tray') {
                 return reply(world.tray);
+            }
+            if (url === 'rest/cluster/unverified') {
+                return reply(world.knocks);
+            }
+            if (url === 'rest/system/version') {
+                return reply({ version: world.version });
+            }
+            if (url === 'rest/cluster/pending/devices') {
+                return reply(world.pendingDevices);
+            }
+            if (url === 'rest/cluster/pending/folders') {
+                return reply(world.pendingFolders);
+            }
+            if (url === 'rest/cluster/pending/members') {
+                return reply(world.members);
             }
             if (url === 'rest/db/hub') {
                 return reply(world.hub);
@@ -255,7 +282,7 @@ function person(over) {
 
 function peer(over) {
     return Object.assign({
-        deviceID: YUKI, name: 'Yuki', connected: true, paused: false, verified: false, folders: []
+        deviceID: YUKI, name: 'Yuki', connected: true, paused: false, verified: true, folders: []
     }, over || {});
 }
 
@@ -519,9 +546,10 @@ console.log('\n-- the note under the strip says what the circles mean');
 
 console.log('\nThe main screen: the render');
 
+const VERIFIED = '2026-09-20T10:00:00Z';
 world.devices = [
-    { deviceID: YUKI, name: 'Yuki' },
-    { deviceID: ANA, name: 'Ana Ruiz' }
+    { deviceID: YUKI, name: 'Yuki', desuqVerifiedAt: VERIFIED },
+    { deviceID: ANA, name: 'Ana Ruiz', desuqVerifiedAt: VERIFIED }
 ];
 world.folders = [{
     id: 'assets', label: 'Project Assets', path: 'D:\\Assets', type: 'sendreceive',
@@ -626,11 +654,102 @@ check('the card says who is reached only through whom',
         check('which asks the server to add that person to that folder',
             last.url === 'rest/db/hub/connect' && last.body.folder === 'assets' && last.body.device === ANA,
             JSON.stringify(last));
-        check('and says what happens next', /They need to accept on their computer/.test(text()));
+        check('and says what happens next', /Nothing syncs between you until you have compared cards/.test(text()));
         check('and the button goes', !Array.prototype.some.call(el[0].querySelectorAll('.desuq-home-hub button'),
             b => /Connect directly/.test(b.textContent)));
     }
 }
+
+console.log('\n-- somebody not verified');
+// Nothing connects to them (lib/model/desuq_verified.go), so the screen has to
+// say that -- not "Offline", not "catching up".
+world.devices[0].desuqVerifiedAt = '';
+world.knocks = { [YUKI]: { name: 'yuki-pc', address: '192.0.2.4:22000', at: new Date().toISOString() } };
+svc.refresh();
+flush();
+flush();
+check('the headline says who is not verified', /Yuki is not verified yet/.test(text()), text().slice(0, 160));
+check('as attention, not a quiet line', /is-attention/.test(headline()), headline());
+check('and says their computer is trying to connect', /Yuki's computer is trying to connect/.test(text()));
+check('their card says nothing syncs until cards are compared',
+    /Nothing syncs with Yuki until you compare cards/.test(text()));
+check('and that their computer was turned away', /tried to connect just now and was turned away/.test(text()));
+check('with a Verify button', Array.prototype.some.call(el[0].querySelectorAll('button'),
+    b => /Verify Yuki/.test(b.textContent)));
+check('their card is marked locked', !!el[0].querySelector('.desuq-home-card.is-locked'));
+check('the folder strip shows them locked, not behind', /who-unverified/.test(html()));
+check('the folder note says nothing reaches them',
+    /Yuki is not verified on this computer, so nothing in this folder reaches them/.test(text()));
+world.devices[0].desuqVerifiedAt = VERIFIED;
+world.knocks = {};
+
+console.log('\n-- names, not just initials');
+svc.refresh();
+flush();
+flush();
+check('the folder card says who it is shared with in words',
+    /Shared with/.test(text()) && !!el[0].querySelector('.desuq-home-person-name'));
+check('each person is named on the strip',
+    Array.prototype.map.call(el[0].querySelectorAll('.desuq-home-person-name'), n => n.textContent.trim())
+        .join(',') === 'Yuki,Ana Ruiz');
+
+console.log('\n-- somebody asking, and a folder on offer');
+const MIA = 'P56RCRR-HEFJ4NT-IDLZTFD-ETSTCJN-X7BGOAJ-DOTXM4D-P5KQMPR-E4GKNVC';
+world.pendingDevices = { [MIA]: { name: 'Mia laptop', address: '192.0.2.9:22000', time: '2026-09-27T10:00:00Z' } };
+world.pendingFolders = { renders: { offeredBy: { [YUKI]: { label: 'Renders', time: '2026-09-27T10:00:00Z' } } } };
+world.members = { renders: { [YUKI]: [
+    { device: YUKI, name: 'Yuki', offering: true, known: true, verified: true },
+    { device: ANA, name: 'Ana Ruiz', known: true, verified: true },
+    { device: MIA, name: 'Mia', known: false, verified: false }
+] } };
+svc.refresh();
+flush();
+flush();
+check('a request outranks everything quiet', /Somebody is waiting to be added/.test(text()) &&
+    /Mia laptop is asking to connect/.test(text()), text().slice(0, 160));
+check('the request card names them', /Mia laptop wants to connect/.test(text()));
+check('with Add and verify', Array.prototype.some.call(el[0].querySelectorAll('button'),
+    b => /Add and verify/.test(b.textContent)));
+check('the offer names who is offering what', /Yuki is offering Renders/.test(text()));
+check('and who else is in it', /Also in it: Ana Ruiz/.test(text()));
+check('and who reaches you only through others',
+    /Mia — not verified on this computer, so their changes reach you only through the people you have verified/.test(text()),
+    text().slice(0, 400));
+check('the home screen takes over from upstream\'s banners', $rootScope.desuqOwnsRequests === true);
+world.pendingDevices = {};
+world.pendingFolders = {};
+world.members = {};
+
+console.log('\n-- a newer build');
+world.connections = { [YUKI]: { connected: true, clientVersion: 'v2.1.6-desuq.11' } };
+svc.refresh();
+flush();
+flush();
+check('says which version and who has it', /Update available: v2.1.6-desuq.11/.test(text()) && /Yuki already has it/.test(text()));
+{
+    const a = Array.prototype.find.call(el[0].querySelectorAll('.desuq-home-update a'), x => /Download/.test(x.textContent));
+    check('Download is the installer itself, not the release page',
+        !!a && /\/releases\/latest\/download\/desuq-syncthing-setup\.exe$/.test(a.getAttribute('href')),
+        a && a.getAttribute('href'));
+}
+world.connections = { [YUKI]: { connected: true, clientVersion: 'v2.1.6-desuq.10-3-gabcdef12-dirty' } };
+svc.refresh();
+flush();
+flush();
+check('a peer one commit past my release is not an update', !el[0].querySelector('.desuq-home-update'));
+world.version = 'v2.1.6-desuq.10-3-gabcdef12';
+world.connections = { [YUKI]: { connected: true, clientVersion: 'v2.1.6-desuq.12' } };
+svc.refresh();
+flush();
+flush();
+check('a machine on a build of its own is never told', !el[0].querySelector('.desuq-home-update'));
+world.connections = { [YUKI]: { connected: true, clientVersion: 'v2.9.0' } };
+world.version = 'v2.1.6-desuq.10';
+svc.refresh();
+flush();
+flush();
+check('stock Syncthing is never an update', !el[0].querySelector('.desuq-home-update'));
+world.connections = { [YUKI]: { connected: true, clientVersion: 'v2' } };
 
 console.log('\n-- a folder that has stopped');
 // This is the state one of the author's own folders has been in since 24

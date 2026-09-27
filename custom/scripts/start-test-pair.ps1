@@ -49,6 +49,12 @@
     is something to sync. Without this the pair connects but shares nothing,
     which is what you want when testing the folder-offer notification.
 
+.PARAMETER Unverified
+    Pair the two without marking each other verified. Nothing will connect
+    until the card is compared in each GUI -- which is what you want when
+    testing the verification gate (lib/model/desuq_verified.go) or the invite
+    flow. Without it the pair is pre-verified, as though that had been done.
+
 .PARAMETER Stop
     Stop both instances and exit. Leaves the homes in place.
 
@@ -64,6 +70,7 @@ param(
     [string]$Binary = (Join-Path $env:LOCALAPPDATA 'Programs\desuq-syncthing\desuq-syncthing.exe'),
     [switch]$Fresh,
     [switch]$WithFolder,
+    [switch]$Unverified,
     [switch]$Stop
 )
 
@@ -251,22 +258,30 @@ if ($ids['A'] -eq $ids['B']) { throw "Both instances report device ID $($ids['A'
 # Only B holds a static address for A, so only B dials. Both sides knowing how
 # to reach the other makes them race and flap; see the header.
 
+#
+# Nothing connects to a device that has not been verified on that computer
+# (lib/model/desuq_verified.go), so unless -Unverified the pair is written as
+# though both people had already compared cards.
+
 $A, $B = $Nodes
+$verifiedAt = if ($Unverified) { '' } else { (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }
 Api -Node $B -Path '/rest/config/devices' -Method Post -Body @{
-    deviceID  = $ids['A']
-    name      = 'Studio Workstation'
-    addresses = @("tcp://127.0.0.1:$($A.Listen)")
+    deviceID        = $ids['A']
+    name            = 'Studio Workstation'
+    addresses       = @("tcp://127.0.0.1:$($A.Listen)")
+    desuqVerifiedAt = $verifiedAt
 } | Out-Null
 
 Api -Node $A -Path '/rest/config/devices' -Method Post -Body @{
-    deviceID  = $ids['B']
-    name      = 'Yuki Laptop'
-    addresses = @('dynamic')
+    deviceID        = $ids['B']
+    name            = 'Yuki Laptop'
+    addresses       = @('dynamic')
+    desuqVerifiedAt = $verifiedAt
 } | Out-Null
 
 Write-Host 'Waiting for the pair to connect...' -NoNewline
 $connected = $false
-for ($i = 0; $i -lt 20; $i++) {
+for ($i = 0; $i -lt $(if ($Unverified) { 0 } else { 20 }); $i++) {
     Start-Sleep -Seconds 3
     $c = Api -Node $A -Path '/rest/system/connections'
     # @() matters: a single match comes back as a bare object, and under
@@ -276,7 +291,9 @@ for ($i = 0; $i -lt 20; $i++) {
     Write-Host '.' -NoNewline
 }
 Write-Host ''
-if (-not $connected) {
+if ($Unverified) {
+    Write-Host 'Paired unverified: nothing connects until the card is compared in both GUIs.'
+} elseif (-not $connected) {
     Write-Warning "Not connected yet. Check: Invoke-RestMethod $(BaseUrl $A)/rest/system/log -Headers @{'X-API-Key'='$($A.Key)'}"
 }
 

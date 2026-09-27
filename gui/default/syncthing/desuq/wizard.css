@@ -365,6 +365,19 @@
     color: var(--v-text-dim, #8d84a3);
 }
 
+/* A computer knocking, with its own button: the name in the body font, since
+   it is somebody's name and not a code. */
+.desuq-wiz-pending-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 0;
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--v-text, #241d33);
+}
+
 /* ==========================================================================
    Step 3 -- verification
    ========================================================================== */

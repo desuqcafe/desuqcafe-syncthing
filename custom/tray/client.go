@@ -237,6 +237,9 @@ type restDevice struct {
 	DeviceID string `json:"deviceID"`
 	Name     string `json:"name"`
 	Paused   bool   `json:"paused"`
+	// DesuqVerifiedAt is empty for a device nobody has compared cards with
+	// here, which the daemon refuses to connect to. See verify.go.
+	DesuqVerifiedAt string `json:"desuqVerifiedAt"`
 }
 
 type restFolder struct {

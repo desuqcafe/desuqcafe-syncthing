@@ -93,6 +93,13 @@ jobs:
       # and the tray, which are build intermediates the installer already
       # carries -- publishing them put three executables on a page the README
       # sends non-technical people to, two of which they must not download.
+      #
+      # Published under one fixed name, not the versioned one the build
+      # writes. GitHub serves /releases/latest/download/<name> for any asset
+      # whose name does not change between releases, and that is the address
+      # the tray's "an update is available" toast opens: one click, the
+      # installer downloads, no release page to read and no Assets list to
+      # find it in. A versioned name would make that link impossible.
       - name: Checksums
         shell: pwsh
         run: |
@@ -100,6 +107,8 @@ jobs:
           if ($setup.Count -ne 1) {
             throw "expected exactly one installer in custom/dist, found $($setup.Count)"
           }
+          # Must match installerAsset in custom/tray/update.go.
+          $setup = Move-Item $setup.FullName custom/dist/desuq-syncthing-setup.exe -PassThru
           $h = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLower()
           # LF, not the CRLF Set-Content writes on Windows: `sha256sum -c`
           # keeps the CR as part of the file name and reports the installer
@@ -148,7 +157,7 @@ jobs:
             ''
             '## Installing'
             ''
-            'Download **`desuq-syncthing-setup-*.exe`** below and run it. No administrator'
+            'Download **`desuq-syncthing-setup.exe`** below and run it. No administrator'
             'rights are needed -- it installs into your own account only.'
             ''
             'Windows will warn that the installer is unsigned: **More info -> Run anyway**.'
@@ -179,5 +188,5 @@ jobs:
           prerelease: false
           body_path: custom/dist/release-notes.md
           files: |
-            custom/dist/*-setup-*.exe
+            custom/dist/desuq-syncthing-setup.exe
             custom/dist/SHA256SUMS.txt

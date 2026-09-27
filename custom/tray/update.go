@@ -47,12 +47,25 @@ import (
 	"strconv"
 )
 
-// releasesURL is opened in a browser when the toast is clicked, and is the
-// only externally-hosted address anywhere in the tray. Nothing fetches it:
-// it is handed to the shell by a person clicking a notification, exactly as
-// if they had typed it. The tray makes no outbound request of its own, here
-// or anywhere else.
+// releasesURL and downloadURL are opened in a browser when the toast or the
+// menu entry is clicked, and are the only externally-hosted addresses
+// anywhere in the tray. Nothing fetches them: they are handed to the shell by
+// a person clicking, exactly as if they had typed them. The tray makes no
+// outbound request of its own, here or anywhere else.
 const releasesURL = "https://github.com/desuqcafe/desuqcafe-syncthing/releases/latest"
+
+// installerAsset is the fixed name the release workflow publishes the
+// installer under (.github/workflows/desuq-release.yaml, "Checksums"). GitHub
+// answers /releases/latest/download/<name> with the newest release's asset of
+// that name, so this one address is always the current installer.
+//
+// The toast used to open releasesURL instead, which left a non-technical
+// person on a GitHub page with a changelog, a collapsed Assets list and three
+// files to choose between. Opening this downloads the installer, and the
+// browser's own download bar is the next thing they see.
+const installerAsset = "desuq-syncthing-setup.exe"
+
+const downloadURL = releasesURL + "/download/" + installerAsset
 
 // forkVersion is a parsed desuqcafe Syncthing version.
 //
@@ -123,6 +136,19 @@ func (v forkVersion) newerThan(o forkVersion) bool {
 // at one.
 func (v forkVersion) isDevBuild() bool { return v.dev > 0 }
 
+// release is the tagged release this version was built at or after.
+//
+// A peer's in-between build is compared as the tag it was made from, never as
+// itself. The developer's machine is usually one of those, and comparing it
+// as-is told every modeller on desuq.10 that "v2.1.6-desuq.10-3-gabc" was an
+// update -- then sent them to download desuq.10, the version they already
+// had, and repeated it daily. There is nothing to install until the next tag
+// exists, and the tag it was made from is exactly what is published.
+func (v forkVersion) release() forkVersion {
+	v.dev = 0
+	return v
+}
+
 func (v forkVersion) String() string {
 	s := "v" + strconv.Itoa(v.major) + "." + strconv.Itoa(v.minor) + "." +
 		strconv.Itoa(v.patch) + "-desuq." + strconv.Itoa(v.rev)
@@ -138,12 +164,12 @@ type peerVersion struct {
 	version string
 }
 
-// newestPeerAhead picks the connected device running the newest version of
+// newestPeerAhead picks the connected device running the newest release of
 // this fork, if any of them is ahead of `mine`.
 //
-// Returns the raw version string the peer reported rather than the parsed
-// form, because that string is what goes in the toast and what the person will
-// be looking for on the releases page.
+// The version in the result is the *release* -- "v2.1.6-desuq.11", never a
+// peer's "v2.1.6-desuq.11-4-gabc" -- because it goes in the toast, and it
+// has to be the version the person will actually get by clicking it.
 func newestPeerAhead(mine string, peers []peerVersion) (peerVersion, bool) {
 	self, ok := parseForkVersion(mine)
 	if !ok {
@@ -168,11 +194,12 @@ func newestPeerAhead(mine string, peers []peerVersion) (peerVersion, bool) {
 			// see the header.
 			continue
 		}
+		v = v.release()
 		if !v.newerThan(self) {
 			continue
 		}
 		if !found || v.newerThan(bestV) {
-			best, bestV, found = p, v, true
+			best, bestV, found = peerVersion{name: p.name, version: v.String()}, v, true
 		}
 	}
 	return best, found

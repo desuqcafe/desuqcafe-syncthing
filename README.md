@@ -18,8 +18,10 @@ nothing to anybody.
 
 ## Install it (Windows 10/11, 64-bit)
 
-1. Download **`desuq-syncthing-setup-*.exe`** from the
-   [latest release](https://github.com/desuqcafe/desuqcafe-syncthing/releases/latest).
+1. Download **[`desuq-syncthing-setup.exe`](https://github.com/desuqcafe/desuqcafe-syncthing/releases/latest/download/desuq-syncthing-setup.exe)**
+   -- that link is always the newest release. The
+   [release page](https://github.com/desuqcafe/desuqcafe-syncthing/releases/latest)
+   says what changed.
 2. Run it. **No administrator rights are needed** — it installs into your own
    account and asks for nothing.
 3. Windows will probably say *"Windows protected your PC"*. That is because the
@@ -85,9 +87,10 @@ says otherwise.
 | **Choose what to sync** | A real file picker over the *global* tree. Accepting a share holds everything back, the index arrives, you tick what you want, and only then does any file data move. Upstream's answer is a textarea full of globs. | [§2](custom/DEPLOYMENT-3D-TEAM.md#2-selective-sync-existed-but-only-as-ignore-patterns--now-there-is-a-picker) |
 | **Disk space you can see** | Free space shown under the folder path and in the folder detail, and a warning when a folder will not fit. Upstream checks capacity per file and never up front, so a 400 GB share can be accepted onto a 250 GB drive. | [§1](custom/DEPLOYMENT-3D-TEAM.md#1-disk-space-the-check-is-weaker-than-it-looks) |
 | **Verified device handshake** | Both devices show the same collectible card — `《 CRIMSON TALISMAN NOCTURNE 》Rank CLXXVI` — derived from the two device IDs. Read it to each other on a call. Confirming means picking the right card out of three, because a checkbox saying "it matched" gets ticked by reflex. | [§9](custom/DEPLOYMENT-3D-TEAM.md#9-adding-a-device-is-mutual-but-it-is-not-authentication) |
+| **Nothing syncs until you have compared cards** | A device you have not verified is refused at the door, before anything can move — and you are told when one is knocking. **Invite someone** does the code, the card and the folders in one dialog, and a folder offer says who else is in it. | [§34](custom/DEPLOYMENT-3D-TEAM.md#34-nothing-syncs-until-you-have-compared-cards) |
 | **Folders look synced** | A violet folder icon in Explorer for every synced folder. No shell extension, no COM registration, no administrator. | [§10](custom/DEPLOYMENT-3D-TEAM.md#10-a-synced-folder-looked-like-any-other-folder--now-it-does-not) |
 | **Rate limits that admit the truth** | Upstream ignores rate limits on the local network by default and says so nowhere, so people conclude the feature is broken. The limit fields now carry a note saying whether the limit applies — and in the device editor, whether it is applying *right now*. | [§11](custom/DEPLOYMENT-3D-TEAM.md#11-rate-limits-do-nothing-on-the-local-network-and-nothing-said-so) |
-| **You are told when there is an update** | The tray notices when a machine you sync with is running a newer build and says so. It does this **without contacting anything** — Syncthing already reports every connected device's version, so there is no releases API to poll and no signing key to guard. | [§17](custom/DEPLOYMENT-3D-TEAM.md#17-nothing-ever-said-a-new-version-existed) |
+| **You are told when there is an update** | The tray notices when a machine you sync with is running a newer build and says so, and one click downloads the installer. It does this **without contacting anything** — Syncthing already reports every connected device's version, so there is no releases API to poll and no signing key to guard. | [§17](custom/DEPLOYMENT-3D-TEAM.md#17-nothing-ever-said-a-new-version-existed) |
 | **No telemetry at all** | Not a setting: a compile-time constant every reporter consults. See below. | [§12](custom/DEPLOYMENT-3D-TEAM.md#12-syncthing-phoned-home-on-a-crash-and-never-asked) |
 | **Defaults for this work** | Staggered versioning at 30 days, a 20 GB absolute disk reserve, the Blender ignore set, the violet theme, and a device named after you rather than `DESKTOP-A1B2C3`. Seeded into `config.xml` before Syncthing first starts. | [seed-config.ps1](custom/scripts/seed-config.ps1) |
 | **Violet** | A theme for the web interface, seeded as the default, plus the tray and folder icons to match. | [`gui/violet/`](gui/violet) |

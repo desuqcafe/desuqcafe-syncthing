@@ -28,7 +28,7 @@
     <div class="desuq-home-headline-mark" aria-hidden="true">
       <span class="fas" ng-class="{
         'fa-check':                home.headline.tone == 'good',
-        'fa-sync-alt':             home.headline.tone == 'busy',
+        'fa-refresh':              home.headline.tone == 'busy',
         'fa-exclamation':          home.headline.tone == 'attention',
         'fa-exclamation-triangle': home.headline.tone == 'problem'
       }"></span>
@@ -38,6 +38,90 @@
       <div class="desuq-home-headline-sub" ng-if="home.headline.detail">{{ home.headline.detail }}</div>
     </div>
   </div>
+
+  <!-- ------------------------------------------------ a newer build exists -->
+  <!-- Not the headline: that line is for sync facts only. Somebody connected
+       is on a newer release of this fork (the same rule as the tray's toast,
+       custom/tray/update.go). The button downloads the installer rather than
+       opening a page: the release page has a changelog and a collapsed Assets
+       list, and neither is what somebody pressing "Download" wants. -->
+  <div class="desuq-home-update" ng-if="home.update">
+    <span class="fas fa-arrow-circle-up desuq-home-update-i" aria-hidden="true"></span>
+    <div class="desuq-home-update-text">
+      <b>Update available: {{ home.update.version }}</b>
+      <span>{{ home.update.from }} already has it. Download it and run it over the top &mdash;
+        your folders and settings are kept.</span>
+    </div>
+    <div class="desuq-home-update-actions">
+      <a class="btn btn-sm desuq-home-btn-primary" ng-href="{{ updateURL }}" target="_blank" rel="noopener">
+        <span class="fas fa-download"></span>&nbsp;Download
+      </a>
+      <a class="desuq-home-link" ng-href="{{ releasesURL }}" target="_blank" rel="noopener">What changed</a>
+    </div>
+  </div>
+
+  <!-- ---------------------------------------------------- waiting for you -->
+  <!-- Somebody asking to be added, and folders being offered. Upstream shows
+       both as yellow banners above everything; index.html hides those while
+       this is on screen (desuqOwnsRequests). The folder offer says who else is
+       in it, because accepting a folder is joining a group of people. -->
+  <section class="desuq-home-block" aria-label="Waiting for you" ng-if="home.requests.length || home.offers.length">
+    <h3 class="desuq-home-h">Waiting for you</h3>
+
+    <div class="desuq-home-card desuq-home-request" ng-repeat="r in home.requests track by r.deviceID">
+      <div class="desuq-home-card-top">
+        <div class="desuq-home-card-name">
+          <span class="fas fa-user-plus desuq-home-card-icon" aria-hidden="true"></span>
+          <span><b>{{ r.name || 'A computer' }}</b> wants to connect</span>
+        </div>
+      </div>
+      <div class="desuq-home-card-facts">
+        Its code starts <span class="desuq-home-mono">{{ r.deviceID.substring(0, 7) }}</span>.
+        If you are expecting them, add them while you are both on a call &mdash; you will compare cards next.
+      </div>
+      <div class="desuq-home-card-actions">
+        <button type="button" class="btn btn-sm desuq-home-btn-primary"
+                ng-click="invite({ deviceID: r.deviceID, name: r.name })">
+          <span class="fas fa-user-plus"></span>&nbsp;Add and verify
+        </button>
+        <button type="button" class="btn btn-sm btn-default" ng-click="dismissPendingDevice(r.deviceID)"
+                title="Hide this. It comes back if they try to connect again.">Not now</button>
+        <button type="button" class="btn btn-sm btn-link desuq-home-quiet"
+                ng-click="ignoreDevice(r.deviceID, pendingDevices[r.deviceID])"
+                title="Never ask about this computer again">I do not know them</button>
+      </div>
+    </div>
+
+    <div class="desuq-home-card desuq-home-request" ng-repeat="o in home.offers track by (o.folderID + o.deviceID)">
+      <div class="desuq-home-card-top">
+        <div class="desuq-home-card-name">
+          <span class="fas fa-folder-open desuq-home-card-icon" aria-hidden="true"></span>
+          <span><b>{{ o.from }}</b> is offering <b>{{ o.label }}</b></span>
+        </div>
+      </div>
+      <div class="desuq-home-offer-members" ng-if="o.members.length">
+        <span class="desuq-home-person" ng-repeat="m in o.members track by m.device"
+              ng-class="m.verified ? 'is-verified' : 'is-through'"
+              title="{{ m.verified ? m.name + ' is verified on this computer.' : m.name + ' is not verified on this computer. Their changes reach you through ' + o.from + '.' }}">
+          <span class="fas" ng-class="m.verified ? 'fa-shield-alt' : 'fa-random'" aria-hidden="true"></span>
+          {{ m.name }}
+        </span>
+      </div>
+      <div class="desuq-home-card-facts">{{ o.membersNote }} Nothing downloads until you choose what to keep.</div>
+      <div class="desuq-home-card-actions">
+        <button type="button" class="btn btn-sm desuq-home-btn-primary" ng-if="!folders[o.folderID]"
+                ng-click="addFolderAndShare(o.folderID, pendingFolders[o.folderID], o.deviceID)">
+          <span class="far fa-check-square"></span>&nbsp;Choose what to keep
+        </button>
+        <button type="button" class="btn btn-sm desuq-home-btn-primary" ng-if="folders[o.folderID]"
+                ng-click="shareFolderWithDevice(o.folderID, o.deviceID)">
+          <span class="fas fa-check"></span>&nbsp;Sync it with {{ o.from }} too
+        </button>
+        <button type="button" class="btn btn-sm btn-default" ng-click="dismissPendingFolder(o.folderID, o.deviceID)"
+                title="Hide this. It comes back when {{ o.from }} next connects.">Not now</button>
+      </div>
+    </div>
+  </section>
 
   <!-- ------------------------------------------------------- your folders -->
   <section class="desuq-home-block" aria-label="Folders">
@@ -101,14 +185,21 @@
            outline is somebody who has not accepted the share at all, which
            looks identical to 0% if you only read the number and is the one of
            the two that never fixes itself. -->
+      <!-- Named, not just initials: a row of coloured discs is a legend nobody
+           was given, and "who has this" should be readable without hovering.
+           The disc keeps the state; the name says who. -->
       <div class="desuq-home-people" ng-if="f.people.length">
         <div class="desuq-home-who-row">
-          <span class="desuq-home-who" ng-repeat="s in f.people"
-                ng-class="'who-' + s.kind"
-                ng-style="s.kind == 'behind' && { 'background-image': 'conic-gradient(var(--v-accent-strong) ' + (s.pct * 3.6) + 'deg, transparent 0)' }"
-                title="{{ s.title }}">
-            <span class="desuq-home-who-i">{{ s.initials }}</span>
-            <span class="desuq-home-who-badge" ng-if="s.connected" aria-hidden="true"></span>
+          <span class="desuq-home-who-label">Shared with</span>
+          <span class="desuq-home-person-chip" ng-repeat="s in f.people track by s.deviceID" title="{{ s.title }}">
+            <span class="desuq-home-who"
+                  ng-class="'who-' + s.kind"
+                  ng-style="s.kind == 'behind' && { 'background-image': 'conic-gradient(var(--v-accent-strong) ' + (s.pct * 3.6) + 'deg, transparent 0)' }">
+              <span class="desuq-home-who-i" ng-if="s.kind != 'unverified'">{{ s.initials }}</span>
+              <span class="desuq-home-who-i" ng-if="s.kind == 'unverified'"><span class="fas fa-lock" aria-hidden="true"></span></span>
+              <span class="desuq-home-who-badge" ng-if="s.connected" aria-hidden="true"></span>
+            </span>
+            <span class="desuq-home-person-name">{{ s.name }}</span>
           </span>
         </div>
         <div class="desuq-home-people-note">{{ f.peopleNote }}</div>
@@ -505,60 +596,78 @@
     <h3 class="desuq-home-h">Sharing with</h3>
 
     <div class="desuq-home-empty" ng-if="!home.peers.length">
-      Nobody yet. Use <b>Setup guide</b> under Actions to send somebody your device code.
+      Nobody yet. <b>Invite someone</b> below &mdash; you will need their code, or they will need yours.
     </div>
 
-    <div class="desuq-home-card" ng-repeat="p in home.peers">
+    <div class="desuq-home-card" ng-repeat="p in home.peers track by p.deviceID" ng-class="{ 'is-locked': !p.verified }">
       <div class="desuq-home-card-top">
         <div class="desuq-home-card-name">
           <span class="desuq-home-dotlight"
                 ng-class="{ 'is-on': p.connected, 'is-off': !p.connected && !p.paused, 'is-paused': p.paused }"
                 aria-hidden="true"></span>{{ p.name }}
         </div>
-        <div class="desuq-home-chip" ng-class="p.connected ? 'chip-online' : 'chip-offline'">
+        <div class="desuq-home-chip chip-locked" ng-if="!p.verified">
+          <span class="fas fa-lock" aria-hidden="true"></span>&nbsp;Not verified
+        </div>
+        <div class="desuq-home-chip" ng-if="p.verified" ng-class="p.connected ? 'chip-online' : 'chip-offline'">
           <span ng-if="p.paused">Paused</span>
           <span ng-if="!p.paused && p.connected">Online now</span>
           <span ng-if="!p.paused && !p.connected">Offline</span>
         </div>
       </div>
 
+      <!-- Not verified: the one thing to say, and the one button. Everything
+           else about them is moot until this is done -- their computer is
+           turned away (lib/model/desuq_verified.go). -->
+      <div class="desuq-home-gate" ng-if="!p.verified">
+        <div><b>Nothing syncs with {{ p.name }} until you compare cards.</b></div>
+        <div ng-if="p.knockText">Their computer tried to connect {{ p.knockText }} and was turned away.</div>
+        <div ng-if="!p.knockText">Get them on a call, then press Verify &mdash; it takes a minute.</div>
+      </div>
+
       <!-- What is actually true of this person, not what the folder's device
            list says. See peerNote() in home.js: "You share Project Assets with
            them" could sit directly under a banner saying they had never
            accepted it. -->
-      <div class="desuq-home-card-facts">
+      <div class="desuq-home-card-facts" ng-if="p.verified">
         <span ng-class="{ 'desuq-home-warn': !p.shares.length }">{{ p.note }}</span>
         <span ng-if="p.seen">{{ p.seen }}</span>
       </div>
 
-      <!-- The verification badge. The card itself lives in this person's
-           settings, where there is room to read it out over a phone; here it
-           is one line like every other, which is the whole point of moving
-           it out of a 194px table row. -->
-      <div class="desuq-home-card-verify">
-        <span class="desuq-home-verified" ng-if="p.verified">
+      <div class="desuq-home-card-verify" ng-if="p.verified">
+        <span class="desuq-home-verified">
           <span class="fas fa-shield-alt" aria-hidden="true"></span>&nbsp;Verified on this computer
         </span>
-        <span class="desuq-home-unverified" ng-if="!p.verified">
-          <span class="fas fa-shield-alt" aria-hidden="true"></span>&nbsp;Not verified yet
-        </span>
+        <!-- Verified here and not connected since. The server on *their*
+             side refuses this computer until they pick its card, and nothing
+             here can see that -- so this is what to check, not a fact. -->
+        <div class="desuq-home-awaiting" ng-if="p.awaitingThem">
+          Not connected yet. If {{ p.name }} has not picked your card on their
+          computer, they need to &mdash; until then it stays offline.
+        </div>
       </div>
 
       <div class="desuq-home-card-actions">
+        <button type="button" class="btn btn-sm desuq-home-btn-primary" ng-if="!p.verified"
+                ng-click="invite({ deviceID: p.deviceID })">
+          <span class="fas fa-shield-alt"></span>&nbsp;Verify {{ p.name }}
+        </button>
+        <button type="button" class="btn btn-sm btn-default" ng-if="p.verified"
+                ng-click="invite({ deviceID: p.deviceID, step: 'share' })">
+          <span class="fas fa-folder-open"></span>&nbsp;Share folders
+        </button>
         <button type="button" class="btn btn-sm btn-default" ng-click="editDeviceExisting(devices[p.deviceID])">
-          <span class="fas fa-shield-alt" ng-if="!p.verified"></span>
-          <span class="fas fa-pencil-alt" ng-if="p.verified"></span>&nbsp;<span
-            >{{ p.verified ? 'Settings' : 'Verify' }}</span>
+          <span class="fas fa-cog"></span>&nbsp;Settings
         </button>
       </div>
     </div>
 
     <div class="desuq-home-block-actions">
-      <button type="button" class="btn btn-sm btn-default" ng-click="addDevice()">
-        <span class="fas fa-plus"></span>&nbsp;<span>Add somebody</span>
+      <button type="button" class="btn btn-sm desuq-home-btn-primary" ng-click="invite()">
+        <span class="fas fa-user-plus"></span>&nbsp;<span>Invite someone</span>
       </button>
-      <button type="button" class="btn btn-sm btn-default" ng-click="showDeviceIdentification(thisDevice())">
-        <span class="fas fa-qrcode"></span>&nbsp;<span>Show my device code</span>
+      <button type="button" class="btn btn-sm btn-default" ng-click="invite({ tab: 'show' })">
+        <span class="fas fa-qrcode"></span>&nbsp;<span>Show my code</span>
       </button>
     </div>
   </section>

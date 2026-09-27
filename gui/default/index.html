@@ -42,6 +42,8 @@
   <link href="syncthing/desuq/home.css" rel="stylesheet"/>
   <!-- desuqcafe fork: the history screen -->
   <link href="syncthing/desuq/history.css" rel="stylesheet"/>
+  <!-- desuqcafe fork: the invite dialog -->
+  <link href="syncthing/desuq/invite.css" rel="stylesheet"/>
 </head>
 
 <body>
@@ -240,7 +242,10 @@
 
         <!-- Panel: New Device -->
 
-        <div ng-repeat="(deviceID, pendingDevice) in pendingDevices" class="row">
+        <!-- desuqcafe fork: hidden while the main screen shows requests itself
+             (desuqOwnsRequests, set by home.js), with the verification card and
+             who else is in the folder. Back if that screen fails to load. -->
+        <div ng-repeat="(deviceID, pendingDevice) in pendingDevices" class="row" ng-if="!desuqOwnsRequests">
           <div class="col-md-12">
             <div class="panel panel-warning">
               <div class="panel-heading">
@@ -276,7 +281,7 @@
 
         <!-- Panel: New Folder -->
         <div ng-repeat="(folderID, pendingFolder) in pendingFolders">
-          <div ng-repeat="(deviceID, offeringDevice) in pendingFolder.offeredBy" class="row reject">
+          <div ng-repeat="(deviceID, offeringDevice) in pendingFolder.offeredBy" class="row reject" ng-if="!desuqOwnsRequests">
             <div class="col-md-12">
               <div class="panel panel-warning">
                 <div class="panel-heading">
@@ -1194,6 +1199,10 @@
                           on-accept-folder="addFolderAndShare(folderID, pendingFolder, device)">
   </desuq-first-run-wizard>
 
+  <!-- desuqcafe fork: the invite dialog -- their code, the card, the folders.
+       Opened from the main screen and the setup guide. See invite.js. -->
+  <desuq-invite></desuq-invite>
+
   <!-- vendor scripts -->
   <script type="text/javascript" src="vendor/jquery/jquery-3.7.1.js"></script>
   <script type="text/javascript" src="vendor/angular/angular.js"></script>
@@ -1237,6 +1246,7 @@
   <script type="text/javascript" src="syncthing/desuq/selectiveSync.js"></script>
   <script type="text/javascript" src="syncthing/desuq/lanLimitDirective.js"></script>
   <script type="text/javascript" src="syncthing/desuq/firstRunWizard.js"></script>
+  <script type="text/javascript" src="syncthing/desuq/invite.js"></script>
   <script type="text/javascript" src="syncthing/desuq/home.js"></script>
   <script type="text/javascript" src="syncthing/desuq/history.js"></script>
   <script type="text/javascript" src="assets/lang/valid-langs.js"></script>

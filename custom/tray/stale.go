@@ -64,6 +64,11 @@ type peerSeen struct {
 	name      string
 	connected bool
 	paused    bool
+	// unverified devices are refused by the daemon until somebody compares
+	// cards with them (lib/model/desuq_verified.go). Their silence is the
+	// rule working, not somebody who stopped syncing, and it has its own
+	// toast -- verify.go -- that says what to do about it.
+	unverified bool
 	// lastSeen is the Unix epoch for a device that has never connected at all
 	// -- see seenEver, and note that it is NOT Go's zero time. Those devices
 	// are excluded: one added an hour ago and not yet accepted at the other
@@ -92,7 +97,7 @@ type staleVerdict struct {
 func stalePeers(peers []peerSeen, now time.Time, after time.Duration) staleVerdict {
 	var v staleVerdict
 	for _, p := range peers {
-		if p.paused || !seenEver(p.lastSeen) {
+		if p.paused || p.unverified || !seenEver(p.lastSeen) {
 			continue
 		}
 		v.Eligible++

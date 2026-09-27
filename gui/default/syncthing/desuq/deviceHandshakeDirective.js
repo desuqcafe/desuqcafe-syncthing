@@ -389,42 +389,128 @@ angular.module('syncthing.core')
         };
     })
 
-    // <device-handshake local-id="myID" remote-id="currentDevice.deviceID">
+    // Where a verification is kept, and the one place anything writes it.
+    //
+    // It is `desuqVerifiedAt` on the device's own config entry, and it is not
+    // decoration: nothing connects to a device until it is set
+    // (lib/model/desuq_verified.go). It used to live in this browser's
+    // localStorage, on the reasoning that the config "would sync a claim about
+    // identity between machines". config.xml is never sent anywhere, so that
+    // was wrong, and keeping it in a browser meant the tray's browser and any
+    // other one disagreed about who was verified.
+    //
+    // A device not in the config yet -- somebody being added right now -- is
+    // verified *provisionally*, in memory, and whoever saves it reads that
+    // back: the invite flow does, and the directive mirrors it onto a bound
+    // device object so upstream's own Add Device modal saves it too.
+    .factory('desuqVerification', ['$http', '$q', '$window', 'desuqHandshake',
+        function ($http, $q, $window, handshake) {
+            var LEGACY_STORE = 'desuq.handshake.confirmed';
+            var provisional = {};
+
+            function key(id) {
+                return String(id || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+            }
+            function devURL(id) {
+                return urlbase + '/config/devices/' + encodeURIComponent(id);
+            }
+
+            // {exists, at}: whether the device is configured, and when it was
+            // verified ('' for never).
+            function status(id) {
+                return $http.get(devURL(id)).then(function (r) {
+                    return { exists: true, at: (r.data && r.data.desuqVerifiedAt) || '' };
+                }, function () {
+                    return { exists: false, at: provisional[key(id)] || '' };
+                });
+            }
+
+            // at is an ISO time, or '' to take verification away. Taking it
+            // away from a connected device disconnects it.
+            function set(id, at) {
+                if (at) {
+                    provisional[key(id)] = at;
+                } else {
+                    delete provisional[key(id)];
+                }
+                return status(id).then(function (s) {
+                    if (!s.exists) {
+                        return at;
+                    }
+                    return $http.patch(devURL(id), { desuqVerifiedAt: at }).then(function () {
+                        return at;
+                    });
+                });
+            }
+
+            // One-off: carry confirmations made while they lived in
+            // localStorage over to the config. They were genuine -- somebody
+            // picked the right card -- so throwing them away would make
+            // everybody redo a call they already made, and the upgrade would
+            // look like it had broken syncing. A record only counts for the
+            // phrase it was made against, exactly as it did before.
+            function migrate(myID, devices) {
+                var store;
+                try {
+                    store = JSON.parse($window.localStorage.getItem(LEGACY_STORE));
+                } catch (e) {
+                    return $q.when(0);
+                }
+                if (!store || !myID) {
+                    return $q.when(0);
+                }
+                var jobs = [];
+                (devices || []).forEach(function (d) {
+                    var rec = store[key(d.deviceID)];
+                    var sas = handshake.of(myID, d.deviceID);
+                    if (!rec || !sas || d.desuqVerifiedAt ||
+                        rec.phrase !== sas.phrase || rec.rank !== sas.rank) {
+                        return;
+                    }
+                    jobs.push($http.patch(devURL(d.deviceID), {
+                        desuqVerifiedAt: new Date().toISOString()
+                    }).then(function () { return 1; }, function () { return 0; }));
+                });
+                return $q.all(jobs).then(function (done) {
+                    try {
+                        $window.localStorage.removeItem(LEGACY_STORE);
+                    } catch (e) {
+                        // Nothing to do: the next load migrates nothing new.
+                    }
+                    return done.reduce(function (a, b) { return a + b; }, 0);
+                });
+            }
+
+            return {
+                status: status,
+                set: set,
+                migrate: migrate,
+                provisional: function (id) { return provisional[key(id)] || ''; }
+            };
+        }])
+
+    // <device-handshake local-id="myID" remote-id="currentDevice.deviceID"
+    //                   device="currentDevice" peer-name="{{ name }}"
+    //                   on-verified="done()">
     //
     // Both IDs are watched, so the card follows the Device ID field as it is
     // pasted in rather than needing the modal reopened.
-    .directive('deviceHandshake', ['desuqHandshake', '$window', '$timeout',
-        function (handshake, $window, $timeout) {
-            // Confirmations live in localStorage rather than the Syncthing
-            // config. Writing to the config would need a REST call and would
-            // sync a claim about identity between machines, which is precisely
-            // the thing that cannot be trusted over the wire. It is a note to
-            // self, and it belongs on this machine only.
-            var STORE = 'desuq.handshake.confirmed';
-
-            function load() {
-                try {
-                    return JSON.parse($window.localStorage.getItem(STORE)) || {};
-                } catch (e) {
-                    return {};
-                }
-            }
-
-            function save(map) {
-                try {
-                    $window.localStorage.setItem(STORE, JSON.stringify(map));
-                } catch (e) {
-                    // Private browsing, storage disabled, quota. The card still
-                    // works; it just will not remember.
-                }
-            }
-
+    //
+    // `device` is optional and is only ever *written*: whatever object is
+    // about to be saved gets `desuqVerifiedAt` mirrored onto it, so a modal
+    // that saves its whole device object afterwards cannot put back the value
+    // it loaded before the card was confirmed.
+    .directive('deviceHandshake', ['desuqHandshake', 'desuqVerification', '$timeout',
+        function (handshake, verification, $timeout) {
             return {
                 restrict: 'E',
                 scope: {
                     localId: '=',
                     remoteId: '=',
-                    compact: '=?'
+                    device: '=?',
+                    peerName: '@?',
+                    compact: '=?',
+                    onVerified: '&?'
                 },
                 // Deliberately not using the translate directive:
                 // angular-translate renders {%placeholders%} literally for any
@@ -432,26 +518,27 @@ angular.module('syncthing.core')
                 // upstream's translation files.
                 template: [
                     '<div class="desuq-handshake" ng-if="sas"',
-                    '     ng-class="{\'desuq-handshake-confirmed\': confirmed, \'desuq-handshake-compact\': compact}">',
-
+                    '     ng-class="{\'desuq-handshake-confirmed\': confirmed, \'desuq-handshake-compact\': compact,',
+                    '                \'desuq-handshake-just\': justConfirmed}">',
                     // --- hero ---
                     //
                     // Hidden while the check is running, and that is the whole
                     // point of the check. The hero carries the real card, the
-                    // phrase spelled out in words, and the rank in two
+                    // phrase spelled out in words and the rank in two
                     // notations; with it on screen, picking the right card out
                     // of three is a matching exercise anyone can pass without
                     // having listened to a single word the other person said.
-                    // The check is meant to cost the attention it claims to
-                    // prove.
                     '  <div class="desuq-handshake-hero" ng-if="!challenge">',
-                    '    <desuq-card card="sas" size="{{compact ? \'sm\' : \'md\'}}"></desuq-card>',
+                    '    <div class="desuq-handshake-cardcol">',
+                    '      <desuq-card card="sas" size="{{compact ? \'sm\' : \'md\'}}"></desuq-card>',
+                    '      <div class="desuq-handshake-cardcap" ng-if="!compact">Your card with {{ who() }}</div>',
+                    '    </div>',
                     '    <div class="desuq-handshake-side" ng-if="!compact">',
                     '      <div class="desuq-handshake-status" ng-if="confirmed">',
-                    '        <span class="fa fa-check-circle"></span> Verified on this computer {{confirmedAt}}',
+                    '        <span class="fa fa-check-circle"></span> Verified on this computer<span ng-if="confirmedAt"> &middot; {{confirmedAt}}</span>',
                     '      </div>',
                     '      <div class="desuq-handshake-status desuq-handshake-status-pending" ng-if="!confirmed">',
-                    '        <span class="fa fa-exclamation-circle"></span> Not verified yet',
+                    '        <span class="fa fa-lock"></span> Not verified &mdash; nothing syncs with {{ who() }} until it is',
                     '      </div>',
                     '      <div class="desuq-handshake-phrase">',
                     '        <span class="desuq-handshake-bracket">&#12298;</span>',
@@ -460,115 +547,158 @@ angular.module('syncthing.core')
                     '        <span class="desuq-handshake-word">{{sas.strike}}</span>',
                     '        <span class="desuq-handshake-bracket">&#12299;</span>',
                     '      </div>',
-                    '      <div class="desuq-handshake-rank-line">Rank {{sas.rankRoman}} <span class="desuq-handshake-dim">({{sas.rank}} of 256)</span></div>',
+                    '      <div class="desuq-handshake-rank-line">{{sas.tierName}} &middot; Rank {{sas.rankRoman}} <span class="desuq-handshake-dim">({{sas.rank}} of 256)</span></div>',
                     '      <div class="desuq-handshake-note">',
-                    '        <p>',
-                    '          <strong>This card is on their screen too.</strong>',
-                    '          Compare it with them &mdash; the words, the rank and the sigil.',
-                    '          If they match, this device really is theirs.',
+                    // Three steps, in the order they are done. The old panel
+                    // was three paragraphs about why, and a button saying
+                    // "Confirm it matches" -- which read as "tick this box",
+                    // the exact reflex the pick-one-of-three exists to defeat,
+                    // and said nothing about taking turns, so one person
+                    // verified and the other assumed that covered both.
+                    '        <ol class="desuq-handshake-steps" ng-if="!confirmed">',
+                    '          <li><b>Get {{ who() }} on a call</b> &mdash; phone, video, or in person.',
+                    '              Not the chat you sent the code in.</li>',
+                    '          <li><b>Take turns reading your card out loud:</b> the three words,',
+                    '              the rarity and the rank. It is the same card on both screens.</li>',
+                    '          <li><b>When it is your turn to listen,</b> press the button below and',
+                    '              pick the card they describe. Then swap, so you each pick on',
+                    '              your own computer.</li>',
+                    '        </ol>',
+                    '        <p class="desuq-handshake-after" ng-if="confirmed">',
+                    '          {{ who() }} also has to pick your card on their computer.',
+                    '          If they have not yet, read yours out to them &mdash; until they do,',
+                    '          nothing connects.',
                     '        </p>',
-                    '        <p class="desuq-handshake-warning">',
-                    '          <span class="fa fa-exclamation-triangle"></span>',
-                    '          Compare it somewhere <em>other than</em> where you sent the device ID,',
-                    '          and never inside Syncthing itself. Anyone who could swap the ID in that',
-                    '          chat could swap this too. A call where you recognise each other is the',
-                    '          strongest version.',
-                    '        </p>',
-                    // Says what the card is worth, in the place where somebody
-                    // is deciding how much to trust it. The number is not
-                    // decoration: 2^32 is small enough that stating it honestly
-                    // is the difference between a security claim and a
-                    // security theatre, and the thing that actually makes it
-                    // work is in the sentence after it.
-                    '        <p class="desuq-handshake-note-fine">',
-                    '          The card is four bytes of a hash of both device IDs &mdash; one of about',
-                    '          four billion. Somebody forging it would have to generate identities by the',
-                    '          billion aimed at you and this person in particular, and finish before the',
-                    '          two of you compare. What actually protects you is comparing on a channel',
-                    '          they do not control; the card only gives you something short enough to',
-                    '          read out.',
-                    '        </p>',
+                    '        <details class="desuq-handshake-why">',
+                    '          <summary>Why this matters</summary>',
+                    '          <p>Adding each other proves the two computers agreed on a code, not',
+                    '             <em>whose</em> code it was. Somebody who could edit the message',
+                    '             that carried it could have swapped in their own, and both of you',
+                    '             would still see &ldquo;Connected&rdquo;.</p>',
+                    '          <p class="desuq-handshake-warning">',
+                    '            <span class="fa fa-exclamation-triangle"></span>',
+                    '            Compare it somewhere <em>other than</em> where you sent the device ID,',
+                    '            and never inside Syncthing itself. Anyone who could swap the ID in that',
+                    '            chat could swap this too. A call where you recognise each other is the',
+                    '            strongest version.',
+                    '          </p>',
+                    // Says what the card is worth, where somebody is deciding
+                    // how much to trust it. 2^32 is small enough that stating
+                    // it honestly is the difference between a security claim
+                    // and security theatre, and what actually makes it work is
+                    // in the sentence after it.
+                    '          <p class="desuq-handshake-note-fine">',
+                    '            The card is four bytes of a hash of both device IDs &mdash; one of about',
+                    '            four billion. Somebody forging it would have to generate identities by the',
+                    '            billion aimed at the two of you in particular, and finish before you',
+                    '            compare. What actually protects you is comparing on a channel',
+                    '            they do not control; the card only gives you something short enough to',
+                    '            read out.',
+                    '          </p>',
+                    '        </details>',
                     '      </div>',
-                    '      <button type="button" class="btn btn-sm desuq-handshake-btn"',
-                    '              ng-if="!challenge && !confirmed" ng-click="startChallenge()">',
-                    '        <span class="fa fa-shield"></span> Confirm it matches',
-                    '      </button>',
-                    '      <button type="button" class="btn btn-sm desuq-handshake-btn desuq-handshake-btn-undo"',
-                    '              ng-if="!challenge && confirmed" ng-click="unconfirm()">',
-                    '        <span class="fa fa-undo"></span> Mark as not verified',
-                    '      </button>',
+                    '      <div class="desuq-handshake-actions">',
+                    '        <button type="button" class="btn desuq-handshake-btn desuq-handshake-btn-go"',
+                    '                ng-if="!confirmed" ng-click="startChallenge()" ng-disabled="saving">',
+                    '          <span class="fa fa-headphones"></span>&nbsp; {{ who() }} is reading me their card',
+                    '        </button>',
+                    '        <button type="button" class="btn btn-sm desuq-handshake-btn desuq-handshake-btn-undo"',
+                    '                ng-if="confirmed" ng-click="unconfirm()" ng-disabled="saving"',
+                    '                title="Disconnects them until the cards are compared again">',
+                    '          <span class="fa fa-undo"></span> Mark as not verified',
+                    '        </button>',
+                    '      </div>',
+                    '      <div class="desuq-handshake-error" ng-if="error">{{ error }}</div>',
                     '    </div>',
                     '  </div>',
-
                     // --- the pick-one-of-three check ---
                     '  <div class="desuq-handshake-challenge" ng-if="challenge">',
                     '    <div ng-if="!noneMatch">',
                     '      <div class="desuq-handshake-ask">',
-                    '        Which card are they looking at?',
-                    '        <span class="desuq-handshake-dim">Pick the one they described. Your own card is hidden until you have.</span>',
+                    '        Which card is {{ who() }} reading out?',
+                    '        <span class="desuq-handshake-dim">Your own card is hidden until you pick, so this only works if you listened.</span>',
                     '      </div>',
                     '      <div class="desuq-handshake-deal">',
                     '        <div class="desuq-handshake-slot" ng-repeat="c in challenge"',
                     '             ng-class="{\'is-wrong\': wrongPick === c.rank}"',
                     '             ng-style="{\'animation-delay\': ($index * 90) + \'ms\'}"',
-                    '             ng-click="choose(c)" role="button" tabindex="0">',
+                    '             ng-click="choose(c)" ng-keydown="($event.keyCode == 13 || $event.keyCode == 32) && choose(c)"',
+                    '             role="button" tabindex="0" aria-label="{{c.aspect}} {{c.omen}} {{c.strike}}, rank {{c.rank}}">',
                     '          <desuq-card card="c" size="sm"></desuq-card>',
                     '        </div>',
                     '      </div>',
                     '      <div class="desuq-handshake-wrong" ng-if="wrongPick">',
                     '        <span class="fa fa-times-circle"></span>',
                     '        <strong>That is not the card on this screen.</strong>',
-                    '        If they really did read that out, stop &mdash; do not add this device,',
-                    '        and check the device ID with them again somewhere you trust.',
+                    '        If they really did read that out, stop &mdash; do not add this device',
+                    '        or verify it, and check the device ID with them again somewhere you trust.',
                     '      </div>',
                     // Without this, somebody whose partner reads out a card
                     // that is on none of these three has no honest move: the
                     // dialogue offers three answers and every one of them is a
-                    // claim that it matched. The correct outcome of a real
-                    // mismatch was reachable only by picking a card at random
-                    // and getting told off for it.
-                    '      <button type="button" class="btn btn-sm desuq-handshake-btn desuq-handshake-btn-undo"',
-                    '              ng-click="noneOfThese()">',
-                    '        None of these &mdash; they read out something else',
-                    '      </button>',
+                    // claim that it matched.
+                    '      <div class="desuq-handshake-challenge-foot">',
+                    '        <button type="button" class="btn btn-sm desuq-handshake-btn desuq-handshake-btn-undo"',
+                    '                ng-click="noneOfThese()">',
+                    '          None of these &mdash; they read out something else',
+                    '        </button>',
+                    '        <button type="button" class="btn btn-sm desuq-handshake-btn-quiet" ng-click="cancelChallenge()">Back</button>',
+                    '      </div>',
                     '    </div>',
-                    '    <div class="desuq-handshake-wrong" ng-if="noneMatch">',
-                    '      <span class="fa fa-times-circle"></span>',
-                    '      <strong>Then stop, and do not add this device.</strong>',
-                    '      Two cards that disagree means the device ID you were given is not the one',
-                    '      they sent. Either it was altered on the way to you, or one of you pasted',
-                    '      the wrong thing. Ask them for the ID again somewhere else &mdash; a call,',
-                    '      in person &mdash; and compare the cards again before going any further.',
+                    '    <div ng-if="noneMatch">',
+                    '      <div class="desuq-handshake-wrong">',
+                    '        <span class="fa fa-times-circle"></span>',
+                    '        <strong>Then stop, and do not add this device.</strong>',
+                    '        Two cards that disagree means the device ID you were given is not the one',
+                    '        they sent. Either it was altered on the way to you, or one of you pasted',
+                    '        the wrong thing. Ask them for the ID again somewhere else &mdash; a call,',
+                    '        in person &mdash; and compare the cards again before going any further.',
+                    '      </div>',
+                    '      <div class="desuq-handshake-challenge-foot">',
+                    '        <button type="button" class="btn btn-sm desuq-handshake-btn-quiet" ng-click="cancelChallenge()">Back to the card</button>',
+                    '      </div>',
                     '    </div>',
-                    '    <button type="button" class="btn btn-sm desuq-handshake-btn desuq-handshake-btn-undo" ng-click="cancelChallenge()">',
-                    '      <span ng-if="!noneMatch">Cancel</span><span ng-if="noneMatch">Back to the card</span>',
-                    '    </button>',
                     '  </div>',
                     '</div>'
                 ].join('\n'),
                 link: function (scope) {
-                    function key() {
-                        return String(scope.remoteId || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+                    var seq = 0;
+
+                    scope.who = function () {
+                        return scope.peerName || 'them';
+                    };
+
+                    function mirror(at) {
+                        if (scope.device && typeof scope.device === 'object') {
+                            scope.device.desuqVerifiedAt = at || '';
+                        }
+                    }
+
+                    function show(at) {
+                        scope.confirmed = !!at;
+                        scope.confirmedAt = at ? new Date(at).toLocaleDateString() : '';
                     }
 
                     function refresh() {
+                        var mine = ++seq;
                         scope.sas = handshake.of(scope.localId, scope.remoteId);
                         scope.challenge = null;
                         scope.wrongPick = null;
                         scope.noneMatch = false;
+                        scope.error = '';
+                        scope.justConfirmed = false;
+                        show('');
                         if (!scope.sas) {
-                            scope.confirmed = false;
                             return;
                         }
-                        var record = load()[key()];
-                        // A stored confirmation is only good for the phrase it
-                        // was made against. If either device ID changed, the
-                        // phrase changes and the old confirmation is void --
-                        // otherwise re-pasting a different ID would inherit a
-                        // tick it never earned.
-                        scope.confirmed = !!record && record.phrase === scope.sas.phrase &&
-                            record.rank === scope.sas.rank;
-                        scope.confirmedAt = scope.confirmed ? record.at : '';
+                        verification.status(scope.remoteId).then(function (s) {
+                            // A later ID has been pasted since this was asked.
+                            if (mine !== seq) {
+                                return;
+                            }
+                            show(s.at);
+                            mirror(s.at);
+                        });
                     }
 
                     scope.startChallenge = function () {
@@ -584,13 +714,11 @@ angular.module('syncthing.core')
                         scope.wrongPick = null;
                         scope.noneMatch = false;
                     };
-
                     scope.cancelChallenge = function () {
                         scope.challenge = null;
                         scope.wrongPick = null;
                         scope.noneMatch = false;
                     };
-
                     // Nothing is recorded and nothing is undone: a device that
                     // was never confirmed stays unconfirmed, and one that was
                     // keeps its tick until somebody explicitly removes it. The
@@ -601,6 +729,31 @@ angular.module('syncthing.core')
                         scope.noneMatch = true;
                     };
 
+                    function record(at) {
+                        scope.saving = true;
+                        scope.error = '';
+                        var mine = seq;
+                        return verification.set(scope.remoteId, at).then(function () {
+                            if (mine !== seq) {
+                                return;
+                            }
+                            show(at);
+                            mirror(at);
+                        }, function () {
+                            scope.error = 'Could not save that. Is Syncthing still running? Try again in a moment.';
+                            scope.justConfirmed = false;
+                            // Show what is actually recorded, not what was
+                            // hoped for.
+                            return verification.status(scope.remoteId).then(function (s) {
+                                if (mine === seq) {
+                                    show(s.at);
+                                }
+                            });
+                        }).finally(function () {
+                            scope.saving = false;
+                        });
+                    }
+
                     scope.choose = function (card) {
                         if (!scope.sas) {
                             return;
@@ -609,29 +762,23 @@ angular.module('syncthing.core')
                             scope.wrongPick = card.rank;
                             return;
                         }
-                        var map = load();
-                        map[key()] = {
-                            phrase: scope.sas.phrase,
-                            rank: scope.sas.rank,
-                            at: new Date().toLocaleDateString()
-                        };
-                        save(map);
                         scope.challenge = null;
                         scope.wrongPick = null;
                         scope.noneMatch = false;
-                        refresh();
-                        // Let the confirmed styling land after the digest, so
-                        // the flourish plays rather than appearing instantly.
+                        // Confirmed on screen at once; the save follows.
+                        show(new Date().toISOString());
+                        scope.justConfirmed = true;
+                        record(new Date().toISOString()).then(function () {
+                            if (scope.confirmed && scope.onVerified) {
+                                scope.onVerified();
+                            }
+                        });
                         $timeout(angular.noop);
                     };
-
                     scope.unconfirm = function () {
-                        var map = load();
-                        delete map[key()];
-                        save(map);
-                        refresh();
+                        scope.justConfirmed = false;
+                        record('');
                     };
-
                     scope.$watch('remoteId', refresh);
                     scope.$watch('localId', refresh);
                 }

@@ -80,6 +80,9 @@ type app struct {
 	// hold is the timed pause. See pausefor.go.
 	hold     pauseHold
 	mQuit    *systray.MenuItem
+	// mUpdate is hidden until a peer is seen on a newer release, and then
+	// stays -- see alerter.onUpdate.
+	mUpdate  *systray.MenuItem
 	quitOnce sync.Once
 	openOnce sync.Once
 }
@@ -318,6 +321,12 @@ func (a *app) onReady() {
 		a.mPauseChoices = append(a.mPauseChoices, a.mPauseFor.AddSubMenuItem(c.label, c.tip))
 	}
 	systray.AddSeparator()
+	a.mUpdate = systray.AddMenuItem("Download the update", "Download the newest installer; run it to update")
+	a.mUpdate.Hide()
+	a.alerts.onUpdate = func(version string) {
+		a.mUpdate.SetTitle("Download update " + version)
+		a.mUpdate.Show()
+	}
 
 	quitLabel := "Quit " + appName
 	quitTip := "Stop Syncthing and close this icon"
@@ -342,6 +351,7 @@ func (a *app) onReady() {
 	go a.alerts.watchVersions(a.ctx)
 	go a.alerts.watchConflicts(a.ctx)
 	go a.alerts.watchStale(a.ctx)
+	go a.alerts.watchKnocks(a.ctx)
 	go a.alerts.watchClaims(a.ctx)
 	go a.alerts.watchDelivery(a.ctx)
 	if !a.opts.noIcons {
@@ -418,6 +428,10 @@ func (a *app) watchClicks() {
 			return
 		case <-a.mOpen.ClickedCh:
 			a.openGUI()
+		case <-a.mUpdate.ClickedCh:
+			if err := openURL(downloadURL); err != nil {
+				slog.Error("could not open the browser", "err", err, "url", downloadURL)
+			}
 		case <-a.mPause.ClickedCh:
 			a.togglePause()
 		case <-a.mQuit.ClickedCh:

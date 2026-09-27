@@ -294,17 +294,37 @@
     text-align: left;
 }
 
-.desuq-handshake-status {
+.desuq-handshake-cardcol {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+}
+
+.desuq-handshake-cardcap {
     font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--v-success-bright, #10b981);
-    margin-bottom: 7px;
+    color: var(--v-text-dim, #8d84a3);
+    letter-spacing: 0.02em;
+}
+
+/* A pill rather than a line of shouting capitals: it is the one fact on the
+   panel that changes, and it should read as a state, not a heading. */
+.desuq-handshake-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 999px;
+    color: var(--v-success-bright, #0a6e51);
+    background: var(--v-success-wash, rgba(11, 122, 90, 0.10));
+    margin-bottom: 9px;
 }
 
 .desuq-handshake-status-pending {
-    color: var(--v-warning-bright, #b45309);
+    color: var(--v-warning-bright, #8a5c06);
+    background: rgba(217, 148, 20, 0.12);
 }
 
 .desuq-handshake-phrase {
@@ -367,6 +387,85 @@
     color: var(--v-text-dim, #8d84a3);
 }
 
+/* The three steps. Numbered in the accent colour, because the order is the
+   instruction: call first, then read, then pick. */
+.desuq-handshake-steps {
+    list-style: none;
+    counter-reset: dqstep;
+    padding: 0;
+    margin: 4px 0 8px;
+}
+
+.desuq-handshake-steps li {
+    counter-increment: dqstep;
+    position: relative;
+    padding: 0 0 7px 30px;
+    color: var(--v-text-muted, #55506b);
+}
+
+.desuq-handshake-steps li b { color: var(--v-text, #241c33); }
+
+.desuq-handshake-steps li::before {
+    content: counter(dqstep);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--v-accent-wash-strong, rgba(109, 52, 214, 0.18));
+    color: var(--v-accent-strong, #6d34d6);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 20px;
+    text-align: center;
+}
+
+.desuq-handshake-after {
+    color: var(--v-text-muted, #55506b);
+}
+
+/* Why, folded. It is for whoever wants to know; the steps above are for
+   everybody, and three paragraphs in front of a button is how a button gets
+   pressed without reading any of them. */
+.desuq-handshake-why {
+    margin-top: 4px;
+}
+
+.desuq-handshake-why summary {
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--v-accent-strong, #6d34d6);
+    list-style: none;
+}
+
+.desuq-handshake-why summary::-webkit-details-marker { display: none; }
+
+.desuq-handshake-why summary::before {
+    content: "\f0da";
+    font-family: ForkAwesome, FontAwesome;
+    display: inline-block;
+    width: 12px;
+    transition: transform 120ms ease;
+}
+
+.desuq-handshake-why[open] summary::before { transform: rotate(90deg); }
+
+.desuq-handshake-why[open] summary { margin-bottom: 6px; }
+
+.desuq-handshake-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.desuq-handshake-error {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--v-danger-bright, #b2352b);
+}
+
 .desuq-handshake-btn {
     margin-top: 9px;
     border-radius: var(--v-radius-sm, 5px);
@@ -380,6 +479,42 @@
 .desuq-handshake-btn:focus {
     background: var(--v-accent-wash-strong, rgba(139, 92, 246, 0.26));
     color: var(--v-accent-bright, #5b28bb);
+}
+
+/* The one thing to press. Filled, because it is the next step and there is
+   no other. */
+.desuq-handshake-btn-go {
+    background: var(--v-accent-strong, #6d34d6);
+    border-color: var(--v-accent-strong, #6d34d6);
+    color: var(--v-text-inverse, #fff);
+    padding: 7px 14px;
+}
+
+.desuq-handshake-btn-go:hover,
+.desuq-handshake-btn-go:focus {
+    background: var(--v-accent-deep, #5a26b8);
+    color: var(--v-text-inverse, #fff);
+}
+
+.desuq-handshake-btn-quiet {
+    margin-top: 9px;
+    background: transparent;
+    border: none;
+    color: var(--v-text-muted, #6b6280);
+}
+
+.desuq-handshake-btn-quiet:hover,
+.desuq-handshake-btn-quiet:focus {
+    color: var(--v-text, #241c33);
+    text-decoration: underline;
+}
+
+.desuq-handshake-challenge-foot {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 6px;
 }
 
 .desuq-handshake-btn-undo {
@@ -396,6 +531,17 @@
     --dqc-glow: rgba(16, 185, 129, 0.6);
     --dqc-accent: #6ee7b7;
     animation: desuq-seal 700ms ease-out;
+}
+
+/* The moment it lands, and only then: a card reopened later is simply
+   verified, not celebrated again. */
+.desuq-handshake-just .desuq-handshake-status {
+    animation: desuq-pop 480ms cubic-bezier(0.2, 0.9, 0.3, 1.4);
+}
+
+@keyframes desuq-pop {
+    from { transform: scale(0.7); opacity: 0; }
+    to   { transform: none; opacity: 1; }
 }
 
 @keyframes desuq-seal {
@@ -502,6 +648,7 @@
     .desuq-sigil-rot,
     .desuq-handshake-slot,
     .desuq-handshake-confirmed .desuq-card,
+    .desuq-handshake-just .desuq-handshake-status,
     .desuq-handshake-slot.is-wrong .desuq-card {
         animation: none;
     }

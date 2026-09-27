@@ -940,3 +940,157 @@ be filled with something. One column lets the page be as short as its content.
     color: var(--v-text-muted);
     line-height: 1.5;
 }
+
+
+/* ---------------------------------------- invite, verify, requests, update */
+
+.chip-locked        { color: var(--v-warning-bright); }
+
+/* The one filled button on a card: the next thing to do. Everything else on
+   the screen stays btn-default, so there is never more than one of these in
+   view per card. */
+.desuq-home-btn-primary.btn {
+    border: 0;
+    background: var(--v-accent-deep);
+    color: var(--v-text-inverse);
+    font-weight: 600;
+}
+
+.desuq-home-btn-primary.btn:hover,
+.desuq-home-btn-primary.btn:focus {
+    background: var(--v-accent-strong);
+    color: var(--v-text-inverse);
+}
+
+.desuq-home-quiet.btn-link { color: var(--v-text-dim); }
+.desuq-home-quiet.btn-link:hover { color: var(--v-text-muted); }
+
+.desuq-home-link {
+    font-size: 13px;
+    color: var(--v-accent-strong);
+}
+
+.desuq-home-mono {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 12.5px;
+}
+
+/* An unverified person: the card is dimmed except for the gate and its
+   button, which are the whole of what there is to do about them. */
+.desuq-home-card.is-locked {
+    border-style: dashed;
+    border-color: var(--v-warning);
+}
+
+.desuq-home-gate {
+    margin-top: 8px;
+    padding: 9px 12px;
+    border-radius: var(--v-radius-sm, 5px);
+    background: rgba(217, 148, 20, 0.10);
+    border-left: 3px solid var(--v-warning);
+    font-size: 13.5px;
+    color: var(--v-text-muted);
+}
+
+.desuq-home-gate b { color: var(--v-text); }
+
+.desuq-home-awaiting {
+    margin-top: 5px;
+    font-size: 12.5px;
+    color: var(--v-text-dim);
+}
+
+/* Requests and offers: accent-edged, because they are waiting on a decision
+   and nothing else on the screen is. */
+.desuq-home-request {
+    border-left: 3px solid var(--v-accent);
+}
+
+.desuq-home-offer-members {
+    margin-top: 9px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.desuq-home-person {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    border: 1px solid var(--v-border);
+    color: var(--v-text);
+}
+
+.desuq-home-person.is-verified .fas { color: var(--v-accent-bright); }
+.desuq-home-person.is-through { border-style: dashed; color: var(--v-text-muted); }
+.desuq-home-person.is-through .fas { color: var(--v-text-dim); }
+
+/* Folder cards: the disc and the name together. */
+.desuq-home-who-label {
+    font-size: 12px;
+    color: var(--v-text-dim);
+    margin-right: 2px;
+}
+
+.desuq-home-person-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding-right: 10px;
+    border-radius: 999px;
+    background: var(--v-surface-raised);
+}
+
+.desuq-home-person-name {
+    font-size: 13px;
+    color: var(--v-text);
+}
+
+.desuq-home-who.who-unverified {
+    background-color: transparent;
+    border: 1px dashed var(--v-warning);
+}
+
+.desuq-home-who.who-unverified .desuq-home-who-i {
+    background: transparent;
+    color: var(--v-warning-bright);
+    font-size: 10px;
+}
+
+/* A newer build. A quiet strip, not a banner: nothing is wrong. */
+.desuq-home-update {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 12px 0 4px;
+    padding: 10px 14px;
+    border-radius: var(--v-radius);
+    border: 1px solid var(--v-border-strong);
+    background: var(--v-accent-wash);
+}
+
+.desuq-home-update-i {
+    color: var(--v-accent-strong);
+    font-size: 20px;
+}
+
+.desuq-home-update-text {
+    flex: 1 1 260px;
+    font-size: 13.5px;
+    color: var(--v-text-muted);
+}
+
+.desuq-home-update-text b {
+    display: block;
+    color: var(--v-text);
+}
+
+.desuq-home-update-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}

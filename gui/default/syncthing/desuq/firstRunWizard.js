@@ -55,10 +55,6 @@ angular.module('syncthing.core')
         // else's device list.
         var STORE = 'desuq.wizard';
 
-        // The handshake directive's own store, read (never written) here so
-        // step 3 can tick itself off when a confirmation already exists.
-        var HANDSHAKE_STORE = 'desuq.handshake.confirmed';
-
         var STEPS = ['name', 'code', 'verify', 'sync'];
 
         // While the wizard is on screen it re-reads its inputs on this
@@ -111,18 +107,6 @@ angular.module('syncthing.core')
             }
         }
 
-        function confirmations() {
-            try {
-                return JSON.parse($window.localStorage.getItem(HANDSHAKE_STORE)) || {};
-            } catch (e) {
-                return {};
-            }
-        }
-
-        function normalise(id) {
-            return String(id || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-        }
-
         // Read everything the four steps need. Deliberately tolerant: a
         // request that fails leaves the previous answer in place rather than
         // blanking the screen, because the most likely cause is Syncthing
@@ -136,7 +120,6 @@ angular.module('syncthing.core')
                 $http.get(urlbase + '/config').then(function (r) {
                     var cfg = r.data || {};
                     var devices = cfg.devices || [];
-                    var confirmed = confirmations();
 
                     st.folderCount = (cfg.folders || []).length;
 
@@ -154,7 +137,10 @@ angular.module('syncthing.core')
                         peers.push({
                             deviceID: d.deviceID,
                             name: d.name || d.deviceID.substring(0, 7),
-                            verified: !!confirmed[normalise(d.deviceID)],
+                            // In the config since verification became the
+                            // condition for connecting at all -- see
+                            // lib/model/desuq_verified.go.
+                            verified: !!d.desuqVerifiedAt,
                             connected: false,
                             clientVersion: ''
                         });
@@ -239,8 +225,10 @@ angular.module('syncthing.core')
                     return !!st.myName;
                 case 'code':
                     return st.peers.length > 0 || st.pending.length > 0;
+                // Every one of them, not any: nothing syncs with a person who
+                // is not, so one verified out of two is half a setup.
                 case 'verify':
-                    return st.peers.some(function (p) { return p.verified; });
+                    return st.peers.length > 0 && st.peers.every(function (p) { return p.verified; });
                 case 'sync':
                     return st.folderCount > 0;
                 default:

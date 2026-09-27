@@ -37,6 +37,10 @@ type DeviceConfiguration struct {
 	RemoteGUIPort            int               `json:"remoteGUIPort" xml:"remoteGUIPort"`
 	RawNumConnections        int               `json:"numConnections" xml:"numConnections"`
 	Group                    string            `json:"group" xml:"group,attr,omitempty"`
+	// desuqcafe fork: when this device was verified on this computer with the
+	// card, RFC 3339. Empty means it may not connect. See
+	// lib/model/desuq_verified.go.
+	DesuqVerifiedAt string `json:"desuqVerifiedAt" xml:"desuqVerifiedAt,attr,omitempty"`
 }
 
 func (cfg DeviceConfiguration) Copy() DeviceConfiguration {

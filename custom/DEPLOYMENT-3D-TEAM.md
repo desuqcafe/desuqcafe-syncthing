@@ -436,12 +436,16 @@ Some deliberate decisions:
   covers `http://127.0.0.1`, but the GUI is routinely opened at
   `http://192.168.x.x` from another machine, where it is `undefined` — so the
   feature would have silently died on exactly the setup most likely to need it.
-- **Confirmations are stored in `localStorage`, not in the config.** Writing
-  them to the config would sync a claim about identity between machines, which
-  is precisely the thing that cannot be trusted over the wire. A confirmation
-  is a note to self and stays on the machine that made it. It is also voided
-  automatically if either device ID changes, so re-pasting a different ID
-  cannot inherit a tick it never earned.
+- **Confirmations are stored in the device's config entry**, as
+  `desuqVerifiedAt`. They were first kept in the browser's `localStorage`, on
+  the reasoning that the config "would sync a claim about identity between
+  machines" -- which it does not: `config.xml` is never sent to anybody. The
+  browser store meant two browsers on one machine disagreed about who was
+  verified, and nothing server-side could act on it; now that the daemon
+  refuses unverified devices (§34), it has to. Old confirmations are carried
+  over once, on the first load of the new GUI, and only for the phrase they
+  were made against. A confirmation belongs to one device entry, so pasting a
+  different ID cannot inherit a tick it never earned.
 - **Confirming means picking the right card out of three.** The failure mode of
   every "compare these codes" dialogue ever shipped is that people click yes
   without reading; a checkbox saying "it matched" gets ticked by reflex. So
@@ -453,9 +457,11 @@ Some deliberate decisions:
   redraw would suggest the phrase itself was unstable. No decoy shares any of
   the four positions with the real card, so someone comparing only the rank
   cannot pick a decoy and be told they were right.
-- **It does not block saving.** The card informs; it does not gate the button.
-  Gating would mean editing upstream's save path, and would trap anyone whose
-  browser failed to load the directive.
+- **It gates connecting, not saving.** A device can be saved unverified -- "we
+  are not on a call right now" is real -- but the daemon then refuses its
+  connection until the card has been compared (§34). The gate is in the
+  server, not the save button, so no browser, script or upstream modal can
+  step around it by accident.
 
 **What it does not do.** It does not defend against someone who can grind
 device IDs: 2^32 is enough to make a live substitution fail, not enough to
@@ -1019,8 +1025,13 @@ The tray compares itself to the machines it is already talking to.
 Syncthing's Hello message carries the client version, `lib/model` puts it in
 `ConnectionStats`, and `/rest/system/connections` has served it all along --
 upstream's own GUI shows it in the device detail table. So when a connected
-device is running a newer build of this fork, the tray says so and the toast
-opens the releases page.
+device is running a newer build of this fork, the tray says so. Clicking the
+toast **downloads the installer** -- `/releases/latest/download/desuq-syncthing-setup.exe`,
+which is why the release publishes it under that fixed name -- rather than
+opening a release page with a changelog and a collapsed Assets list to hunt
+through. The tray menu keeps a *Download update* entry up until the new
+version is installed, and the main screen shows the same notice, so dismissing
+a toast no longer means never hearing about it again.
 
 The obvious alternative was polling GitHub's releases API. It was rejected:
 the README's central claim is that this build contacts nobody, and a daily
@@ -1037,11 +1048,17 @@ Some deliberate decisions:
 - **A build made between tags is never nagged.** That is the developer's own
   machine, they know what they are running, and `git describe`'s suffix sorts
   oddly against the tags by design.
+- **A *peer's* build between tags counts as the tag it was made from.** The
+  developer's machine is usually one, and comparing it as-is told every
+  modeller on `desuq.10` that `desuq.10-3-gabc` was an update -- then sent them
+  to download `desuq.10`, which they already had, daily. There is nothing to
+  install until the next tag exists.
 - **One toast per version, with a day's cooldown.** Every reconnect re-checks;
   a version that was newer an hour ago is not more true for being repeated.
   A *different*, newer version still gets through inside the cooldown.
-- **Nothing is fetched.** The releases URL is the only external address in the
-  tray and it is only ever handed to a browser by somebody clicking the toast.
+- **Nothing is fetched.** The download and releases URLs are the only external
+  addresses in the tray, and they are only ever handed to a browser by
+  somebody clicking.
 
 **What it does not do.** It cannot fire before a peer connects, so a machine
 sitting alone stays quiet -- which for this team is right, because a machine
@@ -2112,6 +2129,95 @@ about a saved version, and the one on disk would be the previous save), and
   `custom/scripts/test-blender-addon.py` checks the client's decisions with
   plain Python and is suite 13. Only Blender 5.2 has been run live, so that
   is the version covered.
+
+## 34. Nothing syncs until you have compared cards
+
+The verification card (§9) was optional for as long as it existed, and it was
+treated as optional: a grey "Not verified yet" and no consequence. It is now
+the condition for connecting at all.
+
+**How it works.** Every connection -- inbound, outbound, any transport --
+exchanges a Hello and then asks the model whether to go on
+(`model.OnHello`). The fork's gate is the first thing there
+(`lib/model/desuq_verified.go`): a device in the config whose
+`desuqVerifiedAt` is empty is refused, before any index, request or cluster
+config can move. Refusing the *connection* rather than gating folders was
+deliberate: folder sharing is checked in a dozen places, and missing one would
+leak data; a refused connection leaks nothing. Unknown devices are untouched,
+so "somebody wants to connect" still works exactly as before.
+
+It is **mutual in practice**: each computer refuses the other until its own
+person has picked the other's card. The card says so ("they also have to pick
+your card on theirs"), and a person verified here who has not connected since
+gets a line saying what to check.
+
+**What people see.**
+
+- The main screen's headline says who is not verified, and their card is
+  dashed amber with one button: *Verify Kai*.
+- A refused attempt is remembered as a **knock** (`/rest/cluster/unverified`),
+  because "Offline" reads as a switched-off computer. The card says *Their
+  computer tried to connect 2 min ago and was turned away*, and the tray
+  toasts *Kai is trying to connect* -- the moment it happens is usually the
+  moment they are on the phone saying "can you see me?".
+- The tray's "has not synced for 3 days" warning skips unverified devices:
+  their silence is the rule working, and it has its own message.
+- The folder card shows them with a lock instead of initials, and says
+  nothing in the folder reaches them.
+
+**Inviting is one flow.** *Invite someone* on the main screen opens three
+steps, in the order they happen on a call: **their code** (paste it, or
+*They need my code* shows yours and lights up the moment they add you),
+**compare cards**, **which folders**. *Verify* on somebody's card opens the
+same dialog at step two. On the other end, *X wants to connect* and folder
+offers appear under **Waiting for you** on the main screen, with *Add and
+verify* -- upstream's yellow banners are hidden while that screen is up.
+*Not on a call now -- do this later* saves without verifying and says what that
+means; it is not a way round the gate, which is in the server.
+
+**Three people, one folder.** A shares with B and with C; A has verified both,
+both have verified A; B and C have never added each other.
+
+- **Everything still syncs.** C's change reaches A, and B gets it from A.
+  Syncthing's index is per folder, not per connection, so B does not need a
+  connection to C to receive C's work.
+- **That is not a hole in the gate.** Verification is about the connection:
+  every link a file travels over has been checked by both people on it. What
+  B trusts is A's judgement about who else is in the folder -- which is true
+  of Syncthing without this fork, and cannot be otherwise, since A can put any
+  file in the folder themselves. The risk that remains is A verifying the
+  wrong person, and that is A's mistake, not a way around the rule.
+- **It is visible.** A folder offer lists everybody in it (from the offering
+  device's cluster config, `/rest/cluster/pending/members`), and marks anybody
+  B has not verified as reaching B only through the people B has. The folder
+  card keeps saying who only reaches whom through one computer (§28).
+- ***Connect directly* now means verifying.** It adds C on B's computer, and
+  C is then refused like anybody new until B and C compare cards -- so the
+  button opens the card straight away. A's verification of C is not carried
+  over to B: B has never checked C's code, and a vouch is a standing grant of
+  trust in A's judgement, which is what Syncthing's introducer does and what
+  §28 chose not to rely on.
+- **Not built: a per-folder strict mode** in which B refuses a folder while
+  anyone in it is unverified *by B*. It closes the gap entirely, at the price
+  of the everyday three-person setup stopping for B until B and C have also
+  had a call.
+
+**Upgrading a team already in use.** Old confirmations carry over the first
+time the new GUI is opened (§9), but only on the computer and browser that
+made them. Anybody never verified stops syncing the moment the new build
+starts. So: the person upgrading first should open the main screen straight
+away, and check **Sharing with** for anybody marked *Not verified*. Because
+the other side is still on the old build, the newer-version notice cannot
+reach them until they are verified -- the old build's card computes the same
+phrase, so comparing on a call works across versions.
+
+**Tests.** `lib/model/desuq_verified_test.go` (refused, let in, refused again,
+revoking closes a live connection, unknown devices still pending);
+`lib/api/api_verified_test.go` (offer members); the card, the invite dialog
+and the main screen through real Angular in the render suites; and by hand on
+a pair started with `start-test-pair.ps1 -Unverified`, verified from both
+GUIs in Chrome: refused and knocking before, connected and the folder offer
+under *Waiting for you* after.
 
 ## Recommended configuration
 

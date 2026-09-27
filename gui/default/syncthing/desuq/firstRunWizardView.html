@@ -119,12 +119,18 @@
           <div class="desuq-wiz-hit" ng-if="st.pending.length > 0">
             <span class="fas fa-user-plus"></span>
             <div>
-              <strong ng-if="st.pending.length == 1">A device is trying to connect.</strong>
-              <strong ng-if="st.pending.length > 1">{{st.pending.length}} devices are trying to connect.</strong>
-              Close this and use the <em>Add Device</em> bar at the top of the
-              main screen &mdash; then come back for the next step.
+              <strong ng-if="st.pending.length == 1">A computer is trying to connect.</strong>
+              <strong ng-if="st.pending.length > 1">{{st.pending.length}} computers are trying to connect.</strong>
+              If it is who you are expecting, add them &mdash; you will compare
+              cards with them next.
               <div class="desuq-wiz-ids">
-                <div ng-repeat="p in st.pending">{{p.name || p.deviceID}}</div>
+                <div class="desuq-wiz-pending-row" ng-repeat="p in st.pending track by p.deviceID">
+                  <span>{{p.name || p.deviceID.substring(0, 7)}}</span>
+                  <button type="button" class="btn btn-sm desuq-wiz-btn-next"
+                          ng-click="$root.desuqInvite.open({ deviceID: p.deviceID, name: p.name })">
+                    Add and verify
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -142,10 +148,10 @@
         <!-- 3. Verify ---------------------------------------------------- -->
         <div ng-if="svc.stepName() == 'verify'" class="desuq-wiz-step">
           <p class="desuq-wiz-lead">
-            Adding each other proves the two installations agreed on a code. It
-            does not prove <em>whose</em> code it was. Anyone who could edit the
-            message you pasted it into could have swapped it, and both ends
-            would still say &ldquo;Connected&rdquo;.
+            <strong>Nothing syncs with anybody until the two of you have compared
+            your card.</strong> Adding each other proves your computers agreed on
+            a code, not <em>whose</em> code it was &mdash; this is how you both
+            know it was not swapped on the way.
           </p>
 
           <div class="desuq-wiz-empty" ng-if="st.peers.length == 0">
@@ -156,21 +162,17 @@
             </div>
           </div>
 
-          <div ng-repeat="p in st.peers" class="desuq-wiz-peer">
+          <div ng-repeat="p in st.peers track by p.deviceID" class="desuq-wiz-peer">
             <div class="desuq-wiz-peer-head">
               <span class="desuq-wiz-peer-name">{{p.name}}</span>
-              <span class="desuq-wiz-peer-state" ng-if="p.connected">connected</span>
-              <span class="desuq-wiz-peer-state desuq-wiz-peer-off" ng-if="!p.connected">not connected</span>
+              <span class="desuq-wiz-peer-state" ng-if="p.verified">verified</span>
+              <span class="desuq-wiz-peer-state desuq-wiz-peer-off" ng-if="!p.verified">not verified</span>
             </div>
-            <device-handshake local-id="st.myID" remote-id="p.deviceID"></device-handshake>
+            <device-handshake local-id="st.myID" remote-id="p.deviceID" device="p"
+                              peer-name="{{ p.name }}"></device-handshake>
           </div>
 
-          <p class="desuq-wiz-note" ng-if="st.peers.length > 0">
-            <strong>Read the card to each other on a call.</strong> Not in the
-            chat that carried the code &mdash; whoever could tamper with the code
-            could tamper with the card. Recognising their voice is the whole
-            mechanism.
-          </p>
+
         </div>
 
         <!-- 4. Sync ------------------------------------------------------ -->

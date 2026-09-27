@@ -153,6 +153,26 @@ func TestNewestPeerAhead(t *testing.T) {
 		}
 	})
 
+	// The developer's machine, one commit past the tag the modeller already
+	// has. There is nothing newer to download: the toast used to say there
+	// was, send them to the release they were running, and repeat it daily.
+	t.Run("a peer between tags counts as the tag it was made from", func(t *testing.T) {
+		if _, ok := newestPeerAhead("v2.1.6-desuq.10", []peerVersion{
+			{name: "dev", version: "v2.1.6-desuq.10-3-gabcdef12-dirty"},
+		}); ok {
+			t.Error("a dev build of the release this machine has is not an update")
+		}
+		got, ok := newestPeerAhead("v2.1.6-desuq.9", []peerVersion{
+			{name: "dev", version: "v2.1.6-desuq.10-3-gabcdef12-dirty"},
+		})
+		if !ok {
+			t.Fatal("desuq.10 exists and is newer than desuq.9")
+		}
+		if got.version != "v2.1.6-desuq.10" {
+			t.Errorf("version = %q, want the release, not the dev string", got.version)
+		}
+	})
+
 	t.Run("empty and unparseable peer versions are skipped", func(t *testing.T) {
 		if _, ok := newestPeerAhead("v2.1.4-desuq.1", []peerVersion{
 			{name: "never connected", version: ""},
@@ -232,17 +252,17 @@ func TestCheckPeerVersionsToastsOnceThenCoolsDown(t *testing.T) {
 		t.Fatalf("expected one notification, got %d", rec.count())
 	}
 	n := rec.sent[0]
-	if n.Title != "An update is available" {
+	if n.Title != "Update available: v2.1.4-desuq.3" {
 		t.Errorf("title = %q", n.Title)
-	}
-	if !strings.Contains(n.Body, "v2.1.4-desuq.3") || !strings.Contains(n.Body, "v2.1.4-desuq.1") {
-		t.Errorf("body should name both versions, got %q", n.Body)
 	}
 	if !strings.Contains(n.Body, "AAAAAAA-BBBBBBB-name") {
 		t.Errorf("body should name the device, got %q", n.Body)
 	}
-	if n.Launch != releasesURL {
-		t.Errorf("launch = %q, want the releases page", n.Launch)
+	if n.Launch != downloadURL {
+		t.Errorf("launch = %q, want the installer download", n.Launch)
+	}
+	if !strings.HasSuffix(downloadURL, "/releases/latest/download/desuq-syncthing-setup.exe") {
+		t.Errorf("downloadURL = %q; must match the asset name the release workflow publishes", downloadURL)
 	}
 
 	// Every reconnect calls this. It must not toast again.

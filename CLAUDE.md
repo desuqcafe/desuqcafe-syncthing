@@ -32,7 +32,7 @@ future `git merge upstream/main` is work you can plan rather than a surprise:
   A line in the root `go.mod`/`go.sum` is a conflict on every upstream
   dependency bump: a recurring tax for a one-off convenience.
 
-Twenty upstream files carry fork edits today, 673 insertions against 211
+Twenty-two upstream files carry fork edits today, 708 insertions against 213
 deletions. Stripping the telemetry is what changed the character of that: it
 is the first work that had to *delete* upstream behaviour rather than sit
 beside it, because there is no additive way to remove a consent nag or a
@@ -114,6 +114,8 @@ git tag v2.1.6-desuq.8; git push origin v2.1.6-desuq.8   # cut a release
 # Two-device testing. Most of what this fork adds only happens between two
 # devices, so this is usually the first thing to run.
 .\custom\scripts\start-test-pair.ps1 -Fresh -WithFolder   # A on 8390, B on 8391
+# -Unverified leaves the pair unverified: nothing connects until the card is
+# compared in both GUIs. Without it the pair is written as already verified.
 .\custom\scripts\start-test-pair.ps1 -Stop
 ```
 
@@ -164,7 +166,26 @@ command line" over configurability. See `custom/DEPLOYMENT-3D-TEAM.md`.
 - **Fork Awesome's family name is `ForkAwesome`, one word.** `"Fork Awesome"`
   with a space silently falls back and renders a tofu box, which is easy to
   miss in a `::before` on a disclosure triangle.
+- **Icon names are Fork Awesome's, not Font Awesome 5's.** `v5-compat.css`
+  maps some FA5 names (`fa-shield-alt` works) but not all: `fa-sync-alt` and
+  `fa-folder-plus` render as nothing at all, and the main screen's busy
+  headline had a blank icon for as long as it existed. Check the name is in
+  `gui/default/vendor/fork-awesome/css/` before using it.
 
+- **Nothing connects to a device that has not been verified on this
+  computer.** `desuqVerifiedAt` on the device's config entry; the refusal is
+  the first thing in `model.OnHello` (`lib/model/desuq_verified.go`), after
+  the Hello exchange and before anything can move. So **anything that adds a
+  device for testing has to set `desuqVerifiedAt`**, or it will sit
+  disconnected with nothing in the log but "Connection rejected".
+  `start-test-pair.ps1` sets it unless given `-Unverified`. Unknown devices are
+  untouched and still reach the pending list. The card used to live in
+  localStorage on the belief that the config is synced; it is not, and the
+  first GUI load carries old confirmations over (`desuqVerification.migrate`).
+- **Upstream's Add/Edit Device modal saves the whole of `currentDevice`.**
+  A PATCH made while it is open is undone by its Save. That is why the card
+  there is bound with `device="currentDevice"` and mirrors `desuqVerifiedAt`
+  onto it; any other fork field written from inside that modal needs the same.
 - **This build sends no telemetry, and that is a constant, not a setting.**
   `lib/build/desuq_telemetry.go`. Upstream has three reporters gated by two
   options, and the third -- the panic-log upload, `crashReportingEnabled` --

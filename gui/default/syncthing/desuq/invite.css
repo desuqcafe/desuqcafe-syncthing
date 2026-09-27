@@ -1,0 +1,159 @@
+/* Added by the desuqcafe fork. Upstream has no such directory, so this file
+   cannot conflict on a merge.
+
+   The invite dialog (invite.js). Its shell is the setup guide's -- wizard.css
+   styles .desuq-wiz-* -- so this only adds what the guide does not have. */
+
+/* The two ways into step 1, as a segmented control: they are alternatives,
+   not a sequence, and tabs say so. */
+.desuq-inv-tabs {
+    display: inline-flex;
+    padding: 3px;
+    margin-bottom: 16px;
+    border-radius: 999px;
+    background: var(--v-surface-sunken, #f7f4ff);
+    border: 1px solid var(--v-border, #e0d7f0);
+}
+
+.desuq-inv-tab {
+    border: 0;
+    background: transparent;
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 13px;
+    color: var(--v-text-muted, #584a72);
+    transition: background var(--v-transition, 120ms ease), color var(--v-transition, 120ms ease);
+}
+
+.desuq-inv-tab:hover { color: var(--v-text, #241d33); }
+
+.desuq-inv-tab.is-on {
+    background: var(--v-surface, #fff);
+    color: var(--v-accent-strong, #6d34d6);
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(40, 20, 70, 0.15);
+}
+
+.desuq-inv-label {
+    display: block;
+    margin: 4px 0 5px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--v-text, #241d33);
+}
+
+/* Monospace and wide: a device code is read in groups of seven, and a
+   proportional font makes a mistyped group harder to spot. */
+.desuq-inv-id.form-control {
+    font-family: var(--v-font-mono, ui-monospace, SFMono-Regular, Consolas, monospace);
+    font-size: 13px;
+    letter-spacing: 0.03em;
+    resize: none;
+    margin-bottom: 12px;
+}
+
+.desuq-inv-name.form-control { max-width: 320px; }
+
+.desuq-inv-err {
+    margin: -6px 0 12px;
+    font-size: 12.5px;
+    color: var(--v-danger-bright, #b2352b);
+}
+
+.desuq-inv-dim {
+    color: var(--v-text-dim, #7b6f95);
+    font-size: 12px;
+    margin-left: 4px;
+}
+
+/* Somebody knocking while the "they need my code" half is open. */
+.desuq-inv-knock {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: var(--v-radius, 8px);
+    border: 1px solid var(--v-accent, #7c4ddb);
+    background: var(--v-accent-wash, rgba(109, 52, 214, 0.09));
+    animation: desuq-inv-in 260ms ease-out;
+}
+
+.desuq-inv-knock > .fas { color: var(--v-accent-strong, #6d34d6); font-size: 18px; }
+.desuq-inv-knock-body { flex: 1 1 auto; }
+
+@keyframes desuq-inv-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: none; }
+}
+
+/* Folders as whole-row toggles: the checkbox is a 13px target, the row is not. */
+.desuq-inv-folders {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 12px;
+    display: grid;
+    gap: 6px;
+}
+
+.desuq-inv-folder {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: 9px 12px;
+    font-weight: 400;
+    cursor: pointer;
+    border-radius: var(--v-radius, 8px);
+    border: 1px solid var(--v-border, #e0d7f0);
+    background: var(--v-surface, #fff);
+    transition: border-color var(--v-transition, 120ms ease), background var(--v-transition, 120ms ease);
+}
+
+.desuq-inv-folder:hover { border-color: var(--v-border-strong, #cfc3e6); }
+
+.desuq-inv-folder.is-on {
+    border-color: var(--v-accent, #7c4ddb);
+    background: var(--v-accent-wash, rgba(109, 52, 214, 0.09));
+}
+
+.desuq-inv-folder.is-fixed { cursor: default; opacity: 0.8; }
+.desuq-inv-folder input { margin: 0; }
+.desuq-inv-folder .fa-folder { color: var(--v-accent, #7c4ddb); }
+.desuq-inv-folder-name { flex: 1 1 auto; color: var(--v-text, #241d33); }
+
+/* What saving without verifying means. Amber, because it is the one thing on
+   this step that will not fix itself. */
+.desuq-inv-gate {
+    display: flex;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--v-radius-sm, 5px);
+    border-left: 3px solid var(--v-warning, #9a6708);
+    background: rgba(217, 148, 20, 0.10);
+    font-size: 13px;
+    color: var(--v-text-muted, #584a72);
+}
+
+.desuq-inv-gate > .fas { color: var(--v-warning, #9a6708); margin-top: 2px; }
+
+.desuq-inv-verified { margin-bottom: 14px; }
+
+.desuq-inv-next {
+    list-style: none;
+    padding: 0;
+    margin: 14px 0 0;
+}
+
+.desuq-inv-next li {
+    display: flex;
+    gap: 10px;
+    padding: 6px 0;
+    color: var(--v-text-muted, #584a72);
+}
+
+.desuq-inv-next .fas { color: var(--v-accent, #7c4ddb); margin-top: 3px; width: 14px; }
+
+@media (prefers-reduced-motion: reduce) {
+    .desuq-inv-knock { animation: none; }
+}

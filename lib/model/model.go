@@ -2268,6 +2268,9 @@ func (m *model) setIgnores(cfg config.FolderConfiguration, content []string) err
 // This allows us to extract some information from the Hello message
 // and add it to a list of known devices ahead of any checks.
 func (m *model) OnHello(remoteID protocol.DeviceID, addr net.Addr, hello protocol.Hello) error {
+	if err := m.desuqVerifiedGate(remoteID, addr, hello); err != nil { // desuqcafe fork, see desuq_verified.go
+		return err
+	}
 	if _, ok := m.cfg.Device(remoteID); !ok {
 		if err := m.observed.AddOrUpdatePendingDevice(remoteID, hello.DeviceName, addr.String()); err != nil {
 			slog.Warn("Failed to persist pending device entry to database", slogutil.Error(err))
@@ -3050,6 +3053,9 @@ func (m *model) CommitConfiguration(from, to config.Configuration) bool {
 			continue
 		}
 		delete(fromDevices, deviceID)
+		if desuqVerificationRevoked(fromCfg.DesuqVerifiedAt, toCfg.DesuqVerifiedAt) { // desuqcafe fork, see desuq_verified.go
+			closeDevices = append(closeDevices, deviceID)
+		}
 		if fromCfg.Paused == toCfg.Paused {
 			continue
 		}

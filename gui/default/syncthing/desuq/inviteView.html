@@ -1,0 +1,248 @@
+<!-- Added by the desuqcafe fork. Upstream has no such directory, so this file
+     cannot conflict on a merge. See invite.js.
+
+     Borrows the setup guide's shell (desuq-wiz-*) on purpose: the two are the
+     same kind of thing, and a second visual language for "a few steps with
+     somebody on the phone" would make the product look like two products.
+
+     Plain {{ }} interpolation throughout, never the translate directive. -->
+
+<div class="modal fade desuq-wiz desuq-inv" tabindex="-1" role="dialog" aria-labelledby="desuqInviteTitle">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content desuq-wiz-content">
+
+      <div class="modal-header desuq-wiz-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+        <div class="desuq-wiz-eyebrow">
+          <span ng-if="st.mode == 'new'">Invite someone</span>
+          <span ng-if="st.mode == 'existing'">{{ svc.name() }}</span>
+        </div>
+        <h4 class="modal-title desuq-wiz-title" id="desuqInviteTitle">
+          <span ng-if="svc.stepName() == 'who'">Who are you syncing with?</span>
+          <span ng-if="svc.stepName() == 'verify'">Check it is really {{ svc.name() }}</span>
+          <span ng-if="svc.stepName() == 'share'">What should {{ svc.name() }} get?</span>
+          <span ng-if="svc.stepName() == 'done'">Done</span>
+        </h4>
+
+        <ol class="desuq-wiz-rail" ng-if="svc.stepName() != 'done'">
+          <li ng-class="{'desuq-wiz-at': svc.stepName() == 'who', 'desuq-wiz-ok': st.step > 0, 'desuq-wiz-past': st.step > 0}">
+            <span class="desuq-wiz-pip"><span class="fas fa-check" ng-if="st.step > 0"></span><span ng-if="st.step == 0">1</span></span>
+            <span class="desuq-wiz-rail-label">Their code</span>
+          </li>
+          <li ng-class="{'desuq-wiz-at': svc.stepName() == 'verify', 'desuq-wiz-ok': st.draft.desuqVerifiedAt, 'desuq-wiz-past': st.step > 1}">
+            <span class="desuq-wiz-pip"><span class="fas fa-check" ng-if="st.draft.desuqVerifiedAt"></span><span ng-if="!st.draft.desuqVerifiedAt">2</span></span>
+            <span class="desuq-wiz-rail-label">Compare cards</span>
+          </li>
+          <li ng-class="{'desuq-wiz-at': svc.stepName() == 'share'}">
+            <span class="desuq-wiz-pip"><span>3</span></span>
+            <span class="desuq-wiz-rail-label">Folders</span>
+          </li>
+        </ol>
+      </div>
+
+      <div class="modal-body desuq-wiz-body">
+
+        <!-- 1. Who ------------------------------------------------------- -->
+        <div ng-if="svc.stepName() == 'who'" class="desuq-wiz-step">
+          <div class="desuq-inv-tabs" role="tablist">
+            <button type="button" role="tab" class="desuq-inv-tab" ng-class="{ 'is-on': st.whoTab == 'paste' }"
+                    aria-selected="{{ st.whoTab == 'paste' }}" ng-click="st.whoTab = 'paste'">
+              <span class="fas fa-paste"></span>&nbsp; I have their code
+            </button>
+            <button type="button" role="tab" class="desuq-inv-tab" ng-class="{ 'is-on': st.whoTab == 'show' }"
+                    aria-selected="{{ st.whoTab == 'show' }}" ng-click="st.whoTab = 'show'">
+              <span class="fas fa-qrcode"></span>&nbsp; They need my code
+            </button>
+          </div>
+
+          <div ng-if="st.whoTab == 'paste'">
+            <label class="desuq-inv-label" for="desuqInvId">Their device code</label>
+            <textarea id="desuqInvId" class="form-control desuq-inv-id" rows="2" spellcheck="false"
+                      ng-model="st.idDraft" ng-change="st.idError = ''"
+                      placeholder="XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX"></textarea>
+            <div class="desuq-inv-err" ng-if="st.idError">
+              <span class="fas fa-exclamation-circle"></span>&nbsp;{{ st.idError }}
+            </div>
+            <label class="desuq-inv-label" for="desuqInvName">What do you call them?</label>
+            <input id="desuqInvName" class="form-control desuq-inv-name" type="text" maxlength="64"
+                   ng-model="st.nameDraft" placeholder="Kai's laptop"
+                   ng-keyup="$event.keyCode == 13 && svc.checkID()"/>
+            <p class="help-block desuq-wiz-help">
+              The name is only for you &mdash; it is what this computer shows next to their files.
+            </p>
+          </div>
+
+          <div ng-if="st.whoTab == 'show'">
+            <p class="desuq-wiz-lead">
+              Send them this code. When they add it, their computer shows up
+              right here, and you can carry on with them.
+            </p>
+            <div class="desuq-wiz-code-row">
+              <div class="desuq-wiz-code-col">
+                <div class="desuq-wiz-code select-on-click">{{ st.myID }}</div>
+                <button type="button" class="btn btn-sm desuq-wiz-copy" ng-click="svc.copy($event, st.myID)">
+                  <span class="fa fa-clone" ng-if="!st.copied"></span>
+                  <span class="fas fa-check" ng-if="st.copied"></span>
+                  &nbsp;<span ng-if="!st.copied">Copy</span><span ng-if="st.copied">Copied</span>
+                </button>
+              </div>
+              <div class="desuq-wiz-qr-col" ng-if="st.myID">
+                <img class="desuq-wiz-qr" ng-src="qr/?text={{ st.myID }}" alt="QR code for this device code"/>
+                <div class="desuq-wiz-qr-cap">or scan it</div>
+              </div>
+            </div>
+
+            <div class="desuq-wiz-waiting" ng-if="!st.pending.length">
+              <div class="desuq-wiz-pulse"><span></span></div>
+              <div><strong>Waiting for them to add you.</strong> You can close this and come back;
+                they will also show up on the main screen.</div>
+            </div>
+            <div class="desuq-inv-knock" ng-repeat="p in st.pending track by p.deviceID">
+              <span class="fas fa-user-plus" aria-hidden="true"></span>
+              <div class="desuq-inv-knock-body">
+                <strong>{{ p.name || 'A computer' }}</strong> is asking to connect.
+                <span class="desuq-inv-dim">{{ p.deviceID.substring(0, 7) }}</span>
+              </div>
+              <button type="button" class="btn btn-sm desuq-wiz-btn-next" ng-click="svc.usePending(p)">
+                That's them&nbsp;<span class="fas fa-chevron-right"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Verify ---------------------------------------------------- -->
+        <div ng-if="svc.stepName() == 'verify'" class="desuq-wiz-step">
+          <p class="desuq-wiz-lead" ng-if="!st.draft.desuqVerifiedAt">
+            Nothing syncs with {{ svc.name() }} until the two of you have compared
+            this card &mdash; that is how you both know the code was not swapped
+            on the way.
+          </p>
+          <device-handshake local-id="st.myID" remote-id="st.draft.deviceID" device="st.draft"
+                            peer-name="{{ svc.name() }}" on-verified="verified()"></device-handshake>
+        </div>
+
+        <!-- 3. Share ----------------------------------------------------- -->
+        <div ng-if="svc.stepName() == 'share'" class="desuq-wiz-step">
+          <!-- The card moves on by itself a second after the right pick, so
+               the confirmation is repeated here rather than lost. -->
+          <div class="desuq-wiz-hit desuq-wiz-hit-ok desuq-inv-verified" ng-if="st.draft.desuqVerifiedAt">
+            <span class="fas fa-shield-alt"></span>
+            <div><strong>{{ svc.name() }} is verified on this computer.</strong>
+              They also pick your card on theirs; once they have, the two computers connect.</div>
+          </div>
+          <p class="desuq-wiz-lead">
+            Tick the folders {{ svc.name() }} should have. They are asked to
+            accept each one on their computer, and pick which files to keep.
+          </p>
+          <div class="desuq-wiz-empty" ng-if="!st.folders.length">
+            <span class="fas fa-folder-open"></span>
+            <div>There are no folders on this computer yet. You can share one later from the main screen.</div>
+          </div>
+          <ul class="desuq-inv-folders" ng-if="st.folders.length">
+            <li ng-repeat="f in st.folders track by f.id">
+              <label class="desuq-inv-folder" ng-class="{ 'is-on': f.checked, 'is-fixed': f.already }">
+                <input type="checkbox" ng-model="f.checked" ng-disabled="f.already"/>
+                <span class="fas fa-folder" aria-hidden="true"></span>
+                <span class="desuq-inv-folder-name">{{ f.label }}</span>
+                <span class="desuq-inv-dim" ng-if="f.already">already shared</span>
+              </label>
+            </li>
+          </ul>
+          <div class="desuq-inv-gate" ng-if="!st.draft.desuqVerifiedAt">
+            <span class="fas fa-lock" aria-hidden="true"></span>
+            <div>
+              <strong>Not verified yet.</strong> This saves {{ svc.name() }} and the
+              folders, but their computer will not be let in &mdash; and nothing
+              syncs &mdash; until you compare cards. Their card is on the main
+              screen whenever you are ready.
+            </div>
+          </div>
+          <div class="desuq-wiz-error" ng-if="st.error">
+            <span class="fas fa-exclamation-triangle"></span>&nbsp;{{ st.error }}
+          </div>
+        </div>
+
+        <!-- Done --------------------------------------------------------- -->
+        <div ng-if="svc.stepName() == 'done' && st.result" class="desuq-wiz-step">
+          <div class="desuq-wiz-hit desuq-wiz-hit-ok">
+            <span class="fas fa-check-circle"></span>
+            <div>
+              <strong ng-if="st.result.isNew">{{ st.result.name }} is added.</strong>
+              <strong ng-if="!st.result.isNew && st.result.verified">{{ st.result.name }} is verified on this computer.</strong>
+              <strong ng-if="!st.result.isNew && !st.result.verified">Saved.</strong>
+              <span ng-if="st.result.added.length">
+                {{ st.result.name }} will be asked to accept {{ st.result.added.join(', ') }}.
+              </span>
+            </div>
+          </div>
+          <ul class="desuq-inv-next">
+            <li ng-if="st.result.verified">
+              <span class="fas fa-shield-alt" aria-hidden="true"></span>
+              {{ st.result.name }} also has to pick your card on their computer
+              &mdash; until they do, the two computers will not connect.
+            </li>
+            <li ng-if="!st.result.verified">
+              <span class="fas fa-lock" aria-hidden="true"></span>
+              Not verified yet, so nothing will sync. Use <b>Verify</b> on
+              {{ st.result.name }}'s card on the main screen when you are both on a call.
+            </li>
+            <li ng-if="st.result.isNew">
+              <span class="fas fa-paper-plane" aria-hidden="true"></span>
+              If they have not added you yet, they need your code too &mdash;
+              <b>Invite someone &rarr; They need my code</b> shows it.
+            </li>
+          </ul>
+        </div>
+
+      </div>
+
+      <div class="modal-footer desuq-wiz-footer">
+        <button type="button" class="btn btn-sm desuq-wiz-btn-quiet" ng-click="svc.close()"
+                ng-if="svc.stepName() != 'done'">Cancel</button>
+        <span class="desuq-wiz-spacer"></span>
+
+        <button type="button" class="btn btn-sm desuq-wiz-btn-back"
+                ng-if="svc.stepName() == 'verify' && st.mode == 'new' || svc.stepName() == 'share'"
+                ng-click="svc.back()">
+          <span class="fas fa-chevron-left"></span>&nbsp;Back
+        </button>
+
+        <button type="button" class="btn btn-sm desuq-wiz-btn-next"
+                ng-if="svc.stepName() == 'who' && st.whoTab == 'paste'"
+                ng-disabled="st.checking" ng-click="svc.checkID()">
+          <span ng-if="!st.checking">Next&nbsp;<span class="fas fa-chevron-right"></span></span>
+          <span ng-if="st.checking">Checking&hellip;</span>
+        </button>
+
+        <!-- Not a way around verifying: the server refuses the connection
+             either way. It is "we are not on a call right now". -->
+        <button type="button" class="btn btn-sm desuq-wiz-btn-back"
+                ng-if="svc.stepName() == 'verify' && !st.draft.desuqVerifiedAt"
+                ng-click="svc.toShare()">
+          Not on a call now &mdash; do this later
+        </button>
+        <button type="button" class="btn btn-sm desuq-wiz-btn-next"
+                ng-if="svc.stepName() == 'verify' && st.draft.desuqVerifiedAt"
+                ng-click="svc.toShare()">
+          Next&nbsp;<span class="fas fa-chevron-right"></span>
+        </button>
+
+        <button type="button" class="btn btn-sm desuq-wiz-btn-next"
+                ng-if="svc.stepName() == 'share'"
+                ng-disabled="st.saving" ng-click="svc.save()">
+          <span ng-if="!st.saving && st.mode == 'new'"><span class="fas fa-user-plus"></span>&nbsp;Add {{ svc.name() }}</span>
+          <span ng-if="!st.saving && st.mode == 'existing'"><span class="fas fa-check"></span>&nbsp;Save</span>
+          <span ng-if="st.saving">Saving&hellip;</span>
+        </button>
+
+        <button type="button" class="btn btn-sm desuq-wiz-btn-next"
+                ng-if="svc.stepName() == 'done'" ng-click="svc.close()">
+          <span class="fas fa-check"></span>&nbsp;Close
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>

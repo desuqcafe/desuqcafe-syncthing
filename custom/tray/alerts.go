@@ -123,6 +123,11 @@ type alerter struct {
 	naggedVersion string
 	lastNag       time.Time
 
+	// onUpdate is told the release a peer is ahead on, every time the check
+	// finds one -- the tray menu keeps a "Download the update" entry up for as
+	// long as it is true. Nil in tests that do not care.
+	onUpdate func(version string)
+
 	// started is when this tray began, apart is when each peer was last seen
 	// to disconnect, and briefing is the peers whose "back in touch" toast is
 	// being prepared. See reconnect.go.
@@ -235,7 +240,7 @@ func (a *alerter) checkPendingDevices() {
 		}
 		a.notify.Notify(Notification{
 			Title:  "A new device wants to connect",
-			Body:   name + " (" + shortDeviceID(id) + ") is asking to connect. Click to review it.",
+			Body:   name + " (" + shortDeviceID(id) + ") is asking to connect. If you are expecting them, click to add them and compare cards.",
 			Launch: a.guiURL(),
 		})
 	}
@@ -535,6 +540,14 @@ func (a *alerter) checkPeerVersions() {
 		return
 	}
 
+	// The menu entry stays until this tray is replaced by the new one, which
+	// running the installer does. A toast is gone the moment it is dismissed,
+	// and "I'll do it later" should not mean "I will never be told again
+	// unless a day passes and somebody reconnects".
+	if a.onUpdate != nil {
+		a.onUpdate(ahead.version)
+	}
+
 	a.mu.Lock()
 	repeat := ahead.version == a.naggedVersion && time.Since(a.lastNag) < updateCooldown
 	if !repeat {
@@ -547,12 +560,12 @@ func (a *alerter) checkPeerVersions() {
 	}
 
 	a.notify.Notify(Notification{
-		Title: "An update is available",
-		Body: ahead.name + " is running " + ahead.version + " and you have " + mine +
-			". Click to download the new installer.",
-		// The one external address in the tray, and it is only ever handed to
-		// a browser by somebody clicking this. Nothing fetches it.
-		Launch: releasesURL,
+		Title: "Update available: " + ahead.version,
+		Body: ahead.name + " already has it. Click to download the installer, then run it " +
+			"-- your folders and settings are kept.",
+		// Only ever handed to a browser by somebody clicking this. Nothing
+		// fetches it. See update.go.
+		Launch: downloadURL,
 	})
 	slog.Info("a connected device is running a newer build",
 		"peer", ahead.name, "theirs", ahead.version, "ours", mine)
@@ -614,11 +627,12 @@ func (a *alerter) checkStale() {
 			name = shortDeviceID(d.DeviceID)
 		}
 		peers = append(peers, peerSeen{
-			id:        d.DeviceID,
-			name:      name,
-			paused:    d.Paused,
-			connected: conns.Connections[d.DeviceID].Connected,
-			lastSeen:  stats[d.DeviceID].LastSeen,
+			id:         d.DeviceID,
+			name:       name,
+			paused:     d.Paused,
+			unverified: d.DesuqVerifiedAt == "",
+			connected:  conns.Connections[d.DeviceID].Connected,
+			lastSeen:   stats[d.DeviceID].LastSeen,
 		})
 	}
 

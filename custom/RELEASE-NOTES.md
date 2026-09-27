@@ -3,95 +3,61 @@
      install section to it, so this file is only ever "what changed".
      Old releases keep their own notes on GitHub; git history keeps these. -->
 
-# desuqcafe Syncthing v2.1.6-desuq.10
+# desuqcafe Syncthing v2.1.6-desuq.11
 
-Know what happened while you were apart, know whether your work has reached
-the others, and see a picture of every scene in the history.
+Nothing syncs with somebody until the two of you have compared cards, inviting
+somebody is one short dialog, and updating is one click.
 
-Update by running the installer over the top. Your folders, devices and
-settings are untouched. **Everyone you share with needs this version** for
-most of this to work between you.
+## Before you update: check who is verified
 
-## Working apart
+**From this version on, your computer will not connect to anybody you have not
+verified.** Cards you already confirmed are carried over the first time you
+open the main screen, but only on the computer and in the browser where you
+confirmed them.
 
-- **When two computers meet again, one notification says what happened.**
-  What the other person changed, and which files you *both* changed, which
-  are the ones that became conflict copies.
-- **A file you deleted can come back** if somebody else edited it later.
-  That used to happen silently. Now you are told.
-- **Saving a `.blend` marks it as "I'm working on this" automatically**, and
-  the mark comes off after a few quiet hours.
-- **A mark you make while someone is offline says so.** The notification no
-  longer implies they have seen it.
+So after updating, open the main screen and look under **Sharing with**. Anybody
+marked **Not verified** will not sync until you get them on a call, press
+**Verify**, and each pick the other's card. Comparing works even if they are
+still on the old version.
 
-## Right-click a .blend
+## Verifying is now required
 
-In Explorer, right-click a `.blend` → *desuqcafe Syncthing* → **I'm working
-on this**, **Show history**, or **Who has this?** (on Windows 11 this is under
-*Show more options*). Hover over a synced folder to see who is working on
-what in it.
+- **Nobody connects until verified.** Adding someone proves your two computers
+  agreed on a code, not whose code it was. Comparing the card on a call is how
+  you both know it was not swapped on the way. It used to be optional, and was
+  skipped.
+- **The card is clearer.** Three numbered steps: get them on a call, take turns
+  reading your card out loud, pick the one they describe. The why is folded
+  away under *Why this matters*.
+- **You are told when an unverified computer is trying to connect**, both on
+  the main screen and as a notification. That is usually the moment they are on
+  the phone asking whether you can see them.
 
-## Did it reach them?
+## Inviting someone
 
-- While your changes are on their way: *Sending cabin.blend to Kai.*
-- While they are offline: *Kai does not have your latest cabin.blend yet —
-  their computer is not connected. It goes when they are back.* This used to
-  say "Sending" and "catching up" about a computer that was switched off.
-- When a delivery that waited has arrived, a notification: *cabin.blend has
-  reached Kai.* Deliveries that finish in seconds stay quiet.
-- Pausing syncing warns you if somebody does not have your latest yet.
+**Invite someone** on the main screen does it in one go: paste their code (or
+show them yours), compare cards while you are on the call, and tick which
+folders they get. When somebody adds *you*, they show up under **Waiting for
+you** with **Add and verify**.
 
-## Nobody silently in the middle
+When a folder is offered to you, the offer now says **who else is in it**, and
+which of those people reach you only through someone else.
 
-With three people, the usual setup has the other two syncing only *through*
-you. When your computer is off, they stop syncing with each other, and
-nothing said so. Now the screen does, on every computer involved. The two at
-the edges get a **Connect directly** button, which adds the other person;
-they then accept it as usual.
+## Who a folder is shared with
 
-## A picture of every scene
+Folder cards now name everybody the folder is shared with, rather than showing
+initials you had to hover over.
 
-History and Conflicts now show the preview Blender saves inside each `.blend`,
-beside every older version, so you can find the version you want by looking
-at it. This works for files saved in Blender 5 too, which are compressed.
+## Updating
 
-## Hand a file over
-
-Your own "I'm working on this" mark now has **Give to Kai**. Their computer
-picks it up and marks the file as theirs, and they get a notification. The
-file is never unmarked in between, so nobody else opens it by mistake. It
-still works if you switch off straight after handing it over.
-
-## Keep a version for good
-
-Older copies are cleaned up after thirty days. Now any one of them can be
-**pinned** in History, and a pinned copy is kept until you unpin it —
-restoring it does not use it up. Pins are kept on the computer where you
-made them: each computer keeps its own older copies.
-
-## Say why you changed it
-
-After saving a file you can add a sentence — *moved the camera, lighting
-untouched* — with **Say why you changed a file** on the folder, when you
-press **Done** on your mark, or by right-clicking a `.blend`. Everyone you
-share with sees it on the main screen and gets a notification. History shows
-each note beside the exact version it was written about, so an older copy
-says why it was saved. Only the person who saved a version can write its note.
-
-## Who is around
-
-Each folder now says, for each person, whether they are here now or when you
-last saw them, what they have marked as working on, and the last file they
-saved. An offline person's card says since when.
-
-## A Blender add-on, if you want it
-
-Opening a `.blend` now tells you if somebody else is working on it, or if a
-newer version is still on its way, before you change anything — and
-otherwise marks it as yours while it is open. **File › desuqcafe Syncthing**
-has the marks and **Say why I changed this**. It is optional and you install
-it yourself: the main screen's **Working on a file?** panel says where the
-file is and how.
+- The update notification now **downloads the installer** instead of opening a
+  web page. Run the downloaded file to update.
+- The tray menu keeps a **Download update** entry until you have updated, and
+  the main screen says so too, so dismissing the notification no longer means
+  never hearing about it again.
+- You are no longer told about an "update" that is really the version you
+  already have. That happened whenever the person who builds releases was
+  running a build of their own.
 
 ## Still true
 

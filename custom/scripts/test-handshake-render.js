@@ -32,7 +32,7 @@ const desuq = path.join(gui, 'syncthing', 'desuq');
 const dom = new JSDOM(
     '<!DOCTYPE html><html><body>' +
     '<div id="host" ng-controller="TestCtrl">' +
-    '  <device-handshake local-id="myID" remote-id="peer"></device-handshake>' +
+    '  <device-handshake local-id="myID" remote-id="peer" device="dev" peer-name="Kai"></device-handshake>' +
     '  <device-handshake local-id="myID" remote-id="peer" compact="true"></device-handshake>' +
     '</div></body></html>',
     { runScripts: 'outside-only', pretendToBeVisual: true, url: 'http://127.0.0.1:8384/' }
@@ -46,6 +46,8 @@ global.navigator = window.navigator;
 window.eval(fs.readFileSync(path.join(gui, 'vendor', 'angular', 'angular.js'), 'utf8'));
 const angular = window.angular;
 angular.module('syncthing.core', []);
+// app.js defines this; the verification service reads it like every GUI file.
+window.urlbase = 'rest';
 window.eval(fs.readFileSync(path.join(desuq, 'handshakeWords.js'), 'utf8'));
 window.eval(fs.readFileSync(path.join(desuq, 'deviceHandshakeDirective.js'), 'utf8'));
 
@@ -53,10 +55,33 @@ const ID_SELF = 'RZAJ5B5-27A7VV3-YKNLPEN-XNCBYFW-GCPS5Z5-G37WIZQ-A6QRJ56-WHPUXQJ
 const ID_PEER = 'XJXAFN4-GWDLBZX-MWGHOJB-VLKE4ZS-DK7V6CK-Y4BZIKR-5YRQPT5-LP2ZSQF';
 const ID_OTHER = '2FGMV2I-HEBG5DU-72FQ7O7-E6IKBAK-ICDG7YI-SYX3GXD-7BQ4XON-KXXT5Q6';
 
-angular.module('syncthing.core').controller('TestCtrl', ['$scope', function ($scope) {
-    $scope.myID = ID_SELF;
-    $scope.peer = ID_PEER;
-}]);
+// The config, as far as verification touches it: ID_PEER is configured and
+// not verified; ID_OTHER is not configured at all -- somebody being added.
+const config = { [ID_PEER]: { deviceID: ID_PEER, name: 'Kai', desuqVerifiedAt: '' } };
+const patches = [];
+angular.module('syncthing.core')
+    .factory('$http', ['$q', function ($q) {
+        const devOf = url => decodeURIComponent(url.replace(/^rest\/config\/devices\//, ''));
+        const http = function () { return $q.when({ data: {} }); };
+        http.get = function (url) {
+            const d = config[devOf(url)];
+            return d ? $q.when({ data: angular.copy(d) }) : $q.reject({ status: 404, data: 'no such device' });
+        };
+        http.patch = function (url, body) {
+            const d = config[devOf(url)];
+            if (!d) { return $q.reject({ status: 404 }); }
+            patches.push({ id: d.deviceID, body: body });
+            Object.assign(d, body);
+            return $q.when({ data: {} });
+        };
+        return http;
+    }])
+    .controller('TestCtrl', ['$scope', function ($scope) {
+        $scope.myID = ID_SELF;
+        $scope.peer = ID_PEER;
+        // What a modal would save afterwards -- the card mirrors onto it.
+        $scope.dev = { deviceID: ID_PEER };
+    }]);
 
 angular.bootstrap(window.document.body, ['syncthing.core']);
 
@@ -128,18 +153,31 @@ check('sigil has a star, a core and orbit marks',
     sigil.querySelectorAll('.desuq-sigil-mark').length >= 3);
 
 // The honesty requirement. A verification ritual people perform incorrectly is
-// worse than none, so the card has to say what does and does not count.
+// worse than none, so the card has to say what does and does not count. The
+// long form is folded under "Why this matters", but it is in the DOM.
 const note = txt(full, '.desuq-handshake-note');
 check('warns against the channel that carried the ID', /other than.*where you sent the device ID/i.test(note));
 check('warns against comparing inside Syncthing', /never inside Syncthing/i.test(note));
 check('explains that the phrase could be swapped too', /could swap this too/i.test(note));
 check('does not prescribe voice as the only channel', !/verify by voice/i.test(note));
-// The card is a 32-bit SAS and says so. Stating the number is what keeps this
-// a security claim rather than a security ritual -- and the sentence after it
-// is the one that says where the strength actually comes from.
 check('says how much entropy the card carries', /four billion/i.test(note));
 check('says the channel is what protects you, not the card',
     /channel they do not control/i.test(note));
+check('the explanation is folded, not in front of the button',
+    !!card(full).querySelector('details.desuq-handshake-why .desuq-handshake-warning'));
+
+// The steps, in the order they are done, and the rule they exist to teach:
+// both people pick, each on their own computer.
+const steps = card(full).querySelectorAll('.desuq-handshake-steps li');
+check('three numbered steps', steps.length === 3, steps.length + ' steps');
+check('step 1 says to call, not to use the chat', /call/i.test(steps[0].textContent) && /not the chat/i.test(steps[0].textContent));
+check('step 3 says to swap, each on their own computer', /swap/i.test(steps[2].textContent) && /own computer/i.test(steps[2].textContent));
+check('the person is named, not "them"', /Kai/.test(steps[0].textContent));
+check('says nothing syncs until verified',
+    /nothing syncs with Kai until/i.test(txt(full, '.desuq-handshake-status') || ''));
+const go = card(full).querySelector('.desuq-handshake-btn-go');
+check('the button says what is happening, not "confirm"', !!go && /Kai is reading me their card/.test(go.textContent),
+    go ? go.textContent.trim() : '');
 
 // Compact form is for the device panel: the card, nothing else.
 check('compact form shows a card', !!card(compactEl).querySelector('.desuq-card'));
@@ -213,23 +251,66 @@ check('picking a decoy is refused', iso.confirmed === false && iso.wrongPick ===
 check('a refusal explains what to do', /do not add this device/i.test(txt(full, '.desuq-handshake-wrong') || ''));
 check('the cards stay on the table after a wrong pick', !!iso.challenge);
 
-// Picking the real card confirms.
+// Picking the real card confirms -- and writes it to the config, because the
+// server refuses the device until it is there (lib/model/desuq_verified.go).
 iso.$apply(function () { iso.choose(iso.sas); });
 check('picking the real card confirms', iso.confirmed === true);
 check('the challenge is cleared once confirmed', !iso.challenge);
 check('confirmed state reaches the DOM', card(full).classList.contains('desuq-handshake-confirmed'));
-check('confirmation is persisted', !!window.localStorage.getItem('desuq.handshake.confirmed'));
+check('the verification is written to the device config',
+    !!config[ID_PEER].desuqVerifiedAt && patches.length === 1, JSON.stringify(patches));
+check('it is written as a time', !isNaN(Date.parse(config[ID_PEER].desuqVerifiedAt)));
+check('it is mirrored onto the object a modal will save', rootScope.dev.desuqVerifiedAt === config[ID_PEER].desuqVerifiedAt);
+check('nothing is kept in localStorage any more', window.localStorage.getItem('desuq.handshake.confirmed') === null);
+check('once verified, the other side is reminded to pick too',
+    /also has to pick your card/i.test(txt(full, '.desuq-handshake-after') || ''));
 
-// A stored confirmation must not survive the pair changing. Otherwise pasting
-// a different device ID would inherit a tick that was never earned for it --
+// A different device must not inherit a tick that was never earned for it --
 // an actively dangerous bug, not a cosmetic one.
 rootScope.$apply(function () { rootScope.peer = ID_OTHER; });
 check('changing the peer clears the confirmation', iso.confirmed === false);
 check('changing the peer changes the phrase',
     txt(full, '.desuq-handshake-phrase') !== phrase, 'now: ' + txt(full, '.desuq-handshake-phrase'));
+check('and clears the mirrored value', rootScope.dev.desuqVerifiedAt === '');
 
 rootScope.$apply(function () { rootScope.peer = ID_PEER; });
-check('returning to a confirmed pair restores the tick', iso.confirmed === true);
+check('returning to a verified device reads the tick back from the config', iso.confirmed === true);
+
+// Somebody not in the config yet -- being added right now. Verified in
+// memory, for whoever saves them to read back; nothing to PATCH.
+rootScope.$apply(function () { rootScope.peer = ID_OTHER; });
+iso.$apply(function () { iso.choose(iso.sas); });
+const verification = angular.element(host).injector().get('desuqVerification');
+check('a device not yet saved is verified provisionally', iso.confirmed === true && !!verification.provisional(ID_OTHER));
+check('and nothing was written for it', patches.length === 1);
+check('the provisional value is what a modal will save', rootScope.dev.desuqVerifiedAt === verification.provisional(ID_OTHER));
+
+// Taking it away is a write too: it disconnects them.
+rootScope.$apply(function () { rootScope.peer = ID_PEER; });
+iso.$apply(function () { iso.unconfirm(); });
+check('"Mark as not verified" clears the config', config[ID_PEER].desuqVerifiedAt === '' && iso.confirmed === false);
+
+// The one-off move of confirmations made while they lived in localStorage.
+const handshake = angular.element(host).injector().get('desuqHandshake');
+const sas = handshake.of(ID_SELF, ID_PEER);
+window.localStorage.setItem('desuq.handshake.confirmed', JSON.stringify({
+    [ID_PEER.replace(/-/g, '')]: { phrase: sas.phrase, rank: sas.rank, at: '1/1/2026' }
+}));
+let moved = null;
+rootScope.$apply(function () {
+    verification.migrate(ID_SELF, [config[ID_PEER]]).then(function (n) { moved = n; });
+});
+check('an old confirmation is carried into the config', moved === 1 && !!config[ID_PEER].desuqVerifiedAt);
+check('and the old store is removed', window.localStorage.getItem('desuq.handshake.confirmed') === null);
+
+config[ID_PEER].desuqVerifiedAt = '';
+window.localStorage.setItem('desuq.handshake.confirmed', JSON.stringify({
+    [ID_PEER.replace(/-/g, '')]: { phrase: 'SOMETHING ELSE', rank: sas.rank, at: '1/1/2026' }
+}));
+rootScope.$apply(function () {
+    verification.migrate(ID_SELF, [config[ID_PEER]]).then(function (n) { moved = n; });
+});
+check('a record for a different phrase is not carried over', moved === 0 && config[ID_PEER].desuqVerifiedAt === '');
 
 // Half-typed input must render nothing rather than a card built from a partial
 // ID, which would show a phrase that means nothing.

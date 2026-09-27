@@ -911,7 +911,9 @@ func (s *service) checkAndSignalConnectLoopOnUpdatedDevices(from, to config.Conf
 		if dev.Paused {
 			continue
 		}
-		if oldDev, ok := oldDevices[dev.DeviceID]; !ok || oldDev.Paused {
+		// desuqcafe fork: a device just verified is dialled now rather than
+		// at the next reconnection interval (lib/model/desuq_verified.go).
+		if oldDev, ok := oldDevices[dev.DeviceID]; !ok || oldDev.Paused || (oldDev.DesuqVerifiedAt == "" && dev.DesuqVerifiedAt != "") {
 			s.dialNowDevices[dev.DeviceID] = struct{}{}
 			dial = true
 		} else if !slices.Equal(oldDev.Addresses, dev.Addresses) {

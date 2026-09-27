@@ -68,8 +68,15 @@
                  here at all. That went unnoticed because the device detail
                  table on the main screen carried a second copy; when that copy
                  was reduced to a link, the card became unreachable and the
-                 nesting bug finally showed. -->
-            <device-handshake local-id="myID" remote-id="currentDevice.deviceID"></device-handshake>
+                 nesting bug finally showed.
+
+                 device="currentDevice" matters now that the card decides
+                 whether the device may connect (desuqVerifiedAt): Save writes
+                 the whole of currentDevice, and without the card mirroring
+                 onto it, Save would put back the value loaded before the card
+                 was confirmed. -->
+            <device-handshake local-id="myID" remote-id="currentDevice.deviceID" device="currentDevice"
+                              peer-name="{{ currentDevice.name }}" ng-if="currentDevice.deviceID != myID"></device-handshake>
           </div>
           <div class="form-group">
             <label translate for="name">Device Name</label>

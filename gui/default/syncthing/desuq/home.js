@@ -47,7 +47,7 @@
 
 angular.module('syncthing.core')
 
-    .factory('desuqHome', function ($http, $q, $window) {
+    .factory('desuqHome', function ($http, $q, $window, $rootScope, desuqVerification) {
         'use strict';
 
         // Everything here is local and small. The screen is always on, so this
@@ -59,10 +59,6 @@ angular.module('syncthing.core')
         // peers is four; this audience will not reach the cap, but a shared
         // machine with twenty folders should not quietly start hammering.
         var MAX_COMPLETION_REQUESTS = 24;
-
-        // Written by deviceHandshakeDirective.js, read (never written) here so
-        // a peer card can say whether it has been verified on this computer.
-        var HANDSHAKE_STORE = 'desuq.handshake.confirmed';
 
         var st = {
             ready: false,
@@ -99,20 +95,20 @@ angular.module('syncthing.core')
             // folder only reaches whom through one computer.
             hub: {},
             // {tone, text, detail} -- tone drives colour and weight, nothing else.
-            headline: { tone: 'busy', text: 'Checking…', detail: '' }
+            headline: { tone: 'busy', text: 'Checking…', detail: '' },
+            // Computers asking to be added: [{deviceID, name, address, time}].
+            requests: [],
+            // Folders somebody is offering this computer, with who else is in
+            // them: [{folderID, label, deviceID, from, time, members}].
+            offers: [],
+            // {version, from} when somebody connected is on a newer release
+            // of this fork; null otherwise. See custom/tray/update.go.
+            update: null
         };
 
-        function confirmations() {
-            try {
-                return JSON.parse($window.localStorage.getItem(HANDSHAKE_STORE)) || {};
-            } catch (e) {
-                return {};
-            }
-        }
-
-        function normalise(id) {
-            return String(id || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-        }
+        // Whether the one-off move of old localStorage confirmations into the
+        // config has been attempted this page load. See desuqVerification.
+        var migrated = false;
 
         // Bytes, in the units a person uses out loud. Deliberately not
         // upstream's binary/decimal toggle: this string appears in a sentence,
@@ -211,7 +207,14 @@ angular.module('syncthing.core')
             // *does* send one, so while connected, 'unknown' cannot mean they
             // have it. Disconnected, the states are dropped and it means
             // nothing at all -- left to the percentage below.
-            if (c.remoteState === 'notSharing' ||
+            if (!peer.verified) {
+                // Nothing moves at all until they are verified here -- the
+                // server refuses their computer (lib/model/desuq_verified.go)
+                // -- so every other reading of their state is beside the
+                // point, and a stale completion would say "catching up"
+                // about somebody who cannot connect.
+                kind = 'unverified';
+            } else if (c.remoteState === 'notSharing' ||
                 (c.remoteState === 'unknown' && peer.connected)) {
                 kind = 'notaccepted';
             } else if (c.remoteState === 'paused' || peer.paused) {
@@ -249,6 +252,7 @@ angular.module('syncthing.core')
             return {
                 deviceID: peer.deviceID,
                 name: peer.name,
+                verified: !!peer.verified,
                 initials: initials(peer.name),
                 connected: peer.connected,
                 kind: kind,
@@ -341,6 +345,12 @@ angular.module('syncthing.core')
                 return people.filter(function (s) { return s.kind === k; })
                     .map(function (s) { return s.name; });
             };
+            var unverified = by('unverified');
+            if (unverified.length) {
+                return joinNames(unverified) + ' ' + plural(unverified.length, 'is', 'are') +
+                    ' not verified on this computer, so nothing in this folder reaches ' +
+                    plural(unverified.length, 'them', 'them') + ' until you compare cards.';
+            }
             var notAccepted = by('notaccepted');
             if (notAccepted.length) {
                 return joinNames(notAccepted) + ' ' + plural(notAccepted.length, 'has', 'have') +
@@ -417,6 +427,10 @@ angular.module('syncthing.core')
                 return shares.filter(function (s) { return s.kind === k; })
                     .map(function (s) { return s.label; });
             };
+            var gated = pick('unverified');
+            if (gated.length) {
+                return 'Shares ' + joinNames(gated) + ' — nothing reaches them until they are verified.';
+            }
             var offered = pick('notaccepted');
             if (offered.length) {
                 return 'Offered ' + joinNames(offered) + ' — not accepted yet.';
@@ -463,6 +477,7 @@ angular.module('syncthing.core')
                 case 'changedthere': return s.name + ' changed ' + s.changedFiles + ' ' + plural(s.changedFiles, 'file', 'files') +
                     ' on their computer. Their copy only receives, so the changes stay there.';
                 case 'notaccepted': return s.name + ' has not accepted this folder yet.';
+                case 'unverified':  return s.name + ' is not verified on this computer, so nothing reaches them.';
                 case 'paused':      return s.name + ' has this folder paused.';
                 default:            return s.name + ': not known yet.';
             }
@@ -474,7 +489,9 @@ angular.module('syncthing.core')
         // the GUI-password notice, not a peer running a newer build.
         var TONE = { good: 'good', busy: 'busy', attention: 'attention', problem: 'problem' };
 
-        function headline(folders, peers, errors, tray) {
+        function headline(folders, peers, errors, tray, requests, offers) {
+            requests = requests || [];
+            offers = offers || [];
             var connected = peers.filter(function (p) { return p.connected; });
             var active = folders.filter(function (f) { return !f.paused; });
 
@@ -523,6 +540,45 @@ angular.module('syncthing.core')
             }
 
             // 2. Nothing is broken, but somebody has to decide something.
+
+            // Somebody asking to be let in. First, because it is the one
+            // request that is usually happening right now, with the other
+            // person waiting on the phone.
+            if (requests.length) {
+                return {
+                    tone: TONE.attention,
+                    text: requests.length === 1
+                        ? 'Somebody is waiting to be added.'
+                        : requests.length + ' computers are waiting to be added.',
+                    detail: (requests.length === 1 ? (requests[0].name || 'A computer') + ' is' : 'They are') +
+                        ' asking to connect. If you are expecting them, add them below and compare cards.'
+                };
+            }
+            if (offers.length) {
+                return {
+                    tone: TONE.attention,
+                    text: offers.length === 1 ? 'A folder is waiting for you.' : offers.length + ' folders are waiting for you.',
+                    detail: offers[0].from + ' is offering ' + offers[0].label +
+                        '. Choose what to keep below — nothing downloads until you have.'
+                };
+            }
+            // Added, and not verified: the server refuses their computer, so
+            // nothing moves in either direction. Outranks everything below
+            // it, all of which is about syncing that cannot happen.
+            var unverified = peers.filter(function (p) { return !p.verified && !p.paused; });
+            if (unverified.length) {
+                var knocking = unverified.filter(function (p) { return p.knock; });
+                var uNames = unverified.map(function (p) { return p.name; });
+                return {
+                    tone: TONE.attention,
+                    text: joinNames(uNames) + ' ' + plural(uNames.length, 'is', 'are') + ' not verified yet.',
+                    detail: (knocking.length
+                        ? joinNames(knocking.map(function (p) { return p.name; })) + "'s computer is trying to connect. "
+                        : '') +
+                        'Nothing syncs until you compare cards on a call — press Verify on their card below.'
+                };
+            }
+
             var localOnly = folders.filter(function (f) {
                 return f.state === 'localadditions' || f.state === 'localunencrypted';
             });
@@ -733,11 +789,128 @@ angular.module('syncthing.core')
             };
         }
 
+        // Who is asking for what: computers wanting to be added, and folders
+        // being offered to this one, with everybody else in each folder.
+        //
+        // Upstream shows both as yellow banners above everything, the folder
+        // one naming only the folder and the device offering it. Accepting a
+        // folder is joining a group of people; the offer says which, and
+        // which of them this computer has verified -- anybody it has not
+        // reaches it only through the people it has.
+        function refreshRequests() {
+            var devs = $http.get(urlbase + '/cluster/pending/devices').then(function (r) {
+                var out = [];
+                angular.forEach(r.data || {}, function (v, id) {
+                    out.push({ deviceID: id, name: (v && v.name) || '', address: (v && v.address) || '',
+                        time: (v && v.time) || '' });
+                });
+                out.sort(function (a, b) { return a.time < b.time ? 1 : -1; });
+                st.requests = out;
+            }, angular.noop);
+
+            var members = {};
+            var folders = $q.all([
+                $http.get(urlbase + '/cluster/pending/folders').then(function (r) { return r.data || {}; },
+                    function () { return null; }),
+                $http.get(urlbase + '/cluster/pending/members').then(function (r) {
+                    members = r.data || {};
+                }, angular.noop)
+            ]).then(function (res) {
+                var pending = res[0];
+                if (!pending) {
+                    return;
+                }
+                var out = [];
+                angular.forEach(pending, function (pf, folderID) {
+                    angular.forEach((pf && pf.offeredBy) || {}, function (offer, deviceID) {
+                        var ms = ((members[folderID] || {})[deviceID] || []).filter(function (m) {
+                            return !m.offering;
+                        });
+                        out.push({
+                            folderID: folderID,
+                            label: (offer && offer.label) || folderID,
+                            deviceID: deviceID,
+                            from: deviceID.substring(0, 7),
+                            time: (offer && offer.time) || '',
+                            members: ms,
+                            membersNote: membersNote(ms)
+                        });
+                    });
+                });
+                out.sort(function (a, b) { return a.time < b.time ? 1 : -1; });
+                st.offers = out;
+            });
+            return $q.all([devs, folders]);
+        }
+
+        // "Also in it: Kai (verified), and Mia -- not connected to you
+        // directly; her changes come through whoever offered it."
+        function membersNote(ms) {
+            if (!ms.length) {
+                return 'Nobody else is in it.';
+            }
+            var direct = ms.filter(function (m) { return m.verified; }).map(function (m) { return m.name; });
+            var through = ms.filter(function (m) { return !m.verified; }).map(function (m) { return m.name; });
+            var parts = [];
+            if (direct.length) {
+                parts.push('Also in it: ' + joinNames(direct) + '.');
+            }
+            if (through.length) {
+                parts.push((direct.length ? 'And ' : 'Also in it: ') + joinNames(through) + ' — not verified on ' +
+                    'this computer, so ' + plural(through.length, 'their', 'their') + ' changes reach you only ' +
+                    'through the people you have verified.');
+            }
+            return parts.join(' ');
+        }
+
+        // Is somebody this computer talks to on a newer release of the fork?
+        // The same rule as custom/tray/update.go -- which has the reasoning
+        // -- so the screen and the tray agree: only -desuq.N versions are
+        // compared, a build between tags is compared as the tag it was made
+        // from, and a machine running a build between tags is never told.
+        var FORK_VERSION = /^v?(\d+)\.(\d+)\.(\d+)-desuq\.(\d+)(?:[-+](\d+)-g[0-9a-fA-F]+)?/;
+
+        function forkVersion(s) {
+            var m = FORK_VERSION.exec(String(s || ''));
+            if (!m) {
+                return null;
+            }
+            return { parts: [+m[1], +m[2], +m[3], +m[4]], dev: m[5] ? +m[5] : 0 };
+        }
+
+        function newer(a, b) {
+            for (var i = 0; i < 4; i++) {
+                if (a.parts[i] !== b.parts[i]) {
+                    return a.parts[i] > b.parts[i];
+                }
+            }
+            return false;
+        }
+
+        function updateFrom(mine, peers) {
+            var self = forkVersion(mine);
+            if (!self || self.dev > 0) {
+                return null;
+            }
+            var best = null, bestV = null;
+            peers.forEach(function (p) {
+                var v = p.connected ? forkVersion(p.clientVersion) : null;
+                if (v && newer(v, self) && (!bestV || newer(v, bestV))) {
+                    best = p;
+                    bestV = v;
+                }
+            });
+            if (!best) {
+                return null;
+            }
+            return { version: 'v' + bestV.parts.slice(0, 3).join('.') + '-desuq.' + bestV.parts[3], from: best.name };
+        }
+
         // Tolerant by design: a request that fails leaves the previous answer
         // on screen rather than blanking it, because the likeliest cause is
         // Syncthing restarting under us and the next tick will succeed.
         function refresh() {
-            var cfg = null, conns = {}, statuses = {}, myID = '';
+            var cfg = null, conns = {}, statuses = {}, myID = '', knocks = {}, mine = '';
 
             var jobs = [
                 $http.get(urlbase + '/config').then(function (r) {
@@ -758,7 +931,17 @@ angular.module('syncthing.core')
 
                 $http.get(urlbase + '/system/error').then(function (r) {
                     st.errors = ((r.data && r.data.errors) || []).slice();
-                }, angular.noop)
+                }, angular.noop),
+
+                $http.get(urlbase + '/cluster/unverified').then(function (r) {
+                    knocks = r.data || {};
+                }, angular.noop),
+
+                $http.get(urlbase + '/system/version').then(function (r) {
+                    mine = (r.data && r.data.version) || '';
+                }, angular.noop),
+
+                refreshRequests()
             ];
 
             return $q.all(jobs).then(function () {
@@ -769,8 +952,14 @@ angular.module('syncthing.core')
                 var names = {};
                 devices.forEach(function (d) { names[d.deviceID] = d.name || d.deviceID.substring(0, 7); });
 
-                var confirmed = confirmations();
                 var folderCfgs = cfg.folders || [];
+
+                if (!migrated && myID) {
+                    migrated = true;
+                    desuqVerification.migrate(myID, devices.filter(function (d) {
+                        return d.deviceID && d.deviceID !== myID;
+                    }));
+                }
 
                 var peers = devices
                     .filter(function (d) { return d.deviceID && d.deviceID !== myID; })
@@ -783,7 +972,12 @@ angular.module('syncthing.core')
                             paused: !!d.paused,
                             at: c.at || '',
                             clientVersion: c.clientVersion || '',
-                            verified: !!confirmed[normalise(d.deviceID)],
+                            // Nothing connects until this is set -- see
+                            // lib/model/desuq_verified.go.
+                            verified: !!d.desuqVerifiedAt,
+                            verifiedAt: d.desuqVerifiedAt || '',
+                            // Refused for being unverified, and when.
+                            knock: knocks[d.deviceID] || null,
                             // [{label, kind}] -- what is shared with this
                             // person and where each one actually stands.
                             shares: [],
@@ -936,6 +1130,7 @@ angular.module('syncthing.core')
                                 var one = st.presence[fid][p.deviceID];
                                 answered = answered || !!one;
                                 if (one && one.lastSeen) {
+                                    p.lastSeen = one.lastSeen;
                                     p.seen = 'Last seen ' + whenWords(new Date(one.lastSeen), new Date()) + '.';
                                     return true;
                                 }
@@ -945,10 +1140,26 @@ angular.module('syncthing.core')
                                 p.seen = 'Has never connected.';
                             }
                         }
+                        // Turned away for being unverified, and when.
+                        p.knockText = p.knock && p.knock.at
+                            ? agoWords(new Date(p.knock.at), new Date()) : '';
+                        // Verified here and not connected since: the likeliest
+                        // reason is that they have not picked this computer's
+                        // card on theirs, and nothing on this side can tell.
+                        // Said as the thing to check, not as a fact.
+                        p.awaitingThem = p.verified && !p.connected && !p.paused &&
+                            (!p.lastSeen || new Date(p.lastSeen) < new Date(p.verifiedAt));
                     });
                     st.peers = peers;
-                    st.headline = headline(st.folders, st.peers, st.errors, st.tray);
+                    st.offers.forEach(function (o) {
+                        o.from = names[o.deviceID] || o.deviceID.substring(0, 7);
+                    });
+                    st.update = updateFrom(mine, peers);
+                    st.headline = headline(st.folders, st.peers, st.errors, st.tray, st.requests, st.offers);
                     st.ready = true;
+                    // Upstream's yellow request banners say the same thing
+                    // with less; index.html hides them while this is up.
+                    $rootScope.desuqOwnsRequests = true;
                 });
             });
         }
@@ -1192,8 +1403,8 @@ angular.module('syncthing.core')
             return $http.post(urlbase + '/db/hub/connect', { folder: folderID, device: device })
                 .then(function () {
                     hubAsked = 0;
-                    return { ok: true, text: 'Asked to connect to ' + name + '. They need to accept on their ' +
-                        'computer, and check the verification card with you.' };
+                    return { ok: true, text: 'Added ' + name + '. Nothing syncs between you until you have ' +
+                        'compared cards on a call, and they have added you too.' };
                 }, function (r) {
                     return { ok: false, text: 'Could not add ' + name + ': ' +
                         ((r && r.data) ? String(r.data).trim() : 'try again in a moment') + '.' };
@@ -1639,7 +1850,7 @@ angular.module('syncthing.core')
         };
     })
 
-    .directive('desuqHome', function (desuqHome, desuqHistory, $timeout, $window) {
+    .directive('desuqHome', function (desuqHome, desuqHistory, $timeout, $window, $rootScope) {
         'use strict';
 
         return {
@@ -1740,8 +1951,26 @@ angular.module('syncthing.core')
                     scope.hubResult[key] = { busy: true, text: '' };
                     desuqHome.hubConnect(folderID, v.device, v.name).then(function (res) {
                         scope.hubResult[key] = res;
+                        // Added, and so refused until verified: go straight
+                        // to the card, which is the next thing to do.
+                        if (res.ok && $rootScope.desuqInvite) {
+                            $rootScope.desuqInvite.open({ deviceID: v.device });
+                        }
                     });
                 };
+
+                // The invite dialog (invite.js), for a blank invite, somebody
+                // asking to connect, or a person already added.
+                scope.invite = function (opts) {
+                    if ($rootScope.desuqInvite) {
+                        $rootScope.desuqInvite.open(opts || {});
+                    }
+                };
+
+                // The update notice's button: the same address as the tray's
+                // (custom/tray/update.go), a download rather than a page.
+                scope.updateURL = 'https://github.com/desuqcafe/desuqcafe-syncthing/releases/latest/download/desuq-syncthing-setup.exe';
+                scope.releasesURL = 'https://github.com/desuqcafe/desuqcafe-syncthing/releases/latest';
                 // "Hand over", keyed by folder + path: whether the list of
                 // people is open. Only needed with more than one person; with
                 // one, the button names them and hands over directly.
